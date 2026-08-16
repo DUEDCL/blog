@@ -1,0 +1,183 @@
+---
+import { getCollection, render } from 'astro:content';
+import { Image } from 'astro:assets';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FormattedDate from '../../components/FormattedDate.astro';
+import { SECTIONS } from '../../consts';
+
+export async function getStaticPaths() {
+  const albums = await getCollection('photos', ({ data }) =>
+    import.meta.env.DEV ? true : data.draft !== true
+  );
+
+  return albums.map((album) => ({
+    params: { slug: album.id },
+    props: { album },
+  }));
+}
+
+const { album } = Astro.props;
+const { Content } = await render(album);
+
+// 封面也进图组，作为第一张
+const shots = [
+  { src: album.data.cover, alt: album.data.coverAlt, caption: undefined as string | undefined },
+  ...album.data.images,
+];
+---
+
+<BaseLayout
+  title={album.data.title}
+  description={album.data.description ?? album.data.title}
+  type="article"
+  publishedAt={album.data.pubDate}
+  image={album.data.cover.src}
+  width="wide"
+>
+  <header class="head rise rise-1">
+    <p class="meta crumbs">
+      <a href="/photos">{SECTIONS.photos.title}</a>
+    </p>
+
+    <h1 class="title">{album.data.title}</h1>
+
+    <div class="stamps meta">
+      {album.data.location && (
+        <>
+          <span>{album.data.location}</span>
+          <span class="sep" aria-hidden="true">/</span>
+        </>
+      )}
+      <FormattedDate date={album.data.pubDate} />
+      <span class="sep" aria-hidden="true">/</span>
+      <span>{shots.length} 张</span>
+    </div>
+
+    {album.data.description && <p class="dek">{album.data.description}</p>}
+  </header>
+
+  {/* 有正文时先显示文字 */}
+  <div class="note prose">
+    <Content />
+  </div>
+
+  <ul class="plates rise rise-2">
+    {shots.map((shot, i) => (
+      <li class="plate">
+        <figure>
+          <Image
+            src={shot.src}
+            alt={shot.alt}
+            widths={[640, 1024, 1600]}
+            loading={i === 0 ? 'eager' : 'lazy'}
+          />
+          {shot.caption && <figcaption class="meta">{shot.caption}</figcaption>}
+        </figure>
+      </li>
+    ))}
+  </ul>
+
+  <nav class="back">
+    <a href="/photos">← 回到{SECTIONS.photos.title}</a>
+  </nav>
+</BaseLayout>
+
+<style>
+  .head {
+    max-width: var(--measure-prose);
+    padding-bottom: var(--sp-8);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .crumbs a {
+    text-decoration: none;
+    color: var(--ink-faint);
+  }
+
+  .crumbs a:hover {
+    color: var(--seal);
+  }
+
+  .title {
+    margin-top: var(--sp-4);
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40;
+    letter-spacing: -0.02em;
+  }
+
+  .stamps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-top: var(--sp-6);
+  }
+
+  .sep {
+    color: var(--rule-strong);
+  }
+
+  .dek {
+    margin-top: var(--sp-6);
+    color: var(--ink-soft);
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
+  }
+
+  .note {
+    max-width: var(--measure-prose);
+    margin-top: var(--sp-8);
+  }
+
+  /* 单列大图：摄影按「一张一版」呈现，不缩成缩略图 */
+  .plates {
+    list-style: none;
+    margin: var(--sp-16) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-16);
+  }
+
+  .plate figure {
+    margin: 0;
+  }
+
+  .plate :global(img) {
+    width: 100%;
+    height: auto;
+    border-radius: 3px;
+  }
+
+  .plate figcaption {
+    margin-top: var(--sp-3);
+    text-align: center;
+  }
+
+  .back {
+    margin-top: var(--sp-24);
+    padding-top: var(--sp-8);
+    border-top: 1px solid var(--rule);
+  }
+
+  .back a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    color: var(--ink-soft);
+  }
+
+  .back a:hover {
+    color: var(--seal);
+  }
+
+  @media (max-width: 40rem) {
+    .title {
+      font-size: var(--text-2xl);
+    }
+
+    .plates {
+      gap: var(--sp-8);
+    }
+  }
+</style>

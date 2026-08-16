@@ -1,0 +1,149 @@
+---
+/* 文章 / 随笔列表页的共用布局。 */
+import BaseLayout from './BaseLayout.astro';
+import EntryCard from '../components/EntryCard.astro';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  title: string;
+  description: string;
+  empty: string;
+  /** 路由前缀，如 /posts */
+  base: string;
+  items: CollectionEntry<'posts' | 'notes'>[];
+  tags?: { tag: string; count: number }[];
+  verticalLabel?: string;
+}
+
+const { title, description, empty, base, items, tags = [], verticalLabel } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  {verticalLabel && (
+    <div class="rail" aria-hidden="true">
+      <span class="vertical-label">{verticalLabel}</span>
+    </div>
+  )}
+
+  <header class="head rise rise-1">
+    <h1 class="head__title">{title}</h1>
+    <p class="head__desc">{description}</p>
+    <p class="head__count meta">共 {items.length} 篇</p>
+  </header>
+
+  {tags.length > 0 && (
+    <ul class="tagbar rise rise-2">
+      {tags.map(({ tag, count }) => (
+        <li class="tagbar__item">
+          <span class="tagbar__name">{tag}</span>
+          <span class="tagbar__count">{count}</span>
+        </li>
+      ))}
+    </ul>
+  )}
+
+  {items.length > 0 ? (
+    <ul class="entries rise rise-3">
+      {items.map((item) => (
+        <EntryCard
+          href={`${base}/${item.id}`}
+          title={item.data.title}
+          description={item.data.description}
+          pubDate={item.data.pubDate}
+          tags={item.data.tags}
+        />
+      ))}
+    </ul>
+  ) : (
+    <p class="empty">{empty}</p>
+  )}
+</BaseLayout>
+
+<style>
+  .rail {
+    position: absolute;
+    left: var(--sp-8);
+    top: 12rem;
+    display: none;
+  }
+
+  @media (min-width: 82rem) {
+    .rail {
+      display: block;
+    }
+  }
+
+  .head {
+    padding-bottom: var(--sp-8);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .head__title {
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40;
+    letter-spacing: -0.02em;
+  }
+
+  .head__desc {
+    margin-top: var(--sp-4);
+    max-width: 34rem;
+    color: var(--ink-soft);
+    font-size: var(--text-lg);
+  }
+
+  .head__count {
+    margin-top: var(--sp-6);
+  }
+
+  .tagbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin: var(--sp-8) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tagbar__item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.2em 0.6em;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+  }
+
+  .tagbar__name::before {
+    content: '#';
+    color: var(--rule-strong);
+  }
+
+  .tagbar__count {
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .entries {
+    list-style: none;
+    margin: var(--sp-12) 0 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .empty {
+    margin-top: var(--sp-12);
+    padding: var(--sp-8) 0;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+  }
+
+  @media (max-width: 40rem) {
+    .head__title {
+      font-size: var(--text-2xl);
+    }
+  }
+</style>

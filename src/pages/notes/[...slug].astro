@@ -1,0 +1,33 @@
+---
+import { getCollection, render } from 'astro:content';
+import ArticleLayout from '../../layouts/ArticleLayout.astro';
+import { SECTIONS } from '../../consts';
+
+export async function getStaticPaths() {
+  const notes = await getCollection('notes', ({ data }) =>
+    import.meta.env.DEV ? true : data.draft !== true
+  );
+
+  return notes.map((note) => ({
+    params: { slug: note.id },
+    props: { note },
+  }));
+}
+
+const { note } = Astro.props;
+const { Content } = await render(note);
+---
+
+<ArticleLayout
+  title={note.data.title}
+  description={note.data.description}
+  pubDate={note.data.pubDate}
+  updatedDate={note.data.updatedDate}
+  tags={note.data.tags}
+  cover={note.data.cover}
+  coverAlt={note.data.coverAlt}
+  section={{ href: '/notes', label: SECTIONS.notes.title }}
+  verticalLabel="随笔"
+>
+  <Content />
+</ArticleLayout>

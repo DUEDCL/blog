@@ -1,0 +1,75 @@
+---
+import { SITE_TITLE, SOCIAL } from '../consts';
+
+const year = new Date().getFullYear();
+
+// 只渲染填了值的社交链接
+const links = [
+  { key: 'github', label: 'GitHub', href: SOCIAL.github },
+  { key: 'email', label: '邮箱', href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
+  { key: 'x', label: 'X', href: SOCIAL.x },
+  { key: 'weibo', label: '微博', href: SOCIAL.weibo },
+  { key: 'zhihu', label: '知乎', href: SOCIAL.zhihu },
+  { key: 'rss', label: 'RSS', href: SOCIAL.rss },
+].filter((l) => l.href);
+---
+
+<footer class="site-footer">
+  <div class="wrap foot">
+    <p class="meta">© {year} {SITE_TITLE}</p>
+
+    <ul class="links">
+      {
+        links.map((l) => (
+          <li>
+            <a
+              href={l.href}
+              rel={l.key === 'rss' || l.key === 'email' ? undefined : 'me noopener'}
+              target={l.href.startsWith('http') ? '_blank' : undefined}
+            >
+              {l.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: var(--sp-32);
+    border-top: 1px solid var(--rule);
+    padding-block: var(--sp-8);
+  }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-6);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .links a {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    text-decoration: none;
+  }
+
+  .links a:hover {
+    color: var(--seal);
+  }
+</style>

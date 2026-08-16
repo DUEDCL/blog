@@ -1,0 +1,204 @@
+---
+/* 文章 / 随笔的详情页布局：窄栏长阅读。 */
+import 'katex/dist/katex.min.css'; /* 自托管，不走 CDN */
+import { Image } from 'astro:assets';
+import BaseLayout from './BaseLayout.astro';
+import FormattedDate from '../components/FormattedDate.astro';
+import type { ImageMetadata } from 'astro';
+
+interface Props {
+  title: string;
+  description: string;
+  pubDate: Date;
+  updatedDate?: Date;
+  tags?: string[];
+  cover?: ImageMetadata;
+  coverAlt?: string;
+  /** 面包屑用：所属栏目 */
+  section: { href: string; label: string };
+  /** 竖排栏目标识的文字 */
+  verticalLabel?: string;
+}
+
+const {
+  title,
+  description,
+  pubDate,
+  updatedDate,
+  tags = [],
+  cover,
+  coverAlt,
+  section,
+  verticalLabel,
+} = Astro.props;
+---
+
+<BaseLayout
+  title={title}
+  description={description}
+  type="article"
+  publishedAt={pubDate}
+  image={cover?.src}
+  width="prose"
+>
+  {/* 竖排栏目标识：宽屏时贴在版心左外侧，是本站的视觉签名 */}
+  {verticalLabel && (
+    <div class="vertical-rail" aria-hidden="true">
+      <span class="vertical-label">{verticalLabel}</span>
+    </div>
+  )}
+
+  <article>
+    <header class="head rise rise-1">
+      <p class="meta crumbs">
+        <a href={section.href}>{section.label}</a>
+      </p>
+
+      <h1 class="title">{title}</h1>
+
+      <p class="dek">{description}</p>
+
+      <div class="stamps meta">
+        <FormattedDate date={pubDate} />
+        {updatedDate && (
+          <>
+            <span class="sep" aria-hidden="true">/</span>
+            <span>更新于 <FormattedDate date={updatedDate} /></span>
+          </>
+        )}
+      </div>
+
+      {tags.length > 0 && (
+        <ul class="tags">
+          {tags.map((t) => (
+            <li class="tag">{t}</li>
+          ))}
+        </ul>
+      )}
+    </header>
+
+    {cover && (
+      <figure class="cover rise rise-2">
+        <Image src={cover} alt={coverAlt ?? ''} widths={[480, 800, 1200]} loading="eager" />
+      </figure>
+    )}
+
+    <div class="prose rise rise-3">
+      <slot />
+    </div>
+  </article>
+
+  <nav class="back">
+    <a href={section.href}>← 回到{section.label}</a>
+  </nav>
+</BaseLayout>
+
+<style>
+  .vertical-rail {
+    position: absolute;
+    left: max(var(--sp-6), calc(50vw - var(--measure-prose) / 2 - var(--sp-16)));
+    top: 12rem;
+    display: none;
+  }
+
+  /* 只在版心两侧真的有空间时才显示竖排标识 */
+  @media (min-width: 68rem) {
+    .vertical-rail {
+      display: block;
+    }
+  }
+
+  .head {
+    padding-bottom: var(--sp-8);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .crumbs a {
+    text-decoration: none;
+    color: var(--ink-faint);
+  }
+
+  .crumbs a:hover {
+    color: var(--seal);
+  }
+
+  .title {
+    margin-top: var(--sp-4);
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40;
+    letter-spacing: -0.02em;
+  }
+
+  .dek {
+    margin-top: var(--sp-4);
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
+    color: var(--ink-soft);
+  }
+
+  .stamps {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-top: var(--sp-6);
+  }
+
+  .sep {
+    color: var(--rule-strong);
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin: var(--sp-4) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tag {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.15em 0.55em;
+  }
+
+  .cover {
+    margin: var(--sp-8) 0 0;
+  }
+
+  .cover :global(img) {
+    border-radius: 3px;
+    border: 1px solid var(--rule);
+  }
+
+  .prose {
+    margin-top: var(--sp-12);
+  }
+
+  .back {
+    margin-top: var(--sp-16);
+    padding-top: var(--sp-8);
+    border-top: 1px solid var(--rule);
+  }
+
+  .back a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    color: var(--ink-soft);
+  }
+
+  .back a:hover {
+    color: var(--seal);
+  }
+
+  @media (max-width: 40rem) {
+    .title {
+      font-size: var(--text-2xl);
+    }
+  }
+</style>

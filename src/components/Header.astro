@@ -1,0 +1,149 @@
+---
+import { SITE_TITLE, SEAL_CHAR, NAV } from '../consts';
+import ThemeToggle from './ThemeToggle.astro';
+
+const path = Astro.url.pathname;
+
+const sealChar = SEAL_CHAR || SITE_TITLE.charAt(0).toUpperCase();
+
+/** 首页只在完全相等时高亮，栏目页匹配前缀 */
+function isCurrent(href: string) {
+  if (href === '/') return path === '/';
+  return path === href || path.startsWith(`${href}/`);
+}
+---
+
+<header class="site-header">
+  <div class="wrap bar">
+    <a href="/" class="brand" aria-label={`${SITE_TITLE} 首页`}>
+      <span class="seal-mark" aria-hidden="true">{sealChar}</span>
+      <span class="brand__name">{SITE_TITLE}</span>
+    </a>
+
+    <nav class="nav" aria-label="主导航">
+      {
+        NAV.filter((item) => item.href !== '/').map((item) => (
+          <a
+            href={item.href}
+            class:list={['nav__link', { 'is-current': isCurrent(item.href) }]}
+            aria-current={isCurrent(item.href) ? 'page' : undefined}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <ThemeToggle />
+  </div>
+</header>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid var(--rule);
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(12px) saturate(1.2);
+  }
+
+  /* 不支持 color-mix 的浏览器退回不透明背景，避免文字糊在内容上 */
+  @supports not (background: color-mix(in srgb, red 50%, transparent)) {
+    .site-header {
+      background: var(--paper);
+    }
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-6);
+    height: 4rem;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-3);
+    text-decoration: none;
+    margin-right: auto;
+  }
+
+  .brand__name {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    font-variation-settings: 'opsz' 14;
+    letter-spacing: 0.01em;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-6);
+  }
+
+  .nav__link {
+    position: relative;
+    font-size: var(--text-sm);
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding-block: var(--sp-2);
+    letter-spacing: 0.08em;
+  }
+
+  .nav__link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--seal);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  .nav__link:hover,
+  .nav__link.is-current {
+    color: var(--ink);
+  }
+
+  .nav__link:hover::after,
+  .nav__link.is-current::after {
+    transform: scaleX(1);
+  }
+
+  .nav__link.is-current {
+    color: var(--seal);
+  }
+
+  /* 窄屏：导航换到品牌下方，横向可滚动，不做汉堡菜单（六个栏目放得下） */
+  @media (max-width: 40rem) {
+    .bar {
+      height: auto;
+      flex-wrap: wrap;
+      padding-block: var(--sp-3);
+      row-gap: var(--sp-2);
+    }
+
+    .nav {
+      order: 3;
+      width: 100%;
+      gap: var(--sp-4);
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: var(--sp-1);
+    }
+
+    .nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .nav__link {
+      white-space: nowrap;
+    }
+  }
+</style>

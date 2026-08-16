@@ -1,0 +1,86 @@
+---
+/* 深色模式切换。无框架、无依赖，纯 CSS 变量切换。 */
+---
+
+<button
+  type="button"
+  id="theme-toggle"
+  class="toggle"
+  aria-label="切换深浅色主题"
+  title="切换深浅色主题"
+>
+  <svg class="icon icon--sun" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="4.5" />
+    <g stroke-linecap="round">
+      <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2" />
+      <path d="M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6" />
+    </g>
+  </svg>
+  <svg class="icon icon--moon" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z" />
+  </svg>
+</button>
+
+<style>
+  .toggle {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+  }
+
+  .toggle:hover {
+    color: var(--seal);
+    border-color: var(--seal);
+    background: var(--seal-wash);
+  }
+
+  .icon {
+    grid-area: 1 / 1;
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  /* 浅色模式显示月亮（点击进入深色），深色模式显示太阳 */
+  .icon--sun {
+    opacity: 0;
+    transform: rotate(-60deg) scale(0.6);
+  }
+  .icon--moon {
+    opacity: 1;
+  }
+
+  :global(:root[data-theme='dark']) .icon--sun {
+    opacity: 1;
+    transform: none;
+  }
+  :global(:root[data-theme='dark']) .icon--moon {
+    opacity: 0;
+    transform: rotate(60deg) scale(0.6);
+  }
+</style>
+
+<script>
+  const btn = document.getElementById('theme-toggle');
+  btn?.addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try {
+      localStorage.setItem('theme', next);
+    } catch {
+      /* 隐私模式下 localStorage 不可写，忽略即可 */
+    }
+  });
+</script>

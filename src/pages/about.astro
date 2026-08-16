@@ -1,0 +1,81 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE_TITLE, SOCIAL } from '../consts';
+
+const links = [
+  { label: 'GitHub', href: SOCIAL.github },
+  { label: '邮箱', href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
+  { label: 'X', href: SOCIAL.x },
+  { label: '微博', href: SOCIAL.weibo },
+  { label: '知乎', href: SOCIAL.zhihu },
+  { label: 'RSS', href: SOCIAL.rss },
+].filter((l) => l.href);
+---
+
+<BaseLayout title="关于" description={`关于 ${SITE_TITLE}`} width="prose">
+  <header class="head rise rise-1">
+    <h1 class="title">关于</h1>
+  </header>
+
+  {/* TODO: 下面全是占位内容，换成你自己的介绍。这是整个站点最该亲手写的一页。 */}
+  <div class="prose rise rise-2">
+    <p>
+      你好，我是 {SITE_TITLE}。这个站点是我自己的一块地，用来放技术笔记、随笔、
+      做过的东西和拍的照片。
+    </p>
+
+    <h2>在做什么</h2>
+    <p>
+      这里写你的职业方向、正在琢磨的技术、手头的项目。两三句就够，不必写成简历。
+    </p>
+
+    <h2>为什么有这个站</h2>
+    <p>
+      写你建站的理由 —— 想有个不受平台规则约束的地方，想把踩过的坑记下来，
+      或者只是想有个自己的角落。
+    </p>
+
+    <h2>这个站怎么搭的</h2>
+    <p>
+      静态站，用 <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> 生成，
+      源码托管在 GitHub，由 Cloudflare Pages 构建和分发。文章是仓库里的 Markdown 文件，
+      推送即部署。全站不引用境外 CDN 资源，字体随构建产物一起分发。
+    </p>
+
+    {links.length > 0 && (
+      <>
+        <h2>找到我</h2>
+        <ul>
+          {links.map((l) => (
+            <li>
+              <a
+                href={l.href}
+                target={l.href.startsWith('http') ? '_blank' : undefined}
+                rel={l.href.startsWith('http') ? 'me noopener' : undefined}
+              >
+                {l.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </>
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  .head {
+    padding-bottom: var(--sp-8);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .title {
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40;
+    letter-spacing: -0.02em;
+  }
+
+  .prose {
+    margin-top: var(--sp-12);
+  }
+</style>

@@ -1,0 +1,81 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { NAV } from '../consts';
+---
+
+<BaseLayout title="页面不存在" description="没有找到这个页面。">
+  <section class="void">
+    <p class="code">404</p>
+    <h1 class="title">这里没有东西</h1>
+    <p class="hint">
+      地址可能拼错了，或者这篇内容已经被我删掉了。
+    </p>
+
+    <ul class="ways">
+      {
+        NAV.map((item) => (
+          <li>
+            <a href={item.href}>{item.label}</a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</BaseLayout>
+
+<style>
+  .void {
+    padding-block: var(--sp-24) var(--sp-16);
+    max-width: 34rem;
+  }
+
+  .code {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: 0.3em;
+    color: var(--seal);
+    margin: 0;
+  }
+
+  .title {
+    margin-top: var(--sp-4);
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40;
+    letter-spacing: -0.02em;
+  }
+
+  .hint {
+    margin-top: var(--sp-4);
+    color: var(--ink-soft);
+    font-size: var(--text-lg);
+  }
+
+  .ways {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-6);
+    margin: var(--sp-12) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ways a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--rule-strong);
+    padding-bottom: 2px;
+  }
+
+  .ways a:hover {
+    color: var(--seal);
+    border-color: var(--seal);
+  }
+
+  @media (max-width: 40rem) {
+    .title {
+      font-size: var(--text-2xl);
+    }
+  }
+</style>

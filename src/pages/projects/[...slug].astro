@@ -1,0 +1,230 @@
+---
+import { getCollection, render } from 'astro:content';
+import { Image } from 'astro:assets';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FormattedDate from '../../components/FormattedDate.astro';
+import { SECTIONS } from '../../consts';
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects', ({ data }) =>
+    import.meta.env.DEV ? true : data.draft !== true
+  );
+
+  return projects.map((project) => ({
+    params: { slug: project.id },
+    props: { project },
+  }));
+}
+
+const { project } = Astro.props;
+const { Content } = await render(project);
+
+const STATUS_LABEL = {
+  active: '在用',
+  wip: '进行中',
+  archived: '已归档',
+} as const;
+---
+
+<BaseLayout
+  title={project.data.title}
+  description={project.data.description}
+  type="article"
+  publishedAt={project.data.pubDate}
+  image={project.data.cover?.src}
+  width="prose"
+>
+  <article>
+    <header class="head rise rise-1">
+      <p class="meta crumbs">
+        <a href="/projects">{SECTIONS.projects.title}</a>
+      </p>
+
+      <div class="titleline">
+        <h1 class="title">{project.data.title}</h1>
+        <span class:list={['badge', `badge--${project.data.status}`]}>
+          {STATUS_LABEL[project.data.status]}
+        </span>
+      </div>
+
+      <p class="dek">{project.data.description}</p>
+
+      <div class="stamps meta">
+        <FormattedDate date={project.data.pubDate} />
+      </div>
+
+      {(project.data.link || project.data.repo) && (
+        <p class="links">
+          {project.data.link && (
+            <a href={project.data.link} target="_blank" rel="noopener">线上 ↗</a>
+          )}
+          {project.data.repo && (
+            <a href={project.data.repo} target="_blank" rel="noopener">源码 ↗</a>
+          )}
+        </p>
+      )}
+
+      {project.data.tags.length > 0 && (
+        <ul class="tags">
+          {project.data.tags.map((t) => <li class="tag">{t}</li>)}
+        </ul>
+      )}
+    </header>
+
+    {project.data.cover && (
+      <figure class="cover rise rise-2">
+        <Image
+          src={project.data.cover}
+          alt={project.data.coverAlt ?? ''}
+          widths={[480, 800, 1200]}
+          loading="eager"
+        />
+      </figure>
+    )}
+
+    <div class="prose rise rise-3">
+      <Content />
+    </div>
+  </article>
+
+  <nav class="back">
+    <a href="/projects">← 回到{SECTIONS.projects.title}</a>
+  </nav>
+</BaseLayout>
+
+<style>
+  .head {
+    padding-bottom: var(--sp-8);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .crumbs a {
+    text-decoration: none;
+    color: var(--ink-faint);
+  }
+
+  .crumbs a:hover {
+    color: var(--seal);
+  }
+
+  .titleline {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+    margin-top: var(--sp-4);
+    flex-wrap: wrap;
+  }
+
+  .title {
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40;
+    letter-spacing: -0.02em;
+  }
+
+  .badge {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.06em;
+    padding: 0.2em 0.55em;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+  }
+
+  .badge--active {
+    color: var(--seal);
+    background: var(--seal-wash);
+  }
+
+  .badge--wip {
+    color: var(--ink-soft);
+  }
+
+  .badge--archived {
+    color: var(--ink-faint);
+  }
+
+  .dek {
+    margin-top: var(--sp-4);
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
+    color: var(--ink-soft);
+  }
+
+  .stamps {
+    margin-top: var(--sp-6);
+  }
+
+  .links {
+    display: flex;
+    gap: var(--sp-6);
+    margin: var(--sp-4) 0 0;
+  }
+
+  .links a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    color: var(--seal);
+    border-bottom: 1px solid var(--seal-wash);
+    padding-bottom: 2px;
+  }
+
+  .links a:hover {
+    border-color: var(--seal);
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin: var(--sp-6) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tag {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.15em 0.55em;
+  }
+
+  .cover {
+    margin: var(--sp-8) 0 0;
+  }
+
+  .cover :global(img) {
+    border-radius: 3px;
+    border: 1px solid var(--rule);
+  }
+
+  .prose {
+    margin-top: var(--sp-12);
+  }
+
+  .back {
+    margin-top: var(--sp-16);
+    padding-top: var(--sp-8);
+    border-top: 1px solid var(--rule);
+  }
+
+  .back a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    color: var(--ink-soft);
+  }
+
+  .back a:hover {
+    color: var(--seal);
+  }
+
+  @media (max-width: 40rem) {
+    .title {
+      font-size: var(--text-2xl);
+    }
+  }
+</style>

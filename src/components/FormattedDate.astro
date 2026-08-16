@@ -1,0 +1,21 @@
+---
+interface Props {
+  date: Date;
+  /** short: 2026.08.16（列表用）｜long: 2026 年 8 月 16 日（正文用） */
+  format?: 'short' | 'long';
+}
+
+const { date, format = 'short' } = Astro.props;
+
+const y = date.getFullYear();
+const m = date.getMonth() + 1;
+const d = date.getDate();
+
+// 手动格式化而非 toLocaleDateString：避免不同运行环境下的格式漂移
+const text =
+  format === 'long'
+    ? `${y} 年 ${m} 月 ${d} 日`
+    : `${y}.${String(m).padStart(2, '0')}.${String(d).padStart(2, '0')}`;
+---
+
+<time datetime={date.toISOString()}>{text}</time>

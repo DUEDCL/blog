@@ -1,0 +1,377 @@
+---
+import { Image } from 'astro:assets';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import EntryCard from '../components/EntryCard.astro';
+import FormattedDate from '../components/FormattedDate.astro';
+import { getPublished } from '../utils/content';
+import { SITE_TITLE, SITE_DESCRIPTION, BIO, SOCIAL, SECTIONS } from '../consts';
+
+const posts = (await getPublished('posts')).slice(0, 4);
+const notes = (await getPublished('notes')).slice(0, 3);
+const photos = (await getPublished('photos')).slice(0, 3);
+const projects = (await getPublished('projects')).filter((p) => p.data.featured).slice(0, 3);
+
+const socialLinks = [
+  { label: 'GitHub', href: SOCIAL.github },
+  { label: '邮箱', href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
+  { label: 'RSS', href: SOCIAL.rss },
+].filter((l) => l.href);
+---
+
+<BaseLayout description={SITE_DESCRIPTION}>
+  {/* ---------- 开篇 ---------- */}
+  <section class="hero">
+    <div class="hero__rail" aria-hidden="true">
+      <span class="vertical-label">个人站点</span>
+    </div>
+
+    <div class="hero__text">
+      <h1 class="hero__title rise rise-1">
+        <span class="hero__name">{SITE_TITLE}</span>
+      </h1>
+
+      <div class="hero__bio rise rise-2">
+        {BIO.map((line) => <p>{line}</p>)}
+      </div>
+
+      {socialLinks.length > 0 && (
+        <ul class="hero__links rise rise-3">
+          {socialLinks.map((l) => (
+            <li>
+              <a href={l.href} target={l.href.startsWith('http') ? '_blank' : undefined}>
+                {l.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </section>
+
+  {/* ---------- 文章 ---------- */}
+  <section class="block">
+    <div class="block__head">
+      <h2 class="block__title">{SECTIONS.posts.title}</h2>
+      <a href="/posts" class="block__more meta">全部 →</a>
+    </div>
+
+    {posts.length > 0 ? (
+      <ul class="entries">
+        {posts.map((p) => (
+          <EntryCard
+            href={`/posts/${p.id}`}
+            title={p.data.title}
+            description={p.data.description}
+            pubDate={p.data.pubDate}
+            tags={p.data.tags}
+          />
+        ))}
+      </ul>
+    ) : (
+      <p class="empty">{SECTIONS.posts.empty}</p>
+    )}
+  </section>
+
+  {/* ---------- 随笔 ---------- */}
+  <section class="block">
+    <div class="block__head">
+      <h2 class="block__title">{SECTIONS.notes.title}</h2>
+      <a href="/notes" class="block__more meta">全部 →</a>
+    </div>
+
+    {notes.length > 0 ? (
+      <ul class="entries">
+        {notes.map((n) => (
+          <EntryCard
+            href={`/notes/${n.id}`}
+            title={n.data.title}
+            description={n.data.description}
+            pubDate={n.data.pubDate}
+            tags={n.data.tags}
+          />
+        ))}
+      </ul>
+    ) : (
+      <p class="empty">{SECTIONS.notes.empty}</p>
+    )}
+  </section>
+
+  {/* ---------- 摄影 ---------- */}
+  <section class="block">
+    <div class="block__head">
+      <h2 class="block__title">{SECTIONS.photos.title}</h2>
+      <a href="/photos" class="block__more meta">全部 →</a>
+    </div>
+
+    {photos.length > 0 ? (
+      <ul class="shots">
+        {photos.map((ph) => (
+          <li class="shot">
+            <a href={`/photos/${ph.id}`}>
+              <Image
+                src={ph.data.cover}
+                alt={ph.data.coverAlt}
+                widths={[320, 640]}
+                loading="lazy"
+              />
+              <span class="shot__caption">
+                <span class="shot__title">{ph.data.title}</span>
+                <span class="meta">
+                  {ph.data.location ?? <FormattedDate date={ph.data.pubDate} />}
+                </span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p class="empty">{SECTIONS.photos.empty}</p>
+    )}
+  </section>
+
+  {/* ---------- 精选作品（无精选时整块不出现） ---------- */}
+  {projects.length > 0 && (
+    <section class="block">
+      <div class="block__head">
+        <h2 class="block__title">{SECTIONS.projects.title}</h2>
+        <a href="/projects" class="block__more meta">全部 →</a>
+      </div>
+
+      <ul class="works">
+        {projects.map((pr) => (
+          <li class="work">
+            <a href={`/projects/${pr.id}`}>
+              <span class="work__title">{pr.data.title}</span>
+              <span class="work__desc">{pr.data.description}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+</BaseLayout>
+
+<style>
+  /* ---------- 开篇 ---------- */
+  .hero {
+    position: relative;
+    padding-bottom: var(--sp-24);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .hero__rail {
+    position: absolute;
+    left: calc(var(--sp-16) * -1);
+    top: 0;
+    display: none;
+  }
+
+  @media (min-width: 82rem) {
+    .hero__rail {
+      display: block;
+    }
+  }
+
+  .hero__text {
+    max-width: 34rem;
+  }
+
+  .hero__title {
+    font-size: var(--text-4xl);
+    font-variation-settings: 'opsz' 60;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+
+  /* 名字下方一道朱红短线，代替常见的下划线装饰 */
+  .hero__name {
+    position: relative;
+    display: inline-block;
+  }
+
+  .hero__name::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -0.35em;
+    width: 2.5rem;
+    height: 3px;
+    background: var(--seal);
+  }
+
+  .hero__bio {
+    margin-top: var(--sp-12);
+    color: var(--ink-soft);
+    font-size: var(--text-lg);
+  }
+
+  .hero__bio p + p {
+    margin-top: var(--sp-4);
+  }
+
+  .hero__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-6);
+    margin: var(--sp-8) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .hero__links a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--rule-strong);
+    padding-bottom: 2px;
+  }
+
+  .hero__links a:hover {
+    color: var(--seal);
+    border-color: var(--seal);
+  }
+
+  /* ---------- 区块 ---------- */
+  .block {
+    margin-top: var(--sp-24);
+  }
+
+  .block__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-6);
+  }
+
+  .block__title {
+    font-size: var(--text-xl);
+    font-variation-settings: 'opsz' 24;
+  }
+
+  .block__more {
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .block__more:hover {
+    color: var(--seal);
+  }
+
+  .entries {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .empty {
+    padding: var(--sp-8) 0;
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+    border-top: 1px solid var(--rule);
+  }
+
+  /* ---------- 摄影预览 ---------- */
+  .shots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: var(--sp-6);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .shot a {
+    display: block;
+    text-decoration: none;
+  }
+
+  .shot :global(img) {
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    border-radius: 3px;
+    filter: saturate(0.92);
+    transition: filter 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  .shot a:hover :global(img) {
+    filter: saturate(1.05);
+    transform: translateY(-3px);
+  }
+
+  .shot__caption {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    margin-top: var(--sp-3);
+  }
+
+  .shot__title {
+    font-family: var(--font-display);
+    font-size: var(--text-base);
+    color: var(--ink);
+  }
+
+  .shot a:hover .shot__title {
+    color: var(--seal);
+  }
+
+  /* ---------- 作品 ---------- */
+  .works {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .work {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .work a {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-4);
+    padding: var(--sp-5) var(--sp-2);
+    text-decoration: none;
+    transition: background-color 0.2s ease, padding-left 0.24s ease;
+  }
+
+  .work a:hover {
+    background: var(--seal-wash);
+    padding-left: var(--sp-4);
+  }
+
+  .work__title {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+  }
+
+  .work a:hover .work__title {
+    color: var(--seal);
+  }
+
+  .work__desc {
+    font-size: var(--text-sm);
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 40rem) {
+    .hero__title {
+      font-size: var(--text-3xl);
+    }
+
+    .hero {
+      padding-bottom: var(--sp-16);
+    }
+
+    .block {
+      margin-top: var(--sp-16);
+    }
+  }
+</style>
