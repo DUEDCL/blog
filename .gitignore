@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # 本地预览配置（Claude Code 用，与仓库无关）
 .claude/
+
+# wrangler 本地状态
+.wrangler/

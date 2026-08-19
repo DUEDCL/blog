@@ -1,0 +1,27 @@
+# Cloudflare Workers 静态资源部署配置。
+#
+# 构建流程：Workers Builds 先跑构建命令（npm run build）生成 dist/，
+# 再跑部署命令（npx wrangler deploy），由本文件决定怎么部署。
+#
+# 两个容易踩的坑：
+# 1. dashboard 里 Worker 的名字必须和下面的 name 完全一致，否则构建会失败。
+# 2. 下面的 [[routes]] 要求 duchenlin.eu.cc 已经是本账号下「活动(Active)」状态的
+#    zone。zone 还没生效就部署，会卡在这一步失败 —— 先加站点、改 NS、等 Active，
+#    再连仓库触发构建。
+
+name = "duchenlin-blog"
+compatibility_date = "2026-08-19"
+
+# 保留 <name>.<账号子域>.workers.dev，DNS 还没生效时用它先验证站点是否正常
+workers_dev = true
+
+[assets]
+directory = "./dist"
+# Workers 不会自动认出 404.html，必须显式声明；Pages 是自动的，这是两者的差异
+not_found_handling = "404-page"
+
+# 裸域直接指向本 Worker。Cloudflare 会自动创建 DNS 记录并签发证书，
+# 不需要手工加 A/CNAME 记录（裸域按 DNS 规范不能用 CNAME，这里由 Cloudflare 内部解决）
+[[routes]]
+pattern = "duchenlin.eu.cc"
+custom_domain = true

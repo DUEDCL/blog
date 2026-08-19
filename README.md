@@ -68,7 +68,51 @@ images:
 - **数学公式**：行内 `$E = mc^2$`，独立成行用 `$$...$$`。
 - **表格、任务列表、脚注** 等标准 Markdown 语法。
 
+## 首次部署（只需做一次）
+
+代码和 `wrangler.toml` 都已就绪，剩下四步需要你在浏览器里操作 —— 这几步涉及账号所有权和
+域名注册商，命令行无法代做。**顺序不能颠倒**：第 4 步依赖域名在 Cloudflare 已生效。
+
+**1. 把域名加进 Cloudflare**
+
+登录 [dash.cloudflare.com](https://dash.cloudflare.com) → 右上 **Add** → **Existing domain** →
+填 `duchenlin.eu.cc` → 选 **Free** 套餐。完成后 Cloudflare 会给你**两个域名服务器地址**，
+形如 `xxx.ns.cloudflare.com`，记下它们。
+
+**2. 在 julydns 换掉域名服务器**
+
+回到 julydns 控制台，进**「DNS管理」**（不是「域名解析」），把原有的域名服务器改成上一步
+拿到的那两个。
+
+> 为什么必须换 NS：裸域（`duchenlin.eu.cc` 不带 `www`）按 DNS 规范不能用 CNAME 指向别处，
+> 只有 Cloudflare 托管 DNS 时才能用它的 CNAME 展平（CNAME flattening）绕过这个限制。
+> 留在 julydns 解析则做不到裸域访问。
+
+**3. 等域名状态变成 Active**
+
+Cloudflare 会自动检测。通常几分钟到几小时，最长 24 小时。状态没变 Active 之前不要做第 4 步。
+
+**4. 连接仓库，开启自动部署**
+
+Cloudflare 里进 **Workers & Pages** → **Create** → **Import a repository** → 授权 GitHub 并选
+`DUEDCL/duchenlin-blog`（私有仓库需要在授权时勾选它），然后按下表填：
+
+| 设置项                    | 填什么                                       |
+| :------------------------ | :------------------------------------------- |
+| Worker name               | `duchenlin-blog` —— **必须一字不差**         |
+| Build command             | `npm run build`                              |
+| Deploy command            | `npx wrangler deploy`（默认值，不用改）      |
+| Root directory            | 留空                                         |
+| API token                 | 选 **Create new token**，权限用默认          |
+
+Worker 名字与 `wrangler.toml` 里的 `name` 不一致会导致构建直接失败，这是最常见的坑。
+
+保存后会立刻触发一次构建。构建成功即上线，`wrangler.toml` 会自动把 `duchenlin.eu.cc` 绑到
+这个 Worker 上，DNS 记录和 HTTPS 证书都由 Cloudflare 自动生成，你不需要手工加任何解析记录。
+
 ## 发布流程
+
+首次部署完成后，日常发布只需要推送：
 
 ```bash
 git add -A && git commit -m "post: 新文章标题" && git push
