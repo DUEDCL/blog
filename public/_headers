@@ -1,4 +1,63 @@
-# Cloudflare Pages 响应头配置。文件本身不会被当作静态资源提供。
+# Cloudflare Workers 静态资源的响应头配置（本站是 Workers 静态资源，不是 Pages）。
+# `_headers` 在 Workers 静态资源上原生支持。文件本身不会被当作静态资源提供。
+#
+# 为什么不写 `/*` —— 官方文档原文：「An incoming request which matches multiple
+# rules' URL patterns will inherit all rules' headers」，同名头「the values are joined
+# with a comma separator」。也就是说规则是**合并**不是覆盖：真写了 `/*`，`/_astro/` 下的
+# 文件会同时命中两条，Cache-Control 被拼成
+#   public, max-age=60, stale-while-revalidate=604800, public, max-age=31536000, immutable
+# 两个 max-age 冲突，长效缓存作废。文档给的解法是在窄规则里用 `! Cache-Control` 先摘掉，
+# 但同一条规则里「先删再设」的先后顺序文档没定义，所以不赌 —— 改成显式列出 HTML 路径。
+
+# --- HTML：短鲜期 + 长时间容许陈旧 ------------------------------------------
+# max-age=60 让边缘与浏览器各存 60 秒；过期后的 7 天内边缘直接吐旧的、同时后台回源刷新
+# （Cf-Cache-Status: UPDATING），访客不等待。这是国内首屏从秒级降到百毫秒级的关键。
+#
+# 三个直接禁用 stale-while-revalidate 的指令一个都不能用：s-maxage、must-revalidate、
+# proxy-revalidate（官方文档确认，依据 RFC 9111 §4.2.4 —— 它们禁止吐陈旧内容，
+# Cloudflare 于是连 SWR 一起关掉，退化成前台阻塞回源）。边缘鲜期要单独调就用 Edge Cache
+# TTL，不要在这里写 s-maxage。
+#
+# 代价：发新内容后最长 60 秒才对老访客生效，等不了就去面板 Purge Everything
+# （purge 对 Workers 静态资源的实际效果未核实，首次部署后实测）。
+#
+# 只有 `/xxx/*` 形式能覆盖到 slug 页，而「splat 能否匹配空串」文档没写，
+# 所以栏目首页（/posts/ 这类）是否被覆盖属未核实 —— 部署后 curl 一下，
+# 没覆盖到就再补一条精确的 `/posts/` 之类（那时也就顺带证明了 splat 不吃空串，
+# 补上去不会造成重复合并）。
+/
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/about/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/archive/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/tags/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/posts/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/notes/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/projects/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+# 摄影只是从导航与首页撤了，页面还在、URL 还能访问，所以缓存规则一并给上
+/photos/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+# 此刻页未上线（无任何链接指向），但文件在、URL 通，同上
+/now/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/rss.xml
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+# --- 构建产物：永久缓存 ------------------------------------------------------
 # Astro 把带内容哈希的产物全部输出到 /_astro/，文件名随内容变化，
 # 所以可以放心让浏览器长期缓存 —— 内容一改文件名就变，不存在缓存不失效的问题。
 /_astro/*
