@@ -25,7 +25,7 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
     </div>
   )}
 
-  <header class="head rise rise-1">
+  <header class="head glass rise rise-1">
     <h1 class="head__title">{title}</h1>
     <p class="head__desc">{description}</p>
     <p class="head__count meta">共 {items.length} 篇</p>
@@ -43,7 +43,7 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
   )}
 
   {items.length > 0 ? (
-    <ul class="entries rise rise-3">
+    <ul class="entries glass rise rise-3">
       {items.map((item) => (
         <EntryCard
           href={`${base}/${item.id}`}
@@ -55,7 +55,7 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
       ))}
     </ul>
   ) : (
-    <p class="empty">{empty}</p>
+    <p class="empty glass">{empty}</p>
   )}
 </BaseLayout>
 
@@ -74,13 +74,13 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
   }
 
   .head {
-    padding-bottom: var(--sp-8);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-12);
+    border-radius: var(--r-xl);
   }
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.02em;
   }
 
@@ -108,9 +108,10 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
     display: inline-flex;
     align-items: center;
     gap: var(--sp-2);
-    border: 1px solid var(--rule);
-    border-radius: 2px;
-    padding: 0.2em 0.6em;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    padding: 0.3em 0.8em;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     color: var(--ink-soft);
@@ -118,7 +119,7 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
 
   .tagbar__name::before {
     content: '#';
-    color: var(--rule-strong);
+    color: var(--seal);
   }
 
   .tagbar__count {
@@ -128,20 +129,23 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
 
   .entries {
     list-style: none;
-    margin: var(--sp-12) 0 0;
+    margin: var(--sp-8) 0 0;
     padding: 0;
-    border-top: 1px solid var(--rule);
+    overflow: hidden;
   }
 
   .empty {
-    margin-top: var(--sp-12);
-    padding: var(--sp-8) 0;
-    border-top: 1px solid var(--rule);
+    margin-top: var(--sp-8);
+    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
 
-  @media (max-width: 40rem) {
+  @media (max-width: 52rem) {
+    .head {
+      padding: var(--sp-8);
+    }
+
     .head__title {
       font-size: var(--text-2xl);
     }

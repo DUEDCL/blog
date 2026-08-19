@@ -13,7 +13,7 @@ const albums = await getPublished('photos');
   description={SECTIONS.photos.description}
   width="wide"
 >
-  <header class="head rise rise-1">
+  <header class="head glass rise rise-1">
     <h1 class="head__title">{SECTIONS.photos.title}</h1>
     <p class="head__desc">{SECTIONS.photos.description}</p>
     <p class="head__count meta">
@@ -48,19 +48,19 @@ const albums = await getPublished('photos');
       ))}
     </ul>
   ) : (
-    <p class="empty">{SECTIONS.photos.empty}</p>
+    <p class="empty glass">{SECTIONS.photos.empty}</p>
   )}
 </BaseLayout>
 
 <style>
   .head {
-    padding-bottom: var(--sp-8);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-12);
+    border-radius: var(--r-xl);
   }
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.02em;
   }
 
@@ -81,7 +81,7 @@ const albums = await getPublished('photos');
     grid-auto-rows: 14rem;
     gap: var(--sp-3);
     list-style: none;
-    margin: var(--sp-12) 0 0;
+    margin: var(--sp-8) 0 0;
     padding: 0;
   }
 
@@ -95,9 +95,16 @@ const albums = await getPublished('photos');
     width: 100%;
     height: 100%;
     overflow: hidden;
-    border-radius: 3px;
-    background: var(--paper-sunken);
+    border-radius: var(--r-lg);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
     text-decoration: none;
+    transition: box-shadow 0.4s ease, border-color 0.24s ease;
+  }
+
+  .cell__link:hover {
+    border-color: var(--glass-border-lit);
+    box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.6);
   }
 
   .cell__link :global(img) {
@@ -113,7 +120,7 @@ const albums = await getPublished('photos');
     filter: saturate(1.05);
   }
 
-  /* 说明文字压在图片上，默认半隐，hover 浮现 */
+  /* 说明文字压在图片上，默认半隐，hover 浮现。底部一层玻璃保证文字可读 */
   .cell__overlay {
     position: absolute;
     inset: auto 0 0 0;
@@ -121,8 +128,12 @@ const albums = await getPublished('photos');
     flex-direction: column;
     gap: var(--sp-1);
     padding: var(--sp-6) var(--sp-4) var(--sp-4);
-    background: linear-gradient(to top, rgba(10, 9, 8, 0.82), transparent);
-    color: #f5f2ec;
+    background: linear-gradient(to top, rgba(6, 6, 10, 0.72), transparent);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    -webkit-mask-image: linear-gradient(to top, #000 55%, transparent);
+    mask-image: linear-gradient(to top, #000 55%, transparent);
+    color: #f2f4f8;
     transform: translateY(0.5rem);
     opacity: 0.85;
     transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.3s ease;
@@ -145,18 +156,21 @@ const albums = await getPublished('photos');
     flex-wrap: wrap;
     gap: var(--sp-3);
     /* 覆盖 .meta 的颜色：图片上必须用亮色 */
-    color: rgba(245, 242, 236, 0.75);
+    color: rgba(242, 244, 248, 0.78);
   }
 
   .empty {
-    margin-top: var(--sp-12);
-    padding: var(--sp-8) 0;
-    border-top: 1px solid var(--rule);
+    margin-top: var(--sp-8);
+    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
 
-  @media (max-width: 40rem) {
+  @media (max-width: 52rem) {
+    .head {
+      padding: var(--sp-8);
+    }
+
     .head__title {
       font-size: var(--text-2xl);
     }

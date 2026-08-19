@@ -28,18 +28,22 @@
     width: 2.25rem;
     height: 2.25rem;
     padding: 0;
-    background: transparent;
-    border: 1px solid var(--rule);
-    border-radius: 2px;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
     color: var(--ink-soft);
     cursor: pointer;
-    transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+    transition: color 0.18s ease, border-color 0.18s ease,
+      background-color 0.18s ease, box-shadow 0.24s ease;
   }
 
   .toggle:hover {
     color: var(--seal);
-    border-color: var(--seal);
-    background: var(--seal-wash);
+    border-color: var(--glass-border-lit);
+    background: var(--glass-bg-strong);
+    box-shadow: 0 0 0 4px var(--seal-wash);
   }
 
   .icon {
@@ -52,22 +56,22 @@
     transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
-  /* 浅色模式显示月亮（点击进入深色），深色模式显示太阳 */
-  .icon--sun {
-    opacity: 0;
-    transform: rotate(-60deg) scale(0.6);
-  }
+  /* 默认深色：显示太阳（点击转浅色）。浅色模式下显示月亮 */
   .icon--moon {
+    opacity: 0;
+    transform: rotate(60deg) scale(0.6);
+  }
+  .icon--sun {
     opacity: 1;
   }
 
-  :global(:root[data-theme='dark']) .icon--sun {
+  :global(:root[data-theme='light']) .icon--moon {
     opacity: 1;
     transform: none;
   }
-  :global(:root[data-theme='dark']) .icon--moon {
+  :global(:root[data-theme='light']) .icon--sun {
     opacity: 0;
-    transform: rotate(60deg) scale(0.6);
+    transform: rotate(-60deg) scale(0.6);
   }
 </style>
 
@@ -75,7 +79,8 @@
   const btn = document.getElementById('theme-toggle');
   btn?.addEventListener('click', () => {
     const root = document.documentElement;
-    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    // 以 light 为判据：属性缺失时视作深色，点击后进浅色，一定有可见变化
+    const next = root.dataset.theme === 'light' ? 'dark' : 'light';
     root.dataset.theme = next;
     try {
       localStorage.setItem('theme', next);

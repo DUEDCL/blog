@@ -35,7 +35,7 @@ const STATUS_LABEL = {
   width="prose"
 >
   <article>
-    <header class="head rise rise-1">
+    <header class="head glass rise rise-1">
       <p class="meta crumbs">
         <a href="/projects">{SECTIONS.projects.title}</a>
       </p>
@@ -94,8 +94,8 @@ const STATUS_LABEL = {
 
 <style>
   .head {
-    padding-bottom: var(--sp-8);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-8);
+    border-radius: var(--r-xl);
   }
 
   .crumbs a {
@@ -125,8 +125,8 @@ const STATUS_LABEL = {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    padding: 0.2em 0.55em;
-    border-radius: 2px;
+    padding: 0.25em 0.7em;
+    border-radius: var(--r-full);
     border: 1px solid currentColor;
   }
 
@@ -156,21 +156,30 @@ const STATUS_LABEL = {
 
   .links {
     display: flex;
-    gap: var(--sp-6);
-    margin: var(--sp-4) 0 0;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin: var(--sp-6) 0 0;
   }
 
   .links a {
+    display: inline-block;
+    padding: var(--sp-2) var(--sp-4);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-decoration: none;
     color: var(--seal);
-    border-bottom: 1px solid var(--seal-wash);
-    padding-bottom: 2px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    transition: color 0.18s ease, background-color 0.24s ease,
+      border-color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
   .links a:hover {
-    border-color: var(--seal);
+    color: var(--seal-hover);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-2px);
   }
 
   .tags {
@@ -187,9 +196,10 @@ const STATUS_LABEL = {
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
     color: var(--ink-soft);
-    border: 1px solid var(--rule);
-    border-radius: 2px;
-    padding: 0.15em 0.55em;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    padding: 0.25em 0.7em;
   }
 
   .cover {
@@ -197,8 +207,8 @@ const STATUS_LABEL = {
   }
 
   .cover :global(img) {
-    border-radius: 3px;
-    border: 1px solid var(--rule);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lift);
   }
 
   .prose {
@@ -207,22 +217,34 @@ const STATUS_LABEL = {
 
   .back {
     margin-top: var(--sp-16);
-    padding-top: var(--sp-8);
-    border-top: 1px solid var(--rule);
   }
 
   .back a {
+    display: inline-block;
+    padding: var(--sp-2) var(--sp-4);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-decoration: none;
     color: var(--ink-soft);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    transition: color 0.18s ease, background-color 0.24s ease,
+      border-color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
   .back a:hover {
-    color: var(--seal);
+    color: var(--ink);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-2px);
   }
 
   @media (max-width: 40rem) {
+    .head {
+      padding: var(--sp-6);
+    }
+
     .title {
       font-size: var(--text-2xl);
     }

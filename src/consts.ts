@@ -1,28 +1,18 @@
 // 站点全局配置。
-// ⚠️ 下面标了 TODO 的三项是占位值，需要你按自己的实际信息替换。
-// 我没有替你猜真实姓名和简介 —— 猜错比留空更糟。
 
 export const SITE_URL = 'https://duchenlin.eu.cc';
 
-/** TODO: 换成你想显示的站点名 / 你的名字 */
-export const SITE_TITLE = 'duchenlin';
+export const SITE_TITLE = '沉麟';
 
-/** TODO: 一句话介绍你自己，会出现在首页和搜索结果里 */
-export const SITE_DESCRIPTION = '写技术、随笔与摄影的个人站点。';
+export const SITE_DESCRIPTION = '沉麟的个人站点 —— 技术文章、随笔、摄影与作品。';
 
-/** TODO: 首页那段自我介绍，两三句话即可 */
+/** 首页自我介绍。想改成更像你的话，直接编辑这两句。 */
 export const BIO = [
-  '这里是我的个人站点，用来存放技术笔记、日常随笔、做过的东西和拍过的照片。',
-  '文章多是自己踩坑后的记录，写给未来的自己看，也顺便放出来。',
+  '写代码，也写字。这里存放技术笔记、日常随笔、做过的东西和拍过的照片。',
+  '文章多是踩坑后的记录，写给未来的自己，也顺便放出来。',
 ];
 
 export const AUTHOR = SITE_TITLE;
-
-/**
- * TODO: 页头印章里的那个字，通常用姓氏。
- * 我从域名猜是「杜」，但没把握 —— 改成你自己的字。留空则显示站名首字母。
- */
-export const SEAL_CHAR = '杜';
 
 /** 每页文章数 */
 export const PAGE_SIZE = 10;

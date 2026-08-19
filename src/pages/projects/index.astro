@@ -15,7 +15,7 @@ const STATUS_LABEL = {
 ---
 
 <BaseLayout title={SECTIONS.projects.title} description={SECTIONS.projects.description}>
-  <header class="head rise rise-1">
+  <header class="head glass rise rise-1">
     <h1 class="head__title">{SECTIONS.projects.title}</h1>
     <p class="head__desc">{SECTIONS.projects.description}</p>
     <p class="head__count meta">共 {projects.length} 个</p>
@@ -24,7 +24,7 @@ const STATUS_LABEL = {
   {projects.length > 0 ? (
     <ul class="cards rise rise-2">
       {projects.map((p) => (
-        <li class="card">
+        <li class="card glass">
           <a href={`/projects/${p.id}`} class="card__main">
             {p.data.cover && (
               <div class="card__shot">
@@ -80,19 +80,19 @@ const STATUS_LABEL = {
       ))}
     </ul>
   ) : (
-    <p class="empty">{SECTIONS.projects.empty}</p>
+    <p class="empty glass">{SECTIONS.projects.empty}</p>
   )}
 </BaseLayout>
 
 <style>
   .head {
-    padding-bottom: var(--sp-8);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-12);
+    border-radius: var(--r-xl);
   }
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.02em;
   }
 
@@ -112,25 +112,24 @@ const STATUS_LABEL = {
     grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
     gap: var(--sp-6);
     list-style: none;
-    margin: var(--sp-12) 0 0;
+    margin: var(--sp-8) 0 0;
     padding: 0;
   }
 
+  /* 边框、背景、圆角、阴影都来自全局 .glass，这里只补布局与交互 */
   .card {
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--rule);
-    border-radius: 3px;
-    background: var(--paper-raised);
     overflow: hidden;
     transition: border-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1),
       box-shadow 0.24s ease;
   }
 
   .card:hover {
-    border-color: var(--rule-strong);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lift);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-3px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 24px 48px -16px rgba(0, 0, 0, 0.6);
   }
 
   .card__main {
@@ -165,7 +164,7 @@ const STATUS_LABEL = {
 
   .card__title {
     font-size: var(--text-lg);
-    font-variation-settings: 'opsz' 18;
+    font-variation-settings: 'opsz' 18, 'SOFT' 0, 'WONK' 0;
     transition: color 0.18s ease;
   }
 
@@ -178,8 +177,8 @@ const STATUS_LABEL = {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    padding: 0.15em 0.5em;
-    border-radius: 2px;
+    padding: 0.25em 0.7em;
+    border-radius: var(--r-full);
     border: 1px solid currentColor;
   }
 
@@ -212,7 +211,7 @@ const STATUS_LABEL = {
 
   .card__tag::before {
     content: '#';
-    color: var(--rule-strong);
+    color: var(--seal);
   }
 
   .card__date {
@@ -225,7 +224,7 @@ const STATUS_LABEL = {
     margin: 0;
     padding: var(--sp-3) var(--sp-6);
     border-top: 1px solid var(--rule);
-    background: var(--paper-sunken);
+    background: rgba(0, 0, 0, 0.12);
   }
 
   .card__links a {
@@ -241,14 +240,17 @@ const STATUS_LABEL = {
   }
 
   .empty {
-    margin-top: var(--sp-12);
-    padding: var(--sp-8) 0;
-    border-top: 1px solid var(--rule);
+    margin-top: var(--sp-8);
+    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
 
-  @media (max-width: 40rem) {
+  @media (max-width: 52rem) {
+    .head {
+      padding: var(--sp-8);
+    }
+
     .head__title {
       font-size: var(--text-2xl);
     }

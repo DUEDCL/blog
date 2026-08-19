@@ -36,8 +36,8 @@ const { href, title, description, pubDate, tags = [] } = Astro.props;
 </li>
 
 <style>
-  .entry {
-    border-bottom: 1px solid var(--rule);
+  .entry + .entry {
+    border-top: 1px solid var(--rule);
   }
 
   .entry__link {
@@ -45,14 +45,14 @@ const { href, title, description, pubDate, tags = [] } = Astro.props;
     grid-template-columns: 6.5rem 1fr auto;
     align-items: baseline;
     gap: var(--sp-6);
-    padding: var(--sp-6) var(--sp-2);
+    padding: var(--sp-6);
     text-decoration: none;
     transition: background-color 0.2s ease, padding-left 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
   .entry__link:hover {
     background: var(--seal-wash);
-    padding-left: var(--sp-4);
+    padding-left: var(--sp-8);
   }
 
   .entry__date {

@@ -15,31 +15,32 @@ const links = [
 ---
 
 <footer class="site-footer">
-  <div class="wrap foot">
-    <p class="meta">© {year} {SITE_TITLE}</p>
+  <div class="wrap">
+    <div class="foot glass">
+      <p class="meta">© {year} {SITE_TITLE}</p>
 
-    <ul class="links">
-      {
-        links.map((l) => (
-          <li>
-            <a
-              href={l.href}
-              rel={l.key === 'rss' || l.key === 'email' ? undefined : 'me noopener'}
-              target={l.href.startsWith('http') ? '_blank' : undefined}
-            >
-              {l.label}
-            </a>
-          </li>
-        ))
-      }
-    </ul>
+      <ul class="links">
+        {
+          links.map((l) => (
+            <li>
+              <a
+                href={l.href}
+                rel={l.key === 'rss' || l.key === 'email' ? undefined : 'me noopener'}
+                target={l.href.startsWith('http') ? '_blank' : undefined}
+              >
+                {l.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
   </div>
 </footer>
 
 <style>
   .site-footer {
     margin-top: var(--sp-32);
-    border-top: 1px solid var(--rule);
     padding-block: var(--sp-8);
   }
 
@@ -49,6 +50,8 @@ const links = [
     align-items: center;
     justify-content: space-between;
     gap: var(--sp-4);
+    padding: var(--sp-5) var(--sp-8);
+    border-radius: var(--r-full);
   }
 
   .links {
@@ -67,9 +70,18 @@ const links = [
     text-transform: uppercase;
     color: var(--ink-faint);
     text-decoration: none;
+    transition: color 0.18s ease;
   }
 
   .links a:hover {
     color: var(--seal);
+  }
+
+  @media (max-width: 40rem) {
+    .foot {
+      /* 窄屏会换行成两行，胶囊形状会变得很怪，改回大圆角矩形 */
+      padding: var(--sp-6);
+      border-radius: var(--r-lg);
+    }
   }
 </style>

@@ -13,12 +13,12 @@ const links = [
 ---
 
 <BaseLayout title="关于" description={`关于 ${SITE_TITLE}`} width="prose">
-  <header class="head rise rise-1">
+  <header class="head glass rise rise-1">
     <h1 class="title">关于</h1>
   </header>
 
   {/* TODO: 下面全是占位内容，换成你自己的介绍。这是整个站点最该亲手写的一页。 */}
-  <div class="prose rise rise-2">
+  <div class="prose glass rise rise-2">
     <p>
       你好，我是 {SITE_TITLE}。这个站点是我自己的一块地，用来放技术笔记、随笔、
       做过的东西和拍的照片。
@@ -65,17 +65,35 @@ const links = [
 
 <style>
   .head {
-    padding-bottom: var(--sp-8);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-8);
+    border-radius: var(--r-xl);
   }
 
   .title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.02em;
   }
 
   .prose {
-    margin-top: var(--sp-12);
+    margin-top: var(--sp-6);
+    padding: var(--sp-8);
+    border-radius: var(--r-xl);
+  }
+
+  /* 玻璃面板里首个标题不需要额外顶部间距 */
+  .prose :global(> *:first-child) {
+    margin-top: 0;
+  }
+
+  @media (max-width: 40rem) {
+    .head,
+    .prose {
+      padding: var(--sp-6);
+    }
+
+    .title {
+      font-size: var(--text-2xl);
+    }
   }
 </style>

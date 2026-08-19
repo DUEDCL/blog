@@ -5,6 +5,7 @@ import EntryCard from '../components/EntryCard.astro';
 import FormattedDate from '../components/FormattedDate.astro';
 import { getPublished } from '../utils/content';
 import { SITE_TITLE, SITE_DESCRIPTION, BIO, SOCIAL, SECTIONS } from '../consts';
+import avatar from '../assets/avatar.jpg';
 
 const posts = (await getPublished('posts')).slice(0, 4);
 const notes = (await getPublished('notes')).slice(0, 3);
@@ -21,30 +22,41 @@ const socialLinks = [
 <BaseLayout description={SITE_DESCRIPTION}>
   {/* ---------- 开篇 ---------- */}
   <section class="hero">
-    <div class="hero__rail" aria-hidden="true">
-      <span class="vertical-label">个人站点</span>
-    </div>
-
-    <div class="hero__text">
-      <h1 class="hero__title rise rise-1">
-        <span class="hero__name">{SITE_TITLE}</span>
-      </h1>
-
-      <div class="hero__bio rise rise-2">
-        {BIO.map((line) => <p>{line}</p>)}
+    <div class="hero__card glass rise rise-1">
+      <div class="hero__portrait">
+        <Image
+          src={avatar}
+          alt={`${SITE_TITLE}的头像`}
+          width={320}
+          height={320}
+          loading="eager"
+          class="hero__avatar"
+        />
       </div>
 
-      {socialLinks.length > 0 && (
-        <ul class="hero__links rise rise-3">
-          {socialLinks.map((l) => (
-            <li>
-              <a href={l.href} target={l.href.startsWith('http') ? '_blank' : undefined}>
-                {l.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div class="hero__text">
+        <p class="meta hero__eyebrow">个人站点</p>
+
+        <h1 class="hero__title">
+          <span class="hero__name">{SITE_TITLE}</span>
+        </h1>
+
+        <div class="hero__bio">
+          {BIO.map((line) => <p>{line}</p>)}
+        </div>
+
+        {socialLinks.length > 0 && (
+          <ul class="hero__links">
+            {socialLinks.map((l) => (
+              <li>
+                <a href={l.href} target={l.href.startsWith('http') ? '_blank' : undefined}>
+                  {l.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   </section>
 
@@ -56,7 +68,7 @@ const socialLinks = [
     </div>
 
     {posts.length > 0 ? (
-      <ul class="entries">
+      <ul class="entries glass">
         {posts.map((p) => (
           <EntryCard
             href={`/posts/${p.id}`}
@@ -68,7 +80,7 @@ const socialLinks = [
         ))}
       </ul>
     ) : (
-      <p class="empty">{SECTIONS.posts.empty}</p>
+      <p class="empty glass">{SECTIONS.posts.empty}</p>
     )}
   </section>
 
@@ -80,7 +92,7 @@ const socialLinks = [
     </div>
 
     {notes.length > 0 ? (
-      <ul class="entries">
+      <ul class="entries glass">
         {notes.map((n) => (
           <EntryCard
             href={`/notes/${n.id}`}
@@ -92,7 +104,7 @@ const socialLinks = [
         ))}
       </ul>
     ) : (
-      <p class="empty">{SECTIONS.notes.empty}</p>
+      <p class="empty glass">{SECTIONS.notes.empty}</p>
     )}
   </section>
 
@@ -125,7 +137,7 @@ const socialLinks = [
         ))}
       </ul>
     ) : (
-      <p class="empty">{SECTIONS.photos.empty}</p>
+      <p class="empty glass">{SECTIONS.photos.empty}</p>
     )}
   </section>
 
@@ -137,7 +149,7 @@ const socialLinks = [
         <a href="/projects" class="block__more meta">全部 →</a>
       </div>
 
-      <ul class="works">
+      <ul class="works glass">
         {projects.map((pr) => (
           <li class="work">
             <a href={`/projects/${pr.id}`}>
@@ -154,83 +166,112 @@ const socialLinks = [
 <style>
   /* ---------- 开篇 ---------- */
   .hero {
+    padding-top: var(--sp-8);
+  }
+
+  .hero__card {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-12);
+    padding: var(--sp-12);
+    border-radius: var(--r-xl);
+  }
+
+  .hero__portrait {
     position: relative;
-    padding-bottom: var(--sp-24);
-    border-bottom: 1px solid var(--rule);
+    flex-shrink: 0;
   }
 
-  .hero__rail {
+  /* 头像背后一团同色光晕，把纯黑的方图从玻璃面上「托」起来 */
+  .hero__portrait::before {
+    content: '';
     position: absolute;
-    left: calc(var(--sp-16) * -1);
-    top: 0;
-    display: none;
+    inset: -18%;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--seal-wash), transparent 68%);
+    filter: blur(12px);
+    z-index: 0;
   }
 
-  @media (min-width: 82rem) {
-    .hero__rail {
-      display: block;
-    }
+  .hero__avatar {
+    position: relative;
+    z-index: 1;
+    width: 8.5rem;
+    height: 8.5rem;
+    border-radius: var(--r-full);
+    object-fit: cover;
+    border: 1px solid var(--glass-border-lit);
+    box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.7);
   }
 
   .hero__text {
-    max-width: 34rem;
+    min-width: 0;
+  }
+
+  .hero__eyebrow {
+    margin-bottom: var(--sp-3);
   }
 
   .hero__title {
     font-size: var(--text-4xl);
-    font-variation-settings: 'opsz' 60;
-    letter-spacing: -0.03em;
+    font-variation-settings: 'opsz' 60, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: -0.02em;
     line-height: 1.05;
   }
 
-  /* 名字下方一道朱红短线，代替常见的下划线装饰 */
+  /* 名字用渐变填充，比纯色更有层次 */
   .hero__name {
-    position: relative;
-    display: inline-block;
-  }
-
-  .hero__name::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    bottom: -0.35em;
-    width: 2.5rem;
-    height: 3px;
-    background: var(--seal);
+    background: linear-gradient(
+      120deg,
+      var(--ink) 20%,
+      var(--seal) 60%,
+      var(--ink) 95%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   .hero__bio {
-    margin-top: var(--sp-12);
+    margin-top: var(--sp-6);
     color: var(--ink-soft);
     font-size: var(--text-lg);
+    max-width: 34rem;
   }
 
   .hero__bio p + p {
-    margin-top: var(--sp-4);
+    margin-top: var(--sp-3);
   }
 
   .hero__links {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-6);
+    gap: var(--sp-3);
     margin: var(--sp-8) 0 0;
     padding: 0;
     list-style: none;
   }
 
   .hero__links a {
+    display: inline-block;
+    padding: var(--sp-2) var(--sp-4);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     letter-spacing: 0.06em;
     text-decoration: none;
     color: var(--ink-soft);
-    border-bottom: 1px solid var(--rule-strong);
-    padding-bottom: 2px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    transition: color 0.18s ease, border-color 0.18s ease,
+      background-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
   .hero__links a:hover {
-    color: var(--seal);
-    border-color: var(--seal);
+    color: var(--ink);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-2px);
   }
 
   /* ---------- 区块 ---------- */
@@ -244,34 +285,36 @@ const socialLinks = [
     justify-content: space-between;
     gap: var(--sp-4);
     margin-bottom: var(--sp-6);
+    padding-inline: var(--sp-2);
   }
 
   .block__title {
     font-size: var(--text-xl);
-    font-variation-settings: 'opsz' 24;
+    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
   }
 
   .block__more {
     text-decoration: none;
     white-space: nowrap;
+    transition: color 0.18s ease;
   }
 
   .block__more:hover {
     color: var(--seal);
   }
 
+  /* 条目列表整体是一块玻璃，内部只有分隔线 —— 比每条一块玻璃省 GPU */
   .entries {
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: 1px solid var(--rule);
+    overflow: hidden;
   }
 
   .empty {
-    padding: var(--sp-8) 0;
+    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
-    border-top: 1px solid var(--rule);
   }
 
   /* ---------- 摄影预览 ---------- */
@@ -292,14 +335,17 @@ const socialLinks = [
   .shot :global(img) {
     aspect-ratio: 4 / 5;
     object-fit: cover;
-    border-radius: 3px;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--glass-border);
     filter: saturate(0.92);
-    transition: filter 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.7, 0.3, 1);
+    transition: filter 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.7, 0.3, 1),
+      box-shadow 0.4s ease;
   }
 
   .shot a:hover :global(img) {
     filter: saturate(1.05);
-    transform: translateY(-3px);
+    transform: translateY(-4px);
+    box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.6);
   }
 
   .shot__caption {
@@ -307,12 +353,14 @@ const socialLinks = [
     flex-direction: column;
     gap: var(--sp-1);
     margin-top: var(--sp-3);
+    padding-inline: var(--sp-1);
   }
 
   .shot__title {
     font-family: var(--font-display);
     font-size: var(--text-base);
     color: var(--ink);
+    transition: color 0.18s ease;
   }
 
   .shot a:hover .shot__title {
@@ -324,11 +372,11 @@ const socialLinks = [
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: 1px solid var(--rule);
+    overflow: hidden;
   }
 
-  .work {
-    border-bottom: 1px solid var(--rule);
+  .work + .work {
+    border-top: 1px solid var(--rule);
   }
 
   .work a {
@@ -336,20 +384,21 @@ const socialLinks = [
     flex-wrap: wrap;
     align-items: baseline;
     gap: var(--sp-4);
-    padding: var(--sp-5) var(--sp-2);
+    padding: var(--sp-5) var(--sp-6);
     text-decoration: none;
     transition: background-color 0.2s ease, padding-left 0.24s ease;
   }
 
   .work a:hover {
     background: var(--seal-wash);
-    padding-left: var(--sp-4);
+    padding-left: var(--sp-8);
   }
 
   .work__title {
     font-family: var(--font-display);
     font-size: var(--text-lg);
     font-weight: 600;
+    transition: color 0.18s ease;
   }
 
   .work a:hover .work__title {
@@ -361,13 +410,21 @@ const socialLinks = [
     color: var(--ink-soft);
   }
 
-  @media (max-width: 40rem) {
-    .hero__title {
-      font-size: var(--text-3xl);
+  @media (max-width: 52rem) {
+    .hero__card {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--sp-8);
+      padding: var(--sp-8);
     }
 
-    .hero {
-      padding-bottom: var(--sp-16);
+    .hero__avatar {
+      width: 6rem;
+      height: 6rem;
+    }
+
+    .hero__title {
+      font-size: var(--text-3xl);
     }
 
     .block {

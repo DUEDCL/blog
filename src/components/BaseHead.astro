@@ -58,19 +58,23 @@ const ogImage = image ? new URL(image, SITE_URL) : undefined;
 <meta name="twitter:description" content={description} />
 {ogImage && <meta name="twitter:image" content={ogImage} />}
 
-{/* 主题在样式加载前同步确定，避免深色模式下的白屏闪烁 */}
+{/* 移动端浏览器地址栏跟随主题，深色下不会露出一条白边 */}
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0c" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef0f5" />
+
+{/* 主题在样式加载前同步确定，避免切换时的闪烁。本站以深色为默认 */}
 <script is:inline>
   (function () {
     try {
       var stored = localStorage.getItem('theme');
       var theme =
         stored ||
-        (window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light');
+        (window.matchMedia('(prefers-color-scheme: light)').matches
+          ? 'light'
+          : 'dark');
       document.documentElement.dataset.theme = theme;
     } catch (e) {
-      document.documentElement.dataset.theme = 'light';
+      document.documentElement.dataset.theme = 'dark';
     }
   })();
 </script>

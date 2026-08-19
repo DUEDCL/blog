@@ -1,6 +1,7 @@
 /* ==========================================================================
-   设计系统
-   方向：编辑排版感。纸与墨的对比、可见的网格线、印泥朱红作唯一强调色。
+   设计系统 —— 深色毛玻璃
+   方向：深色为基底，视口底层铺固定的彩色光晕，内容浮在其上的玻璃面板里。
+   关键前提：backdrop-filter 在纯色背景上完全看不出效果，必须有可折射的底层。
    中文走系统字体栈（零加载成本），西文与数字用自托管 Fraunces / IBM Plex Mono。
    ========================================================================== */
 
@@ -34,6 +35,7 @@
   --sp-2: 0.5rem;
   --sp-3: 0.75rem;
   --sp-4: 1rem;
+  --sp-5: 1.25rem;
   --sp-6: 1.5rem;
   --sp-8: 2rem;
   --sp-12: 3rem;
@@ -46,42 +48,84 @@
   --measure-page: 72rem; /* 常规页面 */
   --measure-wide: 96rem; /* 摄影宽幅 */
 
-  /* --- 颜色：浅色（纸） ------------------------------------------------- */
-  --paper: #faf8f4;
-  --paper-raised: #ffffff;
-  --paper-sunken: #f2eee6;
-  --ink: #1a1815;
-  --ink-soft: #55504a;
-  --ink-faint: #8a8377;
-  --rule: #ddd8ce;
-  --rule-strong: #c4bcae;
-  --seal: #b7352d; /* 印泥朱红 */
-  --seal-hover: #96271f;
-  --seal-wash: rgba(183, 53, 45, 0.08);
+  /* --- 圆角与阴影 ------------------------------------------------------- */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-full: 999px;
 
-  --shadow-lift: 0 1px 2px rgba(26, 24, 21, 0.04),
-    0 8px 24px -12px rgba(26, 24, 21, 0.12);
+  /* --- 颜色：深色（默认） ----------------------------------------------- */
+  --paper: #0a0a0c;
+  --paper-raised: #131317;
+  --paper-sunken: #060608;
+  --ink: #f0efed;
+  --ink-soft: #a8a6a1;
+  --ink-faint: #6b6963;
+  --rule: rgba(255, 255, 255, 0.08);
+  --rule-strong: rgba(255, 255, 255, 0.18);
 
-  color-scheme: light;
-}
+  /* 强调色：冷调月白蓝。变量名沿用 --seal，组件无需改动 */
+  --seal: #8fb8de;
+  --seal-hover: #b3d2f0;
+  --seal-wash: rgba(143, 184, 222, 0.12);
 
-/* --- 颜色：深色（墨） --------------------------------------------------- */
-:root[data-theme='dark'] {
-  --paper: #12110f;
-  --paper-raised: #1b1917;
-  --paper-sunken: #0c0b0a;
-  --ink: #ede9e1;
-  --ink-soft: #a8a29a;
-  --ink-faint: #756f68;
-  --rule: #2a2724;
-  --rule-strong: #3d3934;
-  --seal: #e0554a; /* 暗背景上提亮，保证对比度 */
-  --seal-hover: #ef6d61;
-  --seal-wash: rgba(224, 85, 74, 0.12);
+  /* --- 玻璃 ------------------------------------------------------------- */
+  --glass-bg: rgba(255, 255, 255, 0.045);
+  --glass-bg-strong: rgba(255, 255, 255, 0.075);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-lit: rgba(255, 255, 255, 0.28);
+  --glass-blur: 20px;
+  --glass-saturate: 180%;
+  --glass-fallback: #16161b; /* 不支持 backdrop-filter 时的不透明底 */
 
-  --shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  /* --- 底层光晕（玻璃的折射来源） --------------------------------------- */
+  --glow-1: rgba(88, 128, 255, 0.24);
+  --glow-2: rgba(190, 120, 255, 0.18);
+  --glow-3: rgba(60, 200, 210, 0.14);
+  --noise-opacity: 0.04;
+
+  --shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 12px 32px -14px rgba(0, 0, 0, 0.7);
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 16px 40px -12px rgba(0, 0, 0, 0.55);
 
   color-scheme: dark;
+}
+
+/* --- 颜色：浅色 --------------------------------------------------------- */
+:root[data-theme='light'] {
+  --paper: #eef0f5;
+  --paper-raised: #ffffff;
+  --paper-sunken: #e2e5ee;
+  --ink: #16171c;
+  --ink-soft: #4e5058;
+  --ink-faint: #83868f;
+  --rule: rgba(16, 18, 26, 0.1);
+  --rule-strong: rgba(16, 18, 26, 0.22);
+
+  --seal: #3a6ea8;
+  --seal-hover: #27527f;
+  --seal-wash: rgba(58, 110, 168, 0.1);
+
+  /* 浅色下玻璃要更白更实，否则和背景糊在一起 */
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-border-lit: rgba(255, 255, 255, 0.95);
+  --glass-fallback: #f7f8fb;
+
+  --glow-1: rgba(90, 130, 255, 0.26);
+  --glow-2: rgba(255, 150, 200, 0.2);
+  --glow-3: rgba(80, 210, 220, 0.18);
+  --noise-opacity: 0.03;
+
+  --shadow-lift: 0 1px 2px rgba(20, 24, 40, 0.05),
+    0 12px 32px -14px rgba(20, 24, 40, 0.16);
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 16px 40px -14px rgba(20, 24, 40, 0.18);
+
+  color-scheme: light;
 }
 
 /* ==========================================================================
@@ -97,6 +141,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  background-color: var(--paper);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -113,7 +158,9 @@ html {
 }
 
 body {
+  position: relative;
   margin: 0;
+  min-height: 100vh;
   background-color: var(--paper);
   color: var(--ink);
   font-family: var(--font-body);
@@ -124,17 +171,37 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  /* 纸张纹理：极淡的斜向纹，避免大面积纯色的塑料感 */
-  background-image: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 2px,
-    var(--seal-wash) 2px,
-    var(--seal-wash) 3px
-  );
-  background-size: 96px 96px;
-  background-attachment: fixed;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* 固定光晕层：整个毛玻璃效果的物理前提，没有它 blur 无从折射 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20vmax;
+  z-index: -2;
+  pointer-events: none;
+  background-image: radial-gradient(
+      38vmax 32vmax at 12% 8%,
+      var(--glow-1),
+      transparent 62%
+    ),
+    radial-gradient(34vmax 30vmax at 88% 16%, var(--glow-2), transparent 60%),
+    radial-gradient(40vmax 34vmax at 50% 96%, var(--glow-3), transparent 64%);
+  filter: blur(8px);
+  transition: opacity 0.4s ease;
+}
+
+/* 颗粒层：消掉大面积渐变的塑料感，也让玻璃边缘更可信 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--noise-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
 }
 
 h1,
@@ -146,8 +213,8 @@ h4 {
   line-height: var(--leading-tight);
   letter-spacing: -0.01em;
   margin: 0;
-  /* Fraunces 的光学尺寸轴：大字号自动收紧细节 */
-  font-variation-settings: 'opsz' 32;
+  /* Fraunces 的可变轴：光学尺寸给大字号，WONK/SOFT 归零取现代高对比衬线 */
+  font-variation-settings: 'opsz' 32, 'SOFT' 0, 'WONK' 0;
   text-wrap: balance;
 }
 
@@ -172,7 +239,7 @@ a:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--seal);
   outline-offset: 3px;
-  border-radius: 2px;
+  border-radius: var(--r-sm);
 }
 
 img,
@@ -193,13 +260,26 @@ samp {
 
 hr {
   border: 0;
-  border-top: 1px solid var(--rule);
+  height: 1px;
+  /* 两端淡出的分隔线，比整条实线轻 */
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--rule-strong),
+    transparent
+  );
   margin: var(--sp-12) 0;
 }
 
 ::selection {
   background: var(--seal);
   color: var(--paper);
+}
+
+/* 滚动条也跟上主题，避免深色页面配一条亮白滚动条 */
+* {
+  scrollbar-color: var(--rule-strong) transparent;
+  scrollbar-width: thin;
 }
 
 /* ==========================================================================
@@ -233,6 +313,50 @@ hr {
   border: 0;
 }
 
+/* --- 玻璃面板 ----------------------------------------------------------- */
+.glass {
+  position: relative;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-glass);
+}
+
+/* 顶部一道高光描边：真实玻璃的受光边，是「高级感」的主要来源 */
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    160deg,
+    var(--glass-border-lit),
+    transparent 32%,
+    transparent 68%,
+    var(--glass-border) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.glass--strong {
+  background: var(--glass-bg-strong);
+}
+
+/* 完全不支持 backdrop-filter 的浏览器：退回不透明面板，保证可读 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--glass-fallback);
+  }
+}
+
 /* 元信息标签：等宽 + 全大写 + 宽字距，编辑感的来源之一 */
 .meta {
   font-family: var(--font-mono);
@@ -254,21 +378,6 @@ hr {
   user-select: none;
 }
 
-/* 朱红印章式小标记 */
-.seal-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75em;
-  height: 1.75em;
-  background: var(--seal);
-  color: var(--paper);
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
 /* 载入时的错落淡入：一次性、克制，不干扰阅读 */
 @keyframes rise {
   from {
@@ -282,7 +391,7 @@ hr {
 }
 
 .rise {
-  animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+  animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
 }
 
 .rise-1 { animation-delay: 0.05s; }
@@ -327,19 +436,22 @@ hr {
 }
 
 .prose a:hover {
-  text-decoration-color: var(--seal);
+  color: var(--seal-hover);
+  text-decoration-color: var(--seal-hover);
 }
 
 .prose strong {
   font-weight: 600;
-  /* 中文没有真正的粗体区分，用朱红比加粗更清晰 */
+  /* 中文没有真正的粗体区分，用强调色比加粗更清晰 */
   color: var(--seal);
 }
 
 .prose blockquote {
   margin-inline: 0;
-  padding-left: var(--sp-6);
+  padding: var(--sp-4) var(--sp-6);
   border-left: 2px solid var(--seal);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--seal-wash);
   color: var(--ink-soft);
   font-style: normal;
 }
@@ -354,11 +466,11 @@ hr {
 }
 
 .prose li::marker {
-  color: var(--ink-faint);
+  color: var(--seal);
 }
 
 .prose img {
-  border-radius: 3px;
+  border-radius: var(--r-md);
   border: 1px solid var(--rule);
 }
 
@@ -378,19 +490,20 @@ hr {
   background: var(--seal-wash);
   color: var(--seal);
   padding: 0.15em 0.4em;
-  border-radius: 2px;
+  border-radius: 5px;
   word-break: break-word;
 }
 
 .prose pre {
   padding: var(--sp-4) var(--sp-6);
-  border-radius: 3px;
+  border-radius: var(--r-md);
   border: 1px solid var(--rule);
   overflow-x: auto;
   line-height: 1.65;
   font-size: var(--text-sm);
   /* 代码块出血到版心之外，缓解窄栏的压迫感 */
   margin-inline: calc(var(--sp-4) * -1);
+  box-shadow: var(--shadow-lift);
 }
 
 .prose table {
@@ -417,14 +530,23 @@ hr {
   font-weight: 400;
 }
 
-/* Shiki 双主题：深色模式下切换到 dark 变量，无需运行时重新高亮 */
-:root[data-theme='dark'] .astro-code,
-:root[data-theme='dark'] .astro-code span {
+/* Shiki 双主题：深色是默认主题，浅色模式下切回 light 变量，无需运行时重高亮 */
+.astro-code,
+.astro-code span {
   color: var(--shiki-dark) !important;
   background-color: var(--shiki-dark-bg) !important;
   font-style: var(--shiki-dark-font-style) !important;
   font-weight: var(--shiki-dark-font-weight) !important;
   text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+:root[data-theme='light'] .astro-code,
+:root[data-theme='light'] .astro-code span {
+  color: var(--shiki-light) !important;
+  background-color: var(--shiki-light-bg) !important;
+  font-style: var(--shiki-light-font-style) !important;
+  font-weight: var(--shiki-light-font-weight) !important;
+  text-decoration: var(--shiki-light-text-decoration) !important;
 }
 
 /* 数学公式：长公式允许横向滚动，不撑破版心 */

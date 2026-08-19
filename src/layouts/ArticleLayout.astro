@@ -49,7 +49,7 @@ const {
   )}
 
   <article>
-    <header class="head rise rise-1">
+    <header class="head glass rise rise-1">
       <p class="meta crumbs">
         <a href={section.href}>{section.label}</a>
       </p>
@@ -109,8 +109,8 @@ const {
   }
 
   .head {
-    padding-bottom: var(--sp-8);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-8);
+    border-radius: var(--r-xl);
   }
 
   .crumbs a {
@@ -125,7 +125,7 @@ const {
   .title {
     margin-top: var(--sp-4);
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.02em;
   }
 
@@ -161,9 +161,10 @@ const {
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
     color: var(--ink-soft);
-    border: 1px solid var(--rule);
-    border-radius: 2px;
-    padding: 0.15em 0.55em;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    padding: 0.25em 0.7em;
   }
 
   .cover {
@@ -171,8 +172,9 @@ const {
   }
 
   .cover :global(img) {
-    border-radius: 3px;
-    border: 1px solid var(--rule);
+    border-radius: var(--r-lg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-lift);
   }
 
   .prose {
@@ -186,17 +188,30 @@ const {
   }
 
   .back a {
+    display: inline-block;
+    padding: var(--sp-2) var(--sp-4);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-decoration: none;
     color: var(--ink-soft);
+    transition: color 0.18s ease, background-color 0.24s ease,
+      border-color 0.18s ease;
   }
 
   .back a:hover {
-    color: var(--seal);
+    color: var(--ink);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
   }
 
   @media (max-width: 40rem) {
+    .head {
+      padding: var(--sp-6);
+    }
+
     .title {
       font-size: var(--text-2xl);
     }

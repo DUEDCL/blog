@@ -4,7 +4,7 @@ import { NAV } from '../consts';
 ---
 
 <BaseLayout title="页面不存在" description="没有找到这个页面。">
-  <section class="void">
+  <section class="void glass rise rise-1">
     <p class="code">404</p>
     <h1 class="title">这里没有东西</h1>
     <p class="hint">
@@ -25,8 +25,9 @@ import { NAV } from '../consts';
 
 <style>
   .void {
-    padding-block: var(--sp-24) var(--sp-16);
-    max-width: 34rem;
+    margin-top: var(--sp-16);
+    padding: var(--sp-12);
+    border-radius: var(--r-xl);
   }
 
   .code {
@@ -40,7 +41,7 @@ import { NAV } from '../consts';
   .title {
     margin-top: var(--sp-4);
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.02em;
   }
 
@@ -53,27 +54,38 @@ import { NAV } from '../consts';
   .ways {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-6);
-    margin: var(--sp-12) 0 0;
+    gap: var(--sp-3);
+    margin: var(--sp-8) 0 0;
     padding: 0;
     list-style: none;
   }
 
   .ways a {
+    display: inline-block;
+    padding: var(--sp-2) var(--sp-4);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-decoration: none;
     color: var(--ink-soft);
-    border-bottom: 1px solid var(--rule-strong);
-    padding-bottom: 2px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    transition: color 0.18s ease, background-color 0.24s ease,
+      border-color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
   .ways a:hover {
-    color: var(--seal);
-    border-color: var(--seal);
+    color: var(--ink);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-2px);
   }
 
   @media (max-width: 40rem) {
+    .void {
+      padding: var(--sp-8);
+    }
+
     .title {
       font-size: var(--text-2xl);
     }
