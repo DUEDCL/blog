@@ -1,9 +1,9 @@
 ---
-title: duchenlin.eu.cc
-description: 这个站本身。Astro 静态站，Markdown 写作，推送即部署，全站不依赖境外 CDN。
+title: duchenlin.top
+description: 这个站本身。Astro 静态站，Markdown 写作，一条命令部署，全站不依赖境外 CDN。
 pubDate: 2026-08-16
-tags: ['Astro', 'Cloudflare Pages']
-link: 'https://duchenlin.eu.cc'
+tags: ['Astro', 'Cloudflare Workers']
+link: 'https://duchenlin.top'
 repo: 'https://github.com/DUEDCL/duchenlin-blog'
 status: 'active'
 featured: true
@@ -20,7 +20,7 @@ featured: true
 - **Astro**：零客户端 JS 的静态站生成器，内容站的最优解。
 - **内容集合 + Zod**：frontmatter 字段在构建期校验，写错立刻报错而不是上线后看到空白。
 - **构建期图片处理**：自动压缩、转 WebP、生成多尺寸 srcset。
-- **Cloudflare Pages**：推送到 GitHub 自动构建部署，免费额度对个人站远远够用。
+- **Cloudflare Workers 静态资源**：一条命令部署，免费额度对个人站远远够用。
 
 ## 刻意做的取舍
 

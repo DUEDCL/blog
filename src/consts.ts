@@ -1,6 +1,6 @@
 // 站点全局配置。
 
-export const SITE_URL = 'https://duchenlin.eu.cc';
+export const SITE_URL = 'https://duchenlin.top';
 
 export const SITE_TITLE = '沉麟';
 

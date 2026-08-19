@@ -8,7 +8,9 @@ import rehypeKatex from 'rehype-katex';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://duchenlin.eu.cc',
+  // 主域。canonical、sitemap、RSS 里的绝对地址全由这里推导 ——
+  // duchenlin.eu.cc 也绑在同一个 Worker 上，但它在国内被 RST，不能当主域。
+  site: 'https://duchenlin.top',
 
   integrations: [mdx(), sitemap()],
 
