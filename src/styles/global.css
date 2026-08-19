@@ -43,6 +43,15 @@
   --sp-24: 6rem;
   --sp-32: 8rem;
 
+  /* --- 顶栏高度与锚点偏移 ------------------------------------------------- */
+  /* 顶栏是 sticky，占位高度恒定：--sp-4 + .bar 的 3.5rem + --sp-4 = 5.5rem。
+     Header.astro 靠 transform 做「贴顶收紧」，绝不改 padding，所以这个值不会变。
+     --header-offset 再多留一点呼吸空间，供 html 的 scroll-padding-top 统一使用 ——
+     锚点偏移只在这一处定义，页面不要各自再写 scroll-margin-top（踩过：
+     两处魔法数字互不知情，改了顶栏断点就有一处失效）。 */
+  --header-h: 5.5rem;
+  --header-offset: 6rem;
+
   /* --- 版心宽度 --------------------------------------------------------- */
   --measure-prose: 38rem; /* 文章窄栏：中文每行约 33-36 字，长阅读最舒服 */
   --measure-page: 72rem; /* 常规页面 */
@@ -77,6 +86,9 @@
   --glass-border-lit: rgba(255, 255, 255, 0.28);
   --glass-blur: 20px;
   --glass-saturate: 180%;
+  /* 玻璃后方的提亮量。深色下不需要（白色半透明本身就在提亮），
+     浅色下是让玻璃从浅底里「浮」出来的关键手段之一 */
+  --glass-brightness: 100%;
   --glass-fallback: #16161b; /* 不支持 backdrop-filter 时的不透明底 */
 
   /* --- 底层光晕（玻璃的折射来源） --------------------------------------- */
@@ -95,35 +107,47 @@
 
 /* --- 颜色：浅色 --------------------------------------------------------- */
 :root[data-theme='light'] {
-  --paper: #eef0f5;
+  /* 底色带冷蓝调、比纯白深一档 —— 光晕需要可见空间，纯白底会把它整个吃掉 */
+  --paper: #e6eaf3;
   --paper-raised: #ffffff;
-  --paper-sunken: #e2e5ee;
-  --ink: #16171c;
-  --ink-soft: #4e5058;
-  --ink-faint: #83868f;
-  --rule: rgba(16, 18, 26, 0.1);
-  --rule-strong: rgba(16, 18, 26, 0.22);
+  --paper-sunken: #d5dbe8;
+  --ink: #14161c;
+  --ink-soft: #474a54;
+  --ink-faint: #767a86;
+  --rule: rgba(16, 22, 40, 0.12);
+  --rule-strong: rgba(16, 22, 40, 0.26);
 
-  --seal: #3a6ea8;
-  --seal-hover: #27527f;
-  --seal-wash: rgba(58, 110, 168, 0.1);
+  --seal: #2f5f96;
+  --seal-hover: #1e4472;
+  --seal-wash: rgba(47, 95, 150, 0.1);
 
-  /* 浅色下玻璃要更白更实，否则和背景糊在一起 */
-  --glass-bg: rgba(255, 255, 255, 0.55);
-  --glass-bg-strong: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.75);
-  --glass-border-lit: rgba(255, 255, 255, 0.95);
-  --glass-fallback: #f7f8fb;
+  /* 浅色玻璃的构造与深色相反 —— 这是之前「白色主题下看不出玻璃」的根因：
+     深色靠白色半透明「提亮」，白描边压在深底上自然可见；
+     浅色下白描边压在浅底上等于没有描边，必须改成
+     「深色外描边 + 白色内高光 + 背后提亮」才有厚度感。 */
+  --glass-bg: rgba(255, 255, 255, 0.42);
+  --glass-bg-strong: rgba(255, 255, 255, 0.62);
+  --glass-border: rgba(22, 32, 60, 0.14); /* 深色细描边，勾出玻璃边界 */
+  --glass-border-lit: rgba(255, 255, 255, 0.95); /* 左上受光高光边 */
+  --glass-blur: 26px;
+  --glass-saturate: 210%;
+  --glass-brightness: 112%;
+  --glass-fallback: #f4f6fb;
 
-  --glow-1: rgba(90, 130, 255, 0.26);
-  --glow-2: rgba(255, 150, 200, 0.2);
-  --glow-3: rgba(80, 210, 220, 0.18);
-  --noise-opacity: 0.03;
+  /* 光晕要比深色下更饱和更强：玻璃折射的是光晕，而浅底会把它冲淡 */
+  --glow-1: rgba(72, 118, 255, 0.42);
+  --glow-2: rgba(255, 110, 180, 0.34);
+  --glow-3: rgba(40, 200, 215, 0.3);
+  --noise-opacity: 0.035;
 
-  --shadow-lift: 0 1px 2px rgba(20, 24, 40, 0.05),
-    0 12px 32px -14px rgba(20, 24, 40, 0.16);
-  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 16px 40px -14px rgba(20, 24, 40, 0.18);
+  --shadow-lift: 0 1px 2px rgba(18, 24, 44, 0.06),
+    0 12px 32px -14px rgba(18, 24, 44, 0.2);
+  /* 内高光白线是浅色玻璃立体感的主要来源，要比深色下更强；
+     第二条 inset 沿整圈补一层薄白，模拟玻璃侧壁 */
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 2px 6px -1px rgba(18, 24, 44, 0.08),
+    0 18px 44px -16px rgba(18, 24, 44, 0.26);
 
   color-scheme: light;
 }
@@ -141,8 +165,20 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /* 全站锚点跳转统一让出顶栏高度。放在 html 上一次管住所有页面，
+     比每个页面自己写 scroll-margin-top 可靠 */
+  scroll-padding-top: var(--header-offset);
   background-color: var(--paper);
   transition: background-color 0.4s ease;
+}
+
+/* 窄屏顶栏折成两行（断点与 Header.astro 的 46rem 一致）。
+   实测 375×812 与 320×720 下占位高度都是 142px，所以 9.5rem（152px）留出 10px 呼吸。
+   数字是实测的，不是估的 —— 改 .bar 的窄屏内边距或行距时要回来重测。 */
+@media (max-width: 46rem) {
+  :root {
+    --header-offset: 9.5rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -324,8 +360,10 @@ hr {
 .glass {
   position: relative;
   background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
+    brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
+    brightness(var(--glass-brightness));
   border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-glass);
@@ -374,16 +412,7 @@ hr {
   font-variant-numeric: tabular-nums;
 }
 
-/* 竖排中文栏目标识 —— 本站的记忆点，仅宽屏显示 */
-.vertical-label {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  letter-spacing: 0.3em;
-  color: var(--ink-faint);
-  user-select: none;
-}
+/* 竖排中文栏目标识 —— 杂志式极简下收掉了，样式一并移除 */
 
 /* 载入时的错落淡入：一次性、克制，不干扰阅读 */
 @keyframes rise {

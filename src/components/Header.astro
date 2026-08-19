@@ -52,13 +52,11 @@ function isCurrent(href: string) {
     position: sticky;
     top: 0;
     z-index: 50;
+    /* 玻璃条上方留一点空隙，让它真的是「浮」着的。
+       这个值必须恒定 —— 它参与布局，动画它会让整页每帧重排、把下方内容上下推，
+       在阈值附近表现为可见的抖动（踩过）。收紧观感改由 .bar 的 transform 实现。
+       顶栏占位高度恒为 --header-h，global.css 的 --header-offset 依赖这个前提。 */
     padding-block: var(--sp-4);
-    /* 玻璃条上方留一点空隙，让它真的是「浮」着的 */
-    transition: padding-block 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
-  }
-
-  .site-header.is-scrolled {
-    padding-block: var(--sp-2);
   }
 
   .bar {
@@ -68,10 +66,13 @@ function isCurrent(href: string) {
     height: 3.5rem;
     padding-inline: var(--sp-4);
     border-radius: var(--r-full);
-    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease,
+      transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
+  /* 位移只走合成层，不触发重排，视觉上仍是「贴顶后收紧」 */
   .site-header.is-scrolled .bar {
+    transform: translateY(calc(var(--sp-2) * -1));
     background: var(--glass-bg-strong);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
       0 12px 32px -10px rgba(0, 0, 0, 0.5);
@@ -155,7 +156,8 @@ function isCurrent(href: string) {
     transform: translateX(-50%);
   }
 
-  /* 窄屏：导航换到品牌下方，横向可滚动（六个栏目放得下，不做汉堡菜单） */
+  /* 窄屏：导航换到品牌下方（四个栏目 320px 都放得下，不做汉堡菜单）。
+     overflow-x 只是导航将来变长的兜底，不溢出时它什么也不做。 */
   @media (max-width: 46rem) {
     .bar {
       height: auto;
@@ -171,8 +173,10 @@ function isCurrent(href: string) {
       gap: var(--sp-1);
       overflow-x: auto;
       scrollbar-width: none;
-      /* 边缘淡出，暗示还能滑 */
-      mask-image: linear-gradient(90deg, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
+      /* 这里曾有一层边缘淡出蒙版（linear-gradient 左右各 1.5rem 透明）用来暗示还能滑。
+         删掉了：栏目从六项收到四项后，320px 下 scrollWidth 也等于 clientWidth，
+         永远不溢出，蒙版却照旧啃掉首项左边与末项右边各 24px —— 表现为「左边被吞」。
+         真要做淡出，前提是先判断溢出，不值得为四项导航上这套机器。 */
     }
 
     .nav::-webkit-scrollbar {
@@ -182,14 +186,28 @@ function isCurrent(href: string) {
 </style>
 
 <script>
-  /* 滚动后玻璃变实、上下留白收紧。rAF 节流，避免 scroll 里做布局读写 */
+  /* 滚动后玻璃变实、玻璃条上移。rAF 节流，避免 scroll 里做布局读写。
+     两个阈值形成回差：超过 ON 才加类，低于 OFF 才去类，中间地带保持原状。
+     单阈值会自激 —— 类名切换本身会微调滚动位置，在阈值上来回穿越（踩过）。 */
   const header = document.getElementById('site-header');
   if (header) {
+    const ON = 12;
+    const OFF = 4;
+    let scrolled = false;
     let ticking = false;
+
     const sync = () => {
-      header.classList.toggle('is-scrolled', window.scrollY > 8);
+      const y = window.scrollY;
+      if (!scrolled && y > ON) {
+        scrolled = true;
+        header.classList.add('is-scrolled');
+      } else if (scrolled && y < OFF) {
+        scrolled = false;
+        header.classList.remove('is-scrolled');
+      }
       ticking = false;
     };
+
     window.addEventListener(
       'scroll',
       () => {
