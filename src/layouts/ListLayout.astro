@@ -11,36 +11,17 @@ interface Props {
   /** 路由前缀，如 /posts */
   base: string;
   items: CollectionEntry<'posts' | 'notes'>[];
-  tags?: { tag: string; count: number }[];
-  verticalLabel?: string;
 }
 
-const { title, description, empty, base, items, tags = [], verticalLabel } = Astro.props;
+const { title, description, empty, base, items } = Astro.props;
 ---
 
 <BaseLayout title={title} description={description}>
-  {verticalLabel && (
-    <div class="rail" aria-hidden="true">
-      <span class="vertical-label">{verticalLabel}</span>
-    </div>
-  )}
-
   <header class="head glass rise rise-1">
     <h1 class="head__title">{title}</h1>
     <p class="head__desc">{description}</p>
     <p class="head__count meta">共 {items.length} 篇</p>
   </header>
-
-  {tags.length > 0 && (
-    <ul class="tagbar rise rise-2">
-      {tags.map(({ tag, count }) => (
-        <li class="tagbar__item">
-          <span class="tagbar__name">{tag}</span>
-          <span class="tagbar__count">{count}</span>
-        </li>
-      ))}
-    </ul>
-  )}
 
   {items.length > 0 ? (
     <ul class="entries glass rise rise-3">
@@ -48,9 +29,7 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
         <EntryCard
           href={`${base}/${item.id}`}
           title={item.data.title}
-          description={item.data.description}
           pubDate={item.data.pubDate}
-          tags={item.data.tags}
         />
       ))}
     </ul>
@@ -60,19 +39,6 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
 </BaseLayout>
 
 <style>
-  .rail {
-    position: absolute;
-    left: var(--sp-8);
-    top: 12rem;
-    display: none;
-  }
-
-  @media (min-width: 82rem) {
-    .rail {
-      display: block;
-    }
-  }
-
   .head {
     padding: var(--sp-12);
     border-radius: var(--r-xl);
@@ -93,38 +59,6 @@ const { title, description, empty, base, items, tags = [], verticalLabel } = Ast
 
   .head__count {
     margin-top: var(--sp-6);
-  }
-
-  .tagbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-    margin: var(--sp-8) 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .tagbar__item {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-2);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    padding: 0.3em 0.8em;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--ink-soft);
-  }
-
-  .tagbar__name::before {
-    content: '#';
-    color: var(--seal);
-  }
-
-  .tagbar__count {
-    color: var(--ink-faint);
-    font-variant-numeric: tabular-nums;
   }
 
   .entries {

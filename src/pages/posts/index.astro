@@ -1,10 +1,9 @@
 ---
 import ListLayout from '../../layouts/ListLayout.astro';
-import { getPublished, getTagCounts } from '../../utils/content';
+import { getPublished } from '../../utils/content';
 import { SECTIONS } from '../../consts';
 
 const items = await getPublished('posts');
-const tags = await getTagCounts('posts');
 ---
 
 <ListLayout
@@ -13,6 +12,4 @@ const tags = await getTagCounts('posts');
   empty={SECTIONS.posts.empty}
   base="/posts"
   items={items}
-  tags={tags}
-  verticalLabel="技术文章"
 />

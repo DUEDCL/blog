@@ -4,6 +4,7 @@ import 'katex/dist/katex.min.css'; /* 自托管，不走 CDN */
 import { Image } from 'astro:assets';
 import BaseLayout from './BaseLayout.astro';
 import FormattedDate from '../components/FormattedDate.astro';
+import { tagHref } from '../utils/content';
 import type { ImageMetadata } from 'astro';
 
 interface Props {
@@ -16,8 +17,6 @@ interface Props {
   coverAlt?: string;
   /** 面包屑用：所属栏目 */
   section: { href: string; label: string };
-  /** 竖排栏目标识的文字 */
-  verticalLabel?: string;
 }
 
 const {
@@ -29,7 +28,6 @@ const {
   cover,
   coverAlt,
   section,
-  verticalLabel,
 } = Astro.props;
 ---
 
@@ -41,13 +39,6 @@ const {
   image={cover?.src}
   width="prose"
 >
-  {/* 竖排栏目标识：宽屏时贴在版心左外侧，是本站的视觉签名 */}
-  {verticalLabel && (
-    <div class="vertical-rail" aria-hidden="true">
-      <span class="vertical-label">{verticalLabel}</span>
-    </div>
-  )}
-
   <article>
     <header class="head glass rise rise-1">
       <p class="meta crumbs">
@@ -71,7 +62,9 @@ const {
       {tags.length > 0 && (
         <ul class="tags">
           {tags.map((t) => (
-            <li class="tag">{t}</li>
+            <li>
+              <a class="tag" href={tagHref(t)}>{t}</a>
+            </li>
           ))}
         </ul>
       )}
@@ -94,20 +87,6 @@ const {
 </BaseLayout>
 
 <style>
-  .vertical-rail {
-    position: absolute;
-    left: max(var(--sp-6), calc(50vw - var(--measure-prose) / 2 - var(--sp-16)));
-    top: 12rem;
-    display: none;
-  }
-
-  /* 只在版心两侧真的有空间时才显示竖排标识 */
-  @media (min-width: 68rem) {
-    .vertical-rail {
-      display: block;
-    }
-  }
-
   .head {
     padding: var(--sp-8);
     border-radius: var(--r-xl);
@@ -157,6 +136,7 @@ const {
   }
 
   .tag {
+    display: inline-block;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
@@ -165,6 +145,15 @@ const {
     border: 1px solid var(--glass-border);
     border-radius: var(--r-full);
     padding: 0.25em 0.7em;
+    text-decoration: none;
+    transition: color 0.18s ease, border-color 0.18s ease,
+      background-color 0.24s ease;
+  }
+
+  .tag:hover {
+    color: var(--ink);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
   }
 
   .cover {

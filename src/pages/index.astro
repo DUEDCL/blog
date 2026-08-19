@@ -2,15 +2,20 @@
 import { Image } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import EntryCard from '../components/EntryCard.astro';
-import FormattedDate from '../components/FormattedDate.astro';
 import { getPublished } from '../utils/content';
-import { SITE_TITLE, SITE_DESCRIPTION, BIO, SOCIAL, SECTIONS } from '../consts';
+import {
+  SITE_TITLE,
+  SITE_DESCRIPTION,
+  BIO,
+  SOCIAL,
+  SECTIONS,
+  PORTALS,
+} from '../consts';
 import avatar from '../assets/avatar.jpg';
 
-const posts = (await getPublished('posts')).slice(0, 4);
-const notes = (await getPublished('notes')).slice(0, 3);
-const photos = (await getPublished('photos')).slice(0, 3);
-const projects = (await getPublished('projects')).filter((p) => p.data.featured).slice(0, 3);
+const posts = (await getPublished('posts')).slice(0, 3);
+const notes = (await getPublished('notes')).slice(0, 2);
+const projects = (await getPublished('projects')).filter((p) => p.data.featured).slice(0, 2);
 
 const socialLinks = [
   { label: 'GitHub', href: SOCIAL.github },
@@ -73,9 +78,7 @@ const socialLinks = [
           <EntryCard
             href={`/posts/${p.id}`}
             title={p.data.title}
-            description={p.data.description}
             pubDate={p.data.pubDate}
-            tags={p.data.tags}
           />
         ))}
       </ul>
@@ -97,47 +100,12 @@ const socialLinks = [
           <EntryCard
             href={`/notes/${n.id}`}
             title={n.data.title}
-            description={n.data.description}
             pubDate={n.data.pubDate}
-            tags={n.data.tags}
           />
         ))}
       </ul>
     ) : (
       <p class="empty glass">{SECTIONS.notes.empty}</p>
-    )}
-  </section>
-
-  {/* ---------- 摄影 ---------- */}
-  <section class="block">
-    <div class="block__head">
-      <h2 class="block__title">{SECTIONS.photos.title}</h2>
-      <a href="/photos" class="block__more meta">全部 →</a>
-    </div>
-
-    {photos.length > 0 ? (
-      <ul class="shots">
-        {photos.map((ph) => (
-          <li class="shot">
-            <a href={`/photos/${ph.id}`}>
-              <Image
-                src={ph.data.cover}
-                alt={ph.data.coverAlt}
-                widths={[320, 640]}
-                loading="lazy"
-              />
-              <span class="shot__caption">
-                <span class="shot__title">{ph.data.title}</span>
-                <span class="meta">
-                  {ph.data.location ?? <FormattedDate date={ph.data.pubDate} />}
-                </span>
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p class="empty glass">{SECTIONS.photos.empty}</p>
     )}
   </section>
 
@@ -161,6 +129,24 @@ const socialLinks = [
       </ul>
     </section>
   )}
+  {/* ---------- 入口 ---------- */}
+  <section class="block">
+    <div class="block__head">
+      <h2 class="block__title">别处</h2>
+    </div>
+
+    <ul class="portals">
+      {PORTALS.map((p) => (
+        <li>
+          <a href={p.href} class="portal glass">
+            <span class="portal__label">{p.label}</span>
+            <span class="portal__desc">{p.description}</span>
+            <span class="portal__arrow" aria-hidden="true">→</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
 </BaseLayout>
 
 <style>
@@ -317,56 +303,6 @@ const socialLinks = [
     font-size: var(--text-sm);
   }
 
-  /* ---------- 摄影预览 ---------- */
-  .shots {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: var(--sp-6);
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .shot a {
-    display: block;
-    text-decoration: none;
-  }
-
-  .shot :global(img) {
-    aspect-ratio: 4 / 5;
-    object-fit: cover;
-    border-radius: var(--r-lg);
-    border: 1px solid var(--glass-border);
-    filter: saturate(0.92);
-    transition: filter 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.7, 0.3, 1),
-      box-shadow 0.4s ease;
-  }
-
-  .shot a:hover :global(img) {
-    filter: saturate(1.05);
-    transform: translateY(-4px);
-    box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.6);
-  }
-
-  .shot__caption {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-1);
-    margin-top: var(--sp-3);
-    padding-inline: var(--sp-1);
-  }
-
-  .shot__title {
-    font-family: var(--font-display);
-    font-size: var(--text-base);
-    color: var(--ink);
-    transition: color 0.18s ease;
-  }
-
-  .shot a:hover .shot__title {
-    color: var(--seal);
-  }
-
   /* ---------- 作品 ---------- */
   .works {
     list-style: none;
@@ -408,6 +344,66 @@ const socialLinks = [
   .work__desc {
     font-size: var(--text-sm);
     color: var(--ink-soft);
+  }
+
+  /* ---------- 入口 ---------- */
+  .portals {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: var(--sp-4);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .portal {
+    display: grid;
+    /* 箭头固定在右上，标题与描述占左栏 */
+    grid-template-columns: 1fr auto;
+    align-content: start;
+    gap: var(--sp-2) var(--sp-4);
+    height: 100%;
+    padding: var(--sp-6);
+    text-decoration: none;
+    transition: background-color 0.24s ease, border-color 0.18s ease,
+      transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.3s ease;
+  }
+
+  .portal:hover {
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lift);
+  }
+
+  .portal__label {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--ink);
+    transition: color 0.18s ease;
+  }
+
+  .portal:hover .portal__label {
+    color: var(--seal);
+  }
+
+  .portal__desc {
+    grid-column: 1 / -1;
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--ink-soft);
+  }
+
+  .portal__arrow {
+    color: var(--rule-strong);
+    font-size: var(--text-sm);
+    transition: color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  .portal:hover .portal__arrow {
+    color: var(--seal);
+    transform: translateX(0.25rem);
   }
 
   @media (max-width: 52rem) {

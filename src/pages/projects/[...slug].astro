@@ -3,6 +3,7 @@ import { getCollection, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import FormattedDate from '../../components/FormattedDate.astro';
+import { tagHref } from '../../utils/content';
 import { SECTIONS } from '../../consts';
 
 export async function getStaticPaths() {
@@ -66,7 +67,11 @@ const STATUS_LABEL = {
 
       {project.data.tags.length > 0 && (
         <ul class="tags">
-          {project.data.tags.map((t) => <li class="tag">{t}</li>)}
+          {project.data.tags.map((t) => (
+            <li>
+              <a class="tag" href={tagHref(t)}>{t}</a>
+            </li>
+          ))}
         </ul>
       )}
     </header>
@@ -192,6 +197,7 @@ const STATUS_LABEL = {
   }
 
   .tag {
+    display: inline-block;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
@@ -200,6 +206,15 @@ const STATUS_LABEL = {
     border: 1px solid var(--glass-border);
     border-radius: var(--r-full);
     padding: 0.25em 0.7em;
+    text-decoration: none;
+    transition: color 0.18s ease, border-color 0.18s ease,
+      background-color 0.24s ease;
+  }
+
+  .tag:hover {
+    color: var(--ink);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
   }
 
   .cover {
