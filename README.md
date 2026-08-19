@@ -1,6 +1,8 @@
-# duchenlin.eu.cc
+# duchenlin.top
 
-个人站点。Astro 静态生成，Markdown 写作，推送到 GitHub 即自动部署。
+个人站点。Astro 静态生成，Markdown 写作，本地一条命令部署到 Cloudflare Workers。
+
+线上地址：<https://duchenlin.top>（备用 <https://duchenlin.eu.cc>，国内被墙，仅境外可达）
 
 ## 常用命令
 
@@ -14,7 +16,7 @@
 ## 怎么写一篇新文章
 
 在 `src/content/posts/` 下新建一个 `.md` 文件，文件名就是网址。例如
-`src/content/posts/hello-world.md` → `https://duchenlin.eu.cc/posts/hello-world`。
+`src/content/posts/hello-world.md` → `https://duchenlin.top/posts/hello-world`。
 
 文件顶部两条 `---` 之间的部分叫 frontmatter，是这篇文章的元信息：
 
@@ -68,57 +70,54 @@ images:
 - **数学公式**：行内 `$E = mc^2$`，独立成行用 `$$...$$`。
 - **表格、任务列表、脚注** 等标准 Markdown 语法。
 
-## 首次部署（只需做一次）
+## 部署现状
 
-代码和 `wrangler.toml` 都已就绪，剩下四步需要你在浏览器里操作 —— 这几步涉及账号所有权和
-域名注册商，命令行无法代做。**顺序不能颠倒**：第 4 步依赖域名在 Cloudflare 已生效。
+已上线，托管在 Cloudflare Workers（静态资源模式，不是 Pages）。
 
-**1. 把域名加进 Cloudflare**
+| 项目            | 值                                              |
+| :-------------- | :---------------------------------------------- |
+| Worker 名       | `duchenlin-blog`                                |
+| 绑定的域名      | `duchenlin.top`、`www.duchenlin.top`、`duchenlin.eu.cc` |
+| 证书            | Cloudflare 自动签发，两个 zone 都已 Active      |
+| Always Use HTTPS| 两个 zone 均已开启                              |
 
-登录 [dash.cloudflare.com](https://dash.cloudflare.com) → 右上 **Add** → **Existing domain** →
-填 `duchenlin.eu.cc` → 选 **Free** 套餐。完成后 Cloudflare 会给你**两个域名服务器地址**，
-形如 `xxx.ns.cloudflare.com`，记下它们。
+DNS 记录和 HTTPS 证书都由 `wrangler.toml` 里的 `[[routes]] custom_domain = true` 自动生成，
+不需要手工加任何解析记录 —— 裸域按 DNS 规范不能用 CNAME，Cloudflare 用 CNAME 展平
+（CNAME flattening）在内部解决了这个限制，前提是 DNS 必须托管在 Cloudflare。
 
-**2. 在 julydns 换掉域名服务器**
+### 再加一个域名
 
-回到 julydns 控制台，进**「DNS管理」**（不是「域名解析」），把原有的域名服务器改成上一步
-拿到的那两个。
+1. 在 Cloudflare 加站点（Free 套餐），记下它给出的**两台 NS**。
+2. 到域名注册商把 NS 改成那两台。
+3. 等状态变 Active，然后在 `wrangler.toml` 加一段 `[[routes]]` 并重新部署。
 
-> 为什么必须换 NS：裸域（`duchenlin.eu.cc` 不带 `www`）按 DNS 规范不能用 CNAME 指向别处，
-> 只有 Cloudflare 托管 DNS 时才能用它的 CNAME 展平（CNAME flattening）绕过这个限制。
-> 留在 julydns 解析则做不到裸域访问。
+> **NS 是按 zone 随机分配的，两个域名拿到的不是同一对。** 照抄另一个域名的 NS 会导致
+> 永远激活不了：那两台服务器上没有你这个 zone 的数据。踩过一次 —— `duchenlin.top` 填了
+> `duchenlin.eu.cc` 的 `alfred`/`itzel`，而它自己分到的是 `gloria`/`watson`。
+>
+> 另外：任何一个 `[[routes]]` 对应的 zone 还是 pending，**整个 `wrangler deploy` 都会失败**，
+> 不是只跳过那一条。
 
-**3. 等域名状态变成 Active**
+### 关于 `duchenlin.eu.cc`
 
-Cloudflare 会自动检测。通常几分钟到几小时，最长 24 小时。状态没变 Active 之前不要做第 4 步。
-
-**4. 连接仓库，开启自动部署**
-
-Cloudflare 里进 **Workers & Pages** → **Create** → **Import a repository** → 授权 GitHub 并选
-`DUEDCL/duchenlin-blog`（私有仓库需要在授权时勾选它），然后按下表填：
-
-| 设置项                    | 填什么                                       |
-| :------------------------ | :------------------------------------------- |
-| Worker name               | `duchenlin-blog` —— **必须一字不差**         |
-| Build command             | `npm run build`                              |
-| Deploy command            | `npx wrangler deploy`（默认值，不用改）      |
-| Root directory            | 留空                                         |
-| API token                 | 选 **Create new token**，权限用默认          |
-
-Worker 名字与 `wrangler.toml` 里的 `name` 不一致会导致构建直接失败，这是最常见的坑。
-
-保存后会立刻触发一次构建。构建成功即上线，`wrangler.toml` 会自动把 `duchenlin.eu.cc` 绑到
-这个 Worker 上，DNS 记录和 HTTPS 证书都由 Cloudflare 自动生成，你不需要手工加任何解析记录。
+留着当第二入口，但国内访问不了 —— 有中间设备按主机名字符串匹配注入 TCP RST，换 IP、
+换端口、换子域名都绕不过（判据是主机名本身）。境外可以正常访问。主域用 `duchenlin.top`。
 
 ## 发布流程
 
-首次部署完成后，日常发布只需要推送：
+改完内容后本地跑一条命令：
 
 ```bash
-git add -A && git commit -m "post: 新文章标题" && git push
+npx wrangler deploy
 ```
 
-推送后 Cloudflare 自动构建，约一到两分钟上线。
+它会先读 `dist/`，所以要先 `npm run build`（或者用 `npm run build && npx wrangler deploy`）。
+部署需要 `CLOUDFLARE_API_TOKEN` 环境变量，或者 `npx wrangler login` 交互授权。
+
+GitHub 自动构建（Workers Builds）**还没接上** —— 仓库推送当时被网络挡住了。想接的话在
+Cloudflare 里进 **Workers & Pages** → 选 `duchenlin-blog` → **Settings** → **Builds** →
+连接 `DUEDCL/duchenlin-blog`，构建命令 `npm run build`，部署命令 `npx wrangler deploy`。
+接上之后就变成推送即部署。
 
 ## 需要你填的地方
 
