@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE_TITLE, SOCIAL } from '../consts';
+import { SITE_TITLE, SOCIAL, CONTACT } from '../consts';
 
 const links = [
   { label: 'GitHub', href: SOCIAL.github },
@@ -10,6 +10,49 @@ const links = [
   { label: '知乎', href: SOCIAL.zhihu },
   { label: 'RSS', href: SOCIAL.rss },
 ].filter((l) => l.href);
+
+/**
+ * 名片。三个平台能做到的事差得很远，所以每张卡的按钮不一样：
+ * 只有 QQ 有真正的「一键加好友」链接，微信只能出示二维码，抖音只能打开主页。
+ * 填了才出现 —— CONTACT 全空时整节替换成一句实话。
+ */
+const cards = [
+  CONTACT.qq && {
+    key: 'qq',
+    label: 'QQ',
+    /* 唯一真能一键弹出加好友页的平台。链接格式来自多个社区来源且互相一致，
+       非腾讯官方文档，所以三条腿都给：链接失效还有二维码，二维码不方便还能复制号码 */
+    action: {
+      href: `http://wpa.qq.com/msgrd?v=3&uin=${CONTACT.qq}&site=qq&menu=yes`,
+      text: '加好友',
+    },
+    qr: CONTACT.qqQr || undefined,
+    copy: CONTACT.qq,
+    note: '点开直接弹出加好友页；没反应就扫码或复制号码手动搜。',
+  },
+  CONTACT.wechatQr && {
+    key: 'wechat',
+    label: '微信',
+    /* 微信没有可用的加好友链接：官方 URL Scheme 文档只覆盖小程序，
+       网上流传的个人加好友链接未能核实。只能出示二维码 */
+    qr: CONTACT.wechatQr,
+    note: '微信没有加好友链接，扫码是唯一的办法。',
+  },
+  CONTACT.douyin && {
+    key: 'douyin',
+    label: '抖音',
+    /* 抖音同样没有加好友链接，只有个人主页地址 */
+    action: { href: CONTACT.douyin, text: '打开主页' },
+    note: '抖音只能跳到主页，关注要你自己点一下。',
+  },
+].filter(Boolean) as {
+  key: string;
+  label: string;
+  action?: { href: string; text: string };
+  qr?: string;
+  copy?: string;
+  note: string;
+}[];
 ---
 
 <BaseLayout title="关于" description={`关于 ${SITE_TITLE}`} width="prose">
@@ -17,34 +60,54 @@ const links = [
     <h1 class="title">关于</h1>
   </header>
 
-  {/* TODO: 下面全是占位内容，换成你自己的介绍。这是整个站点最该亲手写的一页。 */}
   <div class="prose glass rise rise-2">
-    <p>
-      你好，我是 {SITE_TITLE}。这个站点是我自己的一块地，用来放技术笔记、随笔、
-      做过的东西和拍的照片。
-    </p>
-
-    <h2>在做什么</h2>
-    <p>
-      这里写你的职业方向、正在琢磨的技术、手头的项目。两三句就够，不必写成简历。
-    </p>
-
-    <h2>为什么有这个站</h2>
-    <p>
-      写你建站的理由 —— 想有个不受平台规则约束的地方，想把踩过的坑记下来，
-      或者只是想有个自己的角落。
-    </p>
+    <p>还没想好怎么介绍自己。想好了会写在这里。</p>
 
     <h2>这个站怎么搭的</h2>
     <p>
       静态站，用 <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> 生成，
-      源码托管在 GitHub，由 Cloudflare Pages 构建和分发。文章是仓库里的 Markdown 文件，
-      推送即部署。全站不引用境外 CDN 资源，字体随构建产物一起分发。
+      托管在 Cloudflare Workers 的静态资源模式上，改完内容在本地跑一条命令部署。
+      文章就是仓库里的 Markdown 文件。全站不引用境外 CDN 资源，字体随构建产物一起分发。
     </p>
+
+    <h2>名片</h2>
+    {cards.length > 0 ? (
+      <ul class="cards">
+        {cards.map((c) => (
+          <li class="card">
+            <span class="card__label">{c.label}</span>
+
+            {c.qr && <img class="card__qr" src={c.qr} alt={`${c.label}二维码`} width="140" height="140" loading="lazy" />}
+
+            <span class="card__acts">
+              {c.action && (
+                <a
+                  class="card__btn"
+                  href={c.action.href}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  {c.action.text}
+                </a>
+              )}
+              {c.copy && (
+                <button class="card__btn" type="button" data-copy={c.copy}>
+                  复制号码
+                </button>
+              )}
+            </span>
+
+            <span class="card__note">{c.note}</span>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p>联系方式还没整理好。</p>
+    )}
 
     {links.length > 0 && (
       <>
-        <h2>找到我</h2>
+        <h2>别处</h2>
         <ul>
           {links.map((l) => (
             <li>
@@ -62,6 +125,27 @@ const links = [
     )}
   </div>
 </BaseLayout>
+
+{/* 复制号码。navigator.clipboard 在非 HTTPS 下不可用，失败就把号码选中让用户自己复制 */}
+<script>
+  document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const value = btn.dataset.copy ?? '';
+      const done = (text: string) => {
+        const original = btn.textContent;
+        btn.textContent = text;
+        setTimeout(() => (btn.textContent = original), 1600);
+      };
+
+      try {
+        await navigator.clipboard.writeText(value);
+        done('已复制');
+      } catch {
+        done(value);
+      }
+    });
+  });
+</script>
 
 <style>
   .head {
@@ -84,6 +168,76 @@ const links = [
   /* 玻璃面板里首个标题不需要额外顶部间距 */
   .prose :global(> *:first-child) {
     margin-top: 0;
+  }
+
+  /* --- 名片 --------------------------------------------------------------- */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: var(--sp-4);
+    margin: var(--sp-6) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: var(--sp-5);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+  }
+
+  .card__label {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* 二维码底色恒为白 —— 深色主题下若透出深底，多数扫码器识别不了 */
+  .card__qr {
+    width: 8.75rem;
+    height: 8.75rem;
+    border-radius: var(--r-sm);
+    background: #fff;
+    padding: var(--sp-2);
+  }
+
+  .card__acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+
+  .card__btn {
+    display: inline-block;
+    padding: var(--sp-2) var(--sp-4);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.2;
+    color: var(--ink-soft);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease,
+      background-color 0.24s ease;
+  }
+
+  .card__btn:hover {
+    color: var(--ink);
+    border-color: var(--glass-border-lit);
+  }
+
+  .card__note {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--ink-faint);
   }
 
   @media (max-width: 40rem) {
