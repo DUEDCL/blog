@@ -1,0 +1,5 @@
+# Cloudflare Pages 响应头配置。文件本身不会被当作静态资源提供。
+# Astro 把带内容哈希的产物全部输出到 /_astro/，文件名随内容变化，
+# 所以可以放心让浏览器长期缓存 —— 内容一改文件名就变，不存在缓存不失效的问题。
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -78,8 +78,9 @@ git add -A && git commit -m "post: 新文章标题" && git push
 
 ## 需要你填的地方
 
-`src/consts.ts` 里带 `TODO` 注释的项目——站名、简介、社交链接、页头印章的字。
-`src/pages/about.astro` 里的「关于」正文也是占位文字。
+`src/consts.ts` 里的社交链接目前只填了 GitHub，邮箱、X、微博、知乎留空（留空的不会渲染）。
+`src/pages/about.astro` 里的「关于」正文是占位文字。
+`src/content/photos/` 与 `src/content/projects/` 引用的配图是占位图，alt 文字写着「占位图，请替换」。
 
 ## 技术说明
 

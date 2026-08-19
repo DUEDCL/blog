@@ -22,5 +22,8 @@
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
     "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.124.0"
   }
 }
