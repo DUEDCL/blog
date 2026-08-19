@@ -142,6 +142,7 @@ html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
   background-color: var(--paper);
+  transition: background-color 0.4s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -161,7 +162,11 @@ body {
   position: relative;
   margin: 0;
   min-height: 100vh;
-  background-color: var(--paper);
+  /* 注意：这里刻意不设 background-color。body 只有 position: relative、
+     z-index: auto，不构成层叠上下文，所以下面两个 z-index 为负的伪元素会落到
+     根（html）层叠上下文里 —— 在根上下文中负 z-index 后代先绘制、body 自身背景
+     后绘制，body 一旦有不透明背景就会把光晕层和颗粒层整个盖掉，毛玻璃随之失效。
+     底色交给 html 承担。 */
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
@@ -171,24 +176,26 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  transition: background-color 0.4s ease, color 0.4s ease;
+  transition: color 0.4s ease;
 }
 
-/* 固定光晕层：整个毛玻璃效果的物理前提，没有它 blur 无从折射 */
+/* 固定光晕层：整个毛玻璃效果的物理前提，没有它 blur 无从折射。
+   这里必须用 inset: 0，不能向外溢出。渐变中心写的是百分比，按元素盒子解析 ——
+   元素一旦比视口大，中心就被按比例推到视口外，屏幕上只剩边角余晖（曾经踩过）。
+   径向渐变边缘本身就是渐隐的，也不需要再叠一层 filter: blur()。 */
 body::before {
   content: '';
   position: fixed;
-  inset: -20vmax;
+  inset: 0;
   z-index: -2;
   pointer-events: none;
   background-image: radial-gradient(
-      38vmax 32vmax at 12% 8%,
+      58vmax 46vmax at 14% 6%,
       var(--glow-1),
-      transparent 62%
+      transparent 66%
     ),
-    radial-gradient(34vmax 30vmax at 88% 16%, var(--glow-2), transparent 60%),
-    radial-gradient(40vmax 34vmax at 50% 96%, var(--glow-3), transparent 64%);
-  filter: blur(8px);
+    radial-gradient(52vmax 44vmax at 88% 20%, var(--glow-2), transparent 64%),
+    radial-gradient(56vmax 46vmax at 46% 98%, var(--glow-3), transparent 68%);
   transition: opacity 0.4s ease;
 }
 

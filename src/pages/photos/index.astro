@@ -74,10 +74,12 @@ const albums = await getPublished('photos');
     margin-top: var(--sp-6);
   }
 
-  /* 密排网格：每第 5 张跨两行，打破整齐的方格感 */
+  /* 密排网格：每第 5 张跨两行，打破整齐的方格感。
+     用 auto-fit 而不是 auto-fill —— 相册只有两三组时 auto-fill 会留下空轨道，
+     右半屏一片空白；auto-fit 会把空轨道折叠掉，让现有相册铺满整行。 */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
     grid-auto-rows: 14rem;
     gap: var(--sp-3);
     list-style: none;
@@ -176,7 +178,7 @@ const albums = await getPublished('photos');
     }
 
     .grid {
-      grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
       grid-auto-rows: 11rem;
     }
   }

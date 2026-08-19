@@ -107,9 +107,13 @@ const STATUS_LABEL = {
     margin-top: var(--sp-6);
   }
 
+  /* auto-fit + 固定上限，兼顾「只有一两个作品」和「以后堆到十几个」两种情况：
+     auto-fit 折叠空轨道，卡片不会孤零零缩在左上角；34rem 的上限防止只剩一张时
+     被拉成横贯全屏的长条。justify-content: start 保持与全站一致的左对齐。 */
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 34rem));
+    justify-content: start;
     gap: var(--sp-6);
     list-style: none;
     margin: var(--sp-8) 0 0;
