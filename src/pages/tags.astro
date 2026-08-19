@@ -1,0 +1,250 @@
+---
+// 标签页：一页装下全站标签与它们各自的内容。
+// 刻意不做 /tags/[标签] 动态路由 —— 当前每个标签只有一两篇，拆开是一堆薄页面；
+// 而且 dist/ 里会出现 tags/算法/ 这类非 ASCII 目录名，多一层部署风险。
+// 内容量涨上来再拆。
+import BaseLayout from '../layouts/BaseLayout.astro';
+import FormattedDate from '../components/FormattedDate.astro';
+import { getAllTagCounts, getEntriesByTag, tagAnchor, tagHref } from '../utils/content';
+
+const tags = await getAllTagCounts();
+
+const groups = await Promise.all(
+  tags.map(async ({ tag, count }) => ({
+    tag,
+    count,
+    // id 与 href 都由 utils 里那一对函数生成，保证两边永远对得上。
+    // 同页跳转：路径相同、仅片段不同，浏览器不会重新加载
+    anchor: tagAnchor(tag),
+    href: tagHref(tag),
+    entries: await getEntriesByTag(tag),
+  }))
+);
+---
+
+<BaseLayout title="标签" description="沉麟站内全部标签，以及每个标签下的内容。">
+  <header class="head rise rise-1">
+    <p class="meta">TAGS</p>
+    <h1 class="head__title">标签</h1>
+    <p class="head__desc">
+      共 {tags.length} 个标签。文章、随笔与作品共用这一套标签。
+    </p>
+  </header>
+
+  {groups.length > 0 ? (
+    <>
+      {/* 标签胶囊：点一下跳到下面对应的一段。字号统一，不按频次加权 */}
+      <ul class="cloud rise rise-2">
+        {groups.map(({ tag, count, href }) => (
+          <li>
+            <a class="chip" href={href}>
+              <span class="chip__name">{tag}</span>
+              <span class="chip__count">{count}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+
+      <div class="groups">
+        {groups.map(({ tag, count, anchor, entries }) => (
+          <section class="group rise rise-3" id={anchor}>
+            <h2 class="group__name">
+              <span class="group__hash" aria-hidden="true">#</span>{tag}
+              <span class="group__count meta">{count} 篇</span>
+            </h2>
+
+            <ol class="line glass">
+              {entries.map((entry) => (
+                <li class="item">
+                  <a href={entry.href} class="item__link">
+                    <span class="meta item__date">
+                      <FormattedDate date={entry.pubDate} />
+                    </span>
+                    <span class="item__title">{entry.title}</span>
+                    <span class="meta item__section">{entry.sectionLabel}</span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
+      </div>
+    </>
+  ) : (
+    <p class="empty glass">还没有标签。给文章的 frontmatter 加 tags 就会出现在这里。</p>
+  )}
+</BaseLayout>
+
+<style>
+  .head {
+    padding-top: var(--sp-8);
+    margin-bottom: var(--sp-8);
+  }
+
+  .head__title {
+    font-size: var(--text-3xl);
+    margin-top: var(--sp-3);
+  }
+
+  .head__desc {
+    margin-top: var(--sp-4);
+    color: var(--ink-soft);
+    font-size: var(--text-lg);
+  }
+
+  /* --- 标签胶囊 ---------------------------------------------------------- */
+  .cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin: 0 0 var(--sp-16);
+    padding: 0;
+    list-style: none;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    padding: 0.35em 0.85em;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--ink-soft);
+    text-decoration: none;
+    transition: color 0.18s ease, border-color 0.18s ease,
+      background-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  .chip:hover {
+    color: var(--ink);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-2px);
+  }
+
+  .chip__name::before {
+    content: '#';
+    color: var(--seal);
+    margin-right: 0.15em;
+  }
+
+  .chip__count {
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- 每个标签一段 ------------------------------------------------------ */
+  .groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-12);
+  }
+
+  .group {
+    /* 锚点偏移由 global.css 的 html { scroll-padding-top } 统一管，这里不重复定义 */
+    border-radius: var(--r-lg);
+    transition: background-color 0.5s ease;
+  }
+
+  /* 跳过来的那一段给一层底色，明确「落在哪」 */
+  .group:target {
+    background: var(--seal-wash);
+    box-shadow: 0 0 0 var(--sp-4) var(--seal-wash);
+  }
+
+  .group__name {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    font-size: var(--text-xl);
+    margin-bottom: var(--sp-4);
+    padding-inline: var(--sp-2);
+  }
+
+  .group__hash {
+    color: var(--seal);
+  }
+
+  .group__count {
+    font-weight: 400;
+  }
+
+  /* --- 条目列表（与归档页同一套版式） ----------------------------------- */
+  .line {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .item + .item {
+    border-top: 1px solid var(--rule);
+  }
+
+  .item__link {
+    display: grid;
+    grid-template-columns: 6.5rem 1fr auto;
+    align-items: baseline;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-6);
+    text-decoration: none;
+    transition: background-color 0.2s ease, padding-left 0.24s ease;
+  }
+
+  .item__link:hover {
+    background: var(--seal-wash);
+    padding-left: var(--sp-8);
+  }
+
+  .item__date {
+    white-space: nowrap;
+  }
+
+  .item__title {
+    font-family: var(--font-display);
+    font-size: var(--text-base);
+    color: var(--ink);
+    transition: color 0.18s ease;
+  }
+
+  .item__link:hover .item__title {
+    color: var(--seal);
+  }
+
+  .item__section {
+    white-space: nowrap;
+    color: var(--ink-faint);
+  }
+
+  .empty {
+    padding: var(--sp-8);
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+  }
+
+  @media (max-width: 52rem) {
+    /* 窄屏放不下三栏，日期与栏目标签折到标题下方 */
+    .item__link {
+      grid-template-columns: 1fr auto;
+      gap: var(--sp-2) var(--sp-4);
+    }
+
+    .item__title {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+
+    .item__date {
+      grid-row: 2;
+    }
+
+    .item__section {
+      grid-row: 2;
+      text-align: right;
+    }
+  }
+</style>

@@ -1,0 +1,140 @@
+---
+/* 此刻：我当下在做什么。内容全部在下面两个常量里，直接改这里就行。 */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import FormattedDate from '../components/FormattedDate.astro';
+import { SITE_TITLE } from '../consts';
+
+/* TODO: 下面是占位内容，换成你自己的。改动时**记得同时改 UPDATED** ——
+   Now 页最怕的就是看不出多久没更新，日期不动等于这一页在骗人。 */
+const UPDATED = new Date('2026-08-19');
+
+const NOW = [
+  { label: '在做', items: ['把这个站从模板改成自己的样子'] },
+  { label: '在读', items: ['（占位，换成你在读的书）'] },
+  { label: '在学', items: ['（占位）'] },
+  { label: '在想', items: ['（占位）'] },
+];
+---
+
+<BaseLayout
+  title="此刻"
+  description={`${SITE_TITLE}最近在做什么、在读什么、在想什么。`}
+  width="prose"
+>
+  <header class="head glass rise rise-1">
+    <p class="meta">NOW</p>
+    <h1 class="title">此刻</h1>
+    <p class="stamp meta">
+      更新于 <FormattedDate date={UPDATED} />
+    </p>
+  </header>
+
+  <div class="panel glass rise rise-2">
+    <dl class="rows">
+      {NOW.map(({ label, items }) => (
+        <div class="row">
+          <dt class="row__label meta">{label}</dt>
+          <dd class="row__items">
+            {items.map((item) => (
+              <p class="row__item">{item}</p>
+            ))}
+          </dd>
+        </div>
+      ))}
+    </dl>
+
+    <p class="note">
+      这一页记录我当下的状态，不求完整，也不保证一直是最新的 —— 上面那个日期是唯一的判据。
+    </p>
+  </div>
+</BaseLayout>
+
+<style>
+  .head {
+    padding: var(--sp-8);
+    border-radius: var(--r-xl);
+  }
+
+  .title {
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: -0.02em;
+    margin-top: var(--sp-3);
+  }
+
+  .stamp {
+    margin-top: var(--sp-4);
+  }
+
+  .panel {
+    margin-top: var(--sp-6);
+    padding: var(--sp-8);
+    border-radius: var(--r-xl);
+  }
+
+  .rows {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-6);
+  }
+
+  .row {
+    /* 标签挂在左侧一栏，正文右侧对齐成一条竖线 */
+    display: grid;
+    grid-template-columns: 4.5rem 1fr;
+    gap: var(--sp-6);
+    align-items: baseline;
+  }
+
+  .row + .row {
+    padding-top: var(--sp-6);
+    border-top: 1px solid var(--rule);
+  }
+
+  .row__label {
+    padding-top: 0.35em;
+    /* 中文两字标签，全大写与宽字距会拉散字形，这里覆盖掉 .meta 的设定 */
+    text-transform: none;
+    letter-spacing: 0.16em;
+    color: var(--seal);
+  }
+
+  .row__items {
+    margin: 0;
+    min-width: 0;
+  }
+
+  .row__item + .row__item {
+    margin-top: var(--sp-2);
+  }
+
+  .note {
+    margin-top: var(--sp-8);
+    padding-top: var(--sp-6);
+    border-top: 1px solid var(--rule);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 40rem) {
+    .head,
+    .panel {
+      padding: var(--sp-6);
+    }
+
+    .title {
+      font-size: var(--text-2xl);
+    }
+
+    /* 窄屏两栏挤不开，标签折到正文上方 */
+    .row {
+      grid-template-columns: 1fr;
+      gap: var(--sp-2);
+    }
+
+    .row__label {
+      padding-top: 0;
+    }
+  }
+</style>

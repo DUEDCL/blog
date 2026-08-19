@@ -3,6 +3,12 @@ import { SITE_TITLE, SOCIAL } from '../consts';
 
 const year = new Date().getFullYear();
 
+// 归档与标签不进顶栏（顶栏只放栏目），入口在首页与这里
+const indexLinks = [
+  { label: '归档', href: '/archive' },
+  { label: '标签', href: '/tags' },
+];
+
 // 只渲染填了值的社交链接
 const links = [
   { key: 'github', label: 'GitHub', href: SOCIAL.github },
@@ -19,21 +25,33 @@ const links = [
     <div class="foot glass">
       <p class="meta">© {year} {SITE_TITLE}</p>
 
-      <ul class="links">
-        {
-          links.map((l) => (
+      {/* 两组链接并排靠右：站内索引在前，站外社交在后。
+          分成两个 ul 是语义上的分组，视觉上仍是一行胶囊文字 */}
+      <div class="foot__groups">
+        <ul class="links">
+          {indexLinks.map((l) => (
             <li>
-              <a
-                href={l.href}
-                rel={l.key === 'rss' || l.key === 'email' ? undefined : 'me noopener'}
-                target={l.href.startsWith('http') ? '_blank' : undefined}
-              >
-                {l.label}
-              </a>
+              <a href={l.href}>{l.label}</a>
             </li>
-          ))
-        }
-      </ul>
+          ))}
+        </ul>
+
+        <ul class="links">
+          {
+            links.map((l) => (
+              <li>
+                <a
+                  href={l.href}
+                  rel={l.key === 'rss' || l.key === 'email' ? undefined : 'me noopener'}
+                  target={l.href.startsWith('http') ? '_blank' : undefined}
+                >
+                  {l.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
     </div>
   </div>
 </footer>
@@ -52,6 +70,14 @@ const links = [
     gap: var(--sp-4);
     padding: var(--sp-5) var(--sp-8);
     border-radius: var(--r-full);
+  }
+
+  /* 两组链接之间留一道比组内更宽的空隙，读起来是「站内 / 站外」两簇 */
+  .foot__groups {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-8);
   }
 
   .links {
