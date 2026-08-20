@@ -4,7 +4,7 @@ description: 这个站本身。Astro 静态站，Markdown 写作，一条命令�
 pubDate: 2026-08-16
 tags: ['Astro', 'Cloudflare Workers']
 link: 'https://duchenlin.top'
-repo: 'https://github.com/DUEDCL/duchenlin-blog'
+repo: 'https://github.com/DUEDCL/blog'
 status: 'active'
 featured: true
 ---

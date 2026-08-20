@@ -9,7 +9,7 @@ topic: 这个站
 draft: true
 ---
 
-开源，仓库在 `github.com/DUEDCL/duchenlin-blog`。
+开源，仓库在 `github.com/DUEDCL/blog`。
 
 里面除了站点代码，还有一个 `docs/` 目录，记着需求原文、技术选型的理由和踩过的坑 ——
 比如毛玻璃为什么必须有可折射的底层、两个域名里为什么有一个国内打不开、缓存头为什么不能
