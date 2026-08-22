@@ -49,9 +49,11 @@
  *      persist 靠**两边都有同名节点**才配对（`swap-functions.js` 里找不到就 `continue`，
  *      老节点连着旧 body 一起丢），所以这一页哪怕不显示它也必须渲染它 ——
  *      少了它，站内 → 门 那一步会把状态栏连事件一起丢掉，再回站内就只剩一个死壳。
- *      它在这一页上是藏着的：`.stage` 带 `data-no-chrome`，MiniPlayer 的 show() 认这个标志。
- *      理由是 R17 定下的「这一页不出现任何别的词」—— 曲名、歌词、时间都是词。
- *      音乐照放不误（那个 `<audio>` 早被挪到 `<html>` 底下了，跟状态栏露不露脸无关）。
+ *      R22④ 起它在这一页上是**露脸的**：`<body>` 带 `data-portal`，MiniPlayer 的 show()
+ *      认这面旗，认出来就不设「播过一次才出现」的门槛，一进门就能看见在放什么。
+ *      （这条改掉了 R17「这一页不出现任何别的词」—— 曲名、歌词、时间都是词，是站主本轮的决定。）
+ *      门不引 global.css，状态栏要的那批 token 由 player.css 末尾的 `[data-portal] .jk-mini`
+ *      就地补上；音乐本身跟它露不露脸无关（那个 `<audio>` 早被挪到 `<html>` 底下了）。
  *   3. `<ThemeBoot />` —— data-theme / data-js 两个属性。换页时 Astro 用新文档的
  *      `<html>` 属性覆盖当前的，这两个运行期属性每次 swap 都会丢；由它的
  *      `astro:after-swap` 补回。这一页现在是最常见的首屏，所以这一份不能省。
@@ -122,11 +124,15 @@ const ENTER = '/home';
     <ThemeBoot />
   </head>
 
-  <body>
-    {/* 舞台：整页唯一的定位参照系，同时是那块「点哪儿都能进」的热区。
-        data-no-chrome 是给状态栏看的一面旗：这一页不露任何站内构件（见顶部注释第 2 条）。
-        用 DOM 标志而不是 pathname —— swap 一落地就能判出来，不必操心 trailingSlash */}
-    <div class="stage" id="stage" data-enter={ENTER} data-no-chrome>
+  <body data-portal>
+    {/* data-portal 是给状态栏看的一面旗：「这一页是门」。它挂在 `<body>` 上而不是 `.stage` 上，
+        因为 player.css 要靠它选中状态栏（补 token）和那枚进站键，而 `.stage` 是状态栏的
+        **兄弟**、不是祖先。写在模板里的 body 属性会随新 body 一起过来，不像 `<html>` 上的
+        属性那样被 swapRootAttributes 清掉。用 DOM 标志而不是 pathname —— swap 一落地就能
+        判出来，不必操心 trailingSlash。
+
+        舞台：整页唯一的定位参照系，同时是那块「点哪儿都能进」的热区。 */}
+    <div class="stage" id="stage" data-enter={ENTER}>
       {/* ① 背景层：视频 + 两道渐变遮罩（遮罩在 .plate::after 上，见样式） */}
       <div class="plate">
         <video
@@ -195,15 +201,16 @@ const ENTER = '/home';
       </div>
     </div>
 
-    {/* 全站那条状态栏。这一页把它藏起来（`.stage` 上的 `data-no-chrome` 就是那面旗），
-        但**必须渲染** —— persist 靠两边同名配对，见顶部注释第 2 条。 */}
+    {/* 全站那条状态栏。R22④ 起这一页也显示它（`<body>` 上的 `data-portal` 就是那面旗），
+        而且**必须渲染** —— persist 靠两边同名配对，见顶部注释第 2 条。
+        它在 `.stage` 之外，所以点它不会冒泡到「点哪儿都进站」那个热区上。 */}
     <MiniPlayer />
 
     <script>
       /**
        * 整页唯一的脚本：点一下或滑一下就进站。视频靠 autoplay 属性自己播，不需要脚本。
        *
-       * 走一段过场再导航（`.is-leaving`：镜头往门里推、白光从门口漫上来），不是原地跳走 ——
+       * 走一段过场再导航（`.is-leaving`：镜头往门里推、光从门框边缘漫开），不是原地跳走 ——
        * 这一页的隐喻就是「走进门」，那段动画是这句话的动作部分。
        * 减少动态偏好下直接跳，不让人干等那 620ms。
        *
@@ -217,8 +224,13 @@ const ENTER = '/home';
        *    而 window 上那几个手势监听仍只在顶层绑一次 —— 放进 `astro:page-load` 会每导航
        *    累积一层。它们靠 `stage` 是不是 null 自锁：**这道守卫不能省**，否则离开门之后
        *    在正站随便滚一下滚轮，就会被送去 /home。
+       *
+       * R22③ 又给每个手势加了一件事：顺带起播（见下面的 kick）。于是所有手势监听都要
+       * 先绕开状态栏 —— 它现在就浮在这一页上，在它上面拖进度条、滚滚轮、按播放键，
+       * 意思都不是「进站」，也不是「起播」。
        */
       import { navigate } from 'astro:transitions/client';
+      import { everPlayed, playing, toggle } from '../scripts/jukebox';
 
       /** 当前页的舞台。不在门上时是 null，下面那几个手势监听随之空转 */
       let stage: HTMLElement | null = null;
@@ -232,6 +244,76 @@ const ENTER = '/home';
       let wheeled = 0;
       let y0: number | null = null;
 
+      /**
+       * 手势落在状态栏上。所有手势监听开头都要问一句 —— 状态栏浮在这一页上，
+       * 在它上面滚滚轮、拖进度条、按播放键，意思既不是「进站」也不是「起播」。
+       * （`click` 不用管：enter() 绑在 `.stage` 上，而状态栏是它的兄弟，点它不冒泡过去。）
+       */
+      const onMini = (e: Event) =>
+        e.target instanceof Element && !!e.target.closest('[data-mini]');
+
+      /**
+       * 门上起播（R22③）。浏览器不给有声媒体开自动播的门 —— 没有用户手势的 `play()`
+       * 必被拒（门上那段背景视频能自动播，是因为它 `muted`）。所以起播分两步：
+       * 进门先试一次（Chrome 的 Media Engagement Index 攒够了就真的会响），
+       * 试不成就等第一个手势顺带把它带起来，而门本来就是「点哪儿都进站」。
+       *
+       * 两道守卫都不能省：
+       *   `stage` —— 只在门上动手。否则离开门之后，正站任何一页点一下都会突然响。
+       *   `!everPlayed()` —— 手动按了暂停再回到门口，不该被强行重开。
+       *   `!playing()` —— 一次触摸会同时派发 pointerdown 与 touchstart，两个都会走到这里；
+       *     `play()` 是同步把 `paused` 置 false 的，而 `play` 事件要等下一个任务才派发，
+       *     所以只看 `everPlayed()` 的话第二下会把刚起播的歌又按停。
+       *
+       * 被拒时 `everPlayed()` 仍是 false，下一个手势自动重试，不需要额外的状态位。
+       */
+      const kick = () => {
+        if (stage && !everPlayed() && !playing()) toggle();
+      };
+
+      /**
+       * 门洞在视频画面里的位置，占画面宽高的比例。实测来的：把当前帧画进 canvas 采样亮度，
+       * 最亮的那一块就是门洞 —— 横向 0.429–0.571（正好对称于画面中线）、纵向 0.344–0.789，
+       * 与截图上门框的四条边逐像素对得上。视频里的光会随门的开合明暗变化，门框本身不动，
+       * 所以这四个数是常量，不必每次出场都重新采样。
+       */
+      const DOOR = { x0: 0.429, x1: 0.571, y0: 0.344, y1: 0.789 };
+
+      /**
+       * 把门洞在**屏幕上**的矩形量出来，写成 `--door-*` 四个变量给出场那层光用（R24）。
+       *
+       * 为什么不在 CSS 里直接写百分比：`object-fit: cover` 会按视口比例裁掉画面的一部分，
+       * 而两档取景的裁法不同（横屏是 1492×1054u 的取景框加居中偏移，竖屏是铺满 +
+       * `object-position: 43%`），同一个门洞落在屏幕上的位置也就不同；那段 6.5s 的慢推镜头
+       * 还在实时改变它 —— 点得早，门就还在放大的那一帧上。现量一次比在 CSS 里为每档各抄
+       * 一份坐标准得多，取景以后再改也不会走位。
+       *
+       * 读的是 `getBoundingClientRect()`（含 pushIn 当前帧的缩放），而舞台是
+       * `position: fixed; inset: 0`，所以视口坐标就是舞台坐标，不用再减一次原点。
+       */
+      function aimDoor() {
+        const v = stage?.querySelector<HTMLVideoElement>('.plate-video');
+        if (!stage || !v) return;
+
+        const box = v.getBoundingClientRect();
+        // 元数据还没到就按素材的固有尺寸算：poster 与视频同一取景、同一比例，位置一样
+        const iw = v.videoWidth || 1664;
+        const ih = v.videoHeight || 1248;
+        // cover：短边贴满，长边溢出后按 object-position 的百分比决定从哪边裁
+        const s = Math.max(box.width / iw, box.height / ih);
+        const dw = iw * s;
+        const dh = ih * s;
+        // 这两条规则里 object-position 只写百分比与 center，计算值必然是两个百分数
+        const [px, py] = getComputedStyle(v).objectPosition.split(' ').map(parseFloat);
+        const ox = box.left + (box.width - dw) * ((px || 0) / 100);
+        const oy = box.top + (box.height - dh) * ((py || 0) / 100);
+
+        stage.style.setProperty('--door-l', `${ox + DOOR.x0 * dw}px`);
+        stage.style.setProperty('--door-t', `${oy + DOOR.y0 * dh}px`);
+        stage.style.setProperty('--door-w', `${(DOOR.x1 - DOOR.x0) * dw}px`);
+        stage.style.setProperty('--door-h', `${(DOOR.y1 - DOOR.y0) * dh}px`);
+      }
+
       function enter() {
         if (!stage || leaving) return;
         leaving = true;
@@ -241,6 +323,8 @@ const ENTER = '/home';
           return;
         }
 
+        // 先量门框再挂 .is-leaving：顺序反了的话那层光的第一帧会落在上一次的位置上
+        aimDoor();
         stage.classList.add('is-leaving');
         // 620ms 与样式里 .is-leaving 那组 transition 同长，改一个要改另一个
         setTimeout(() => navigate(to), 620);
@@ -265,7 +349,27 @@ const ENTER = '/home';
          而这一页压着一段视频，load 会被推到视频可播之后；等它才绑会漏掉早到的那一下点击。
          导航过来的那些次则由下面这个监听负责（脚本本身只跑一次）。 */
       wire();
-      document.addEventListener('astro:page-load', wire);
+      document.addEventListener('astro:page-load', () => {
+        wire();
+        // 落地就试一次自动播。攒够 MEI 的浏览器会真的响；被拒就安静地停在暂停态，
+        // 状态栏照旧显示这一首，等第一个手势
+        kick();
+      });
+
+      /* 第一个手势顺带起播。用 pointerdown 而不是 click —— 它先于 click，
+         于是「点一下进门」这一下里，音乐是在过场开始之前就响起来的。
+         这个监听不做别的事：进站仍然由 `.stage` 上那个 click 负责 */
+      window.addEventListener('pointerdown', (e) => {
+        if (onMini(e)) return;
+        kick();
+      });
+
+      /* 键盘进站（焦点落在进站键上按 Enter/空格）走的是这条。不挑键：任何一次按键
+         都是有效的用户手势，而起播本身有 kick 里那三道守卫兜着 */
+      window.addEventListener('keydown', (e) => {
+        if (onMini(e)) return;
+        kick();
+      });
 
       /* 滚轮当「滑动」：这一页没有可滚的内容，滑的意思只能是「走」，所以不看方向。
          攒到 60 才触发 —— 鼠标一格滚轮就有 100，一次就走；触控板的轻微擦碰
@@ -273,7 +377,8 @@ const ENTER = '/home';
       window.addEventListener(
         'wheel',
         (e) => {
-          if (!stage) return;
+          if (!stage || onMini(e)) return;
+          kick();
           wheeled += Math.abs(e.deltaY) + Math.abs(e.deltaX);
           if (wheeled > 60) enter();
         },
@@ -284,7 +389,8 @@ const ENTER = '/home';
       window.addEventListener(
         'touchstart',
         (e) => {
-          if (!stage) return;
+          if (!stage || onMini(e)) return;
+          kick();
           y0 = e.touches[0].clientY;
         },
         { passive: true }
@@ -292,7 +398,7 @@ const ENTER = '/home';
       window.addEventListener(
         'touchmove',
         (e) => {
-          if (!stage) return;
+          if (!stage || onMini(e)) return;
           if (y0 !== null && Math.abs(e.touches[0].clientY - y0) > 24) enter();
         },
         { passive: true }
@@ -394,7 +500,8 @@ const ENTER = '/home';
 
   /* ==========================================================================
      舞台与背景
-     层序：plate 1 < 标识与提示 2 < 出场白光 3。
+     层序：plate 1 < 标识与提示 2 < 出场那两层光 3（门框光 .stage::before 在前、
+     收尾的白 .stage::after 在后，同层按文档顺序叠）。
      ========================================================================== */
   .stage {
     position: fixed;
@@ -693,9 +800,15 @@ const ENTER = '/home';
 
   /* ==========================================================================
      出场：走进门里
-     点或滑之后不是原地跳走 —— 镜头往门里推、遮罩让开、白光从门口漫上来，
+     点或滑之后不是原地跳走 —— 镜头往门里推、遮罩让开、光从门框边缘漫出来，
      620ms 后脚本才真的导航（那个 setTimeout 与这里的时长是一对，改一个要改另一个）。
      减少动态偏好下脚本直接跳转，这一整组根本不会被挂上。
+
+     R24 换掉的是**发散的原点**。原先是一整屏的 radial-gradient、圆心钉在 50% 44%
+     （门洞里的一个点），看起来是光从一个点上炸开。现在光源是**门框那个矩形**：
+     `.stage::before` 正好贴在门洞上，三层 box-shadow 从它的四条边往外漫，
+     所以发散的起点是一圈边、不是一个点；收尾那层白也跟着改成均匀铺满，
+     不再带任何圆心。矩形在屏幕上的位置由脚本现量现写（见 aimDoor 与 --door-*）。
 
      放大挂在 .plate 而不是 .plate-video 上：视频身上有 pushIn 在跑，
      动画会盖掉普通声明，写在它自己身上的 scale 过渡不会生效。父层没有动画，
@@ -723,8 +836,41 @@ const ENTER = '/home';
     transition: opacity 0.3s ease-out;
   }
 
-  /* 白光。径向渐变的中心对准门洞（画面偏上，约 50% 44%），
-     所以看起来是从门里漫出来的，而不是整屏刷白 */
+  /* 门框光。位置就是脚本量出来的那个门洞矩形；四个变量一个都没写到时长宽退成 0，
+     整个伪元素缩成一个看不见的点，不会在画面里留下一块来路不明的亮斑。
+     三层 box-shadow 从矩形的四条边往外扩：贴边的一道亮线、中景光晕、泼开去的漫射。
+     半径与扩散都写成 --u 的倍数，跟着这一页的缩放单位走。 */
+  .stage::before {
+    content: '';
+    position: absolute;
+    left: var(--door-l, 50%);
+    top: var(--door-t, 44%);
+    width: var(--door-w, 0px);
+    height: var(--door-h, 0px);
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0;
+    /* 门洞自己也亮起来 —— 走进门本来就是走进那片光里 */
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow:
+      0 0 calc(10 * var(--u)) calc(1 * var(--u)) rgba(255, 255, 255, 0.95),
+      0 0 calc(52 * var(--u)) calc(14 * var(--u)) rgba(255, 255, 255, 0.62),
+      0 0 calc(260 * var(--u)) calc(130 * var(--u)) rgba(255, 255, 255, 0.42);
+  }
+
+  /* 亮边先起来（0.26s），随后四条边一起往外让 —— 门框自己在张开，
+     光是从张开的那圈边上挤出来的。横向的倍数比纵向大：门洞是竖长条，
+     两个方向要想扩出差不多宽的一圈光，短边就得乘得更多。 */
+  .stage.is-leaving::before {
+    opacity: 1;
+    scale: 1.26 1.11;
+    transition:
+      opacity 0.26s ease-out,
+      scale 0.62s cubic-bezier(0.4, 0, 0.7, 0);
+  }
+
+  /* 收尾的那层白：均匀铺满，**不带中心点**。它只负责把最后那点残余压成白，
+     免得导航过去时是硬切；延后 0.18s 起，前面那段时间画面里只有门框在发光。 */
   .stage::after {
     content: '';
     position: absolute;
@@ -732,17 +878,12 @@ const ENTER = '/home';
     z-index: 3;
     pointer-events: none;
     opacity: 0;
-    background: radial-gradient(
-      circle at 50% 44%,
-      rgba(255, 255, 255, 0.96) 0%,
-      rgba(255, 255, 255, 0.72) 34%,
-      rgba(255, 255, 255, 0) 72%
-    );
+    background: #fff;
   }
 
   .stage.is-leaving::after {
     opacity: 1;
-    transition: opacity 0.62s ease-in;
+    transition: opacity 0.44s ease-in 0.18s;
   }
 
   /* ==========================================================================

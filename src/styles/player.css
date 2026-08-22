@@ -73,6 +73,7 @@
 }
 
 .jk-vinyl__label {
+  position: relative;
   width: 38%;
   height: 38%;
   border-radius: 50%;
@@ -82,6 +83,38 @@
   text-align: center;
   background: radial-gradient(circle at 38% 32%, var(--sand-250), var(--brass-deep));
   box-shadow: inset 0 0 0 1px rgba(5, 5, 5, 0.35);
+  /* 封面是个方图，圆角靠这里裁 —— 图自己也有 border-radius，
+     两道一起兜住 Safari 上圆角边缘的一两像素毛刺 */
+  overflow: hidden;
+}
+
+/**
+ * 专辑封面（R22①）。盖满整个中心标签，跟着 `.jk-vinyl__disc` 一起转 ——
+ * 它是那个盘的后代，动画在祖先上，不必自己再来一遍。
+ *
+ * `object-fit: cover`：上游给的是 300×300 的方图，但不保证永远方，
+ * 裁掉溢出的一边总比压扁一张脸好。
+ */
+.jk-vinyl__cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  /* 图片默认是 inline，行盒会在圆下面顶出一条缝 */
+  display: block;
+}
+
+/* 上面那句 `display: block` 会把 UA 样式表给 [hidden] 的 display:none 顶掉，
+   所以要自己再声明一次 —— 不然没封面时露出来的是一张 alt 为空的空图 */
+.jk-vinyl__cover[hidden] {
+  display: none;
+}
+
+/* 有封面就不留文字：97 px 的圆里再压一行字，压在专辑图上没法读 */
+.jk-vinyl__label.has-cover .jk-vinyl__label-t {
+  display: none;
 }
 
 /* 中心孔。挂在 .jk-vinyl 上而不是 label 里：label 是 grid item，
@@ -682,11 +715,46 @@
   border-color: var(--glass-border-lit);
 }
 
-.jk-juke__msg {
+/* 状态字与「全部播放」共一行：左边说有几首，右边就是把这几首都拿走 */
+.jk-juke__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
   margin-top: var(--sp-4);
+}
+
+.jk-juke__msg {
   color: var(--ink-faint);
   /* 状态文字来回换长短会把下面的列表顶上顶下，先占住一行 */
   min-height: 1.5em;
+}
+
+/* 比照 .jk-juke__go，小半号 —— 它是「顺手把整批拿走」，不该抢过搜索键 */
+.jk-juke__all {
+  flex: none;
+  padding: 0.4em 0.9em;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease,
+    background-color 0.24s ease, opacity 0.18s ease;
+}
+
+.jk-juke__all:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border-lit);
+}
+
+/* 一首结果都没有时按了也没意义，明确地不可按 */
+.jk-juke__all:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .jk-juke__res {
@@ -769,14 +837,59 @@
   padding-bottom: calc(var(--jk-room, 0px) + var(--sp-6) * 2);
 }
 
+/**
+ * 状态栏那张卡。**声明是自足的，不再挂 `.glass`** ——
+ * `.glass` 住在 global.css 里，而门（起始页）是全站唯一不引 global.css 的页面，
+ * 而 R22④ 要它在门上也显示。所以把玻璃那几条搬进来，凡渲染状态栏的地方就都有。
+ *
+ * 顺带修掉一个旧毛病：原来 `.glass` 的 `@supports not` 回退被 `.jk-mini__card`
+ * 后面的 `background` 盖掉，不支持 backdrop-filter 的浏览器上这张卡是半透明的。
+ * 现在回退就写在下面，同一个选择器，盖不掉。
+ */
 .jk-mini__card {
+  /* 给 ::before 那道高光当定位参照 */
+  position: relative;
   display: grid;
   gap: var(--sp-3);
   padding: var(--sp-4);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
+    brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
+    brightness(var(--glass-brightness));
+  /* 这里不用 --shadow-glass：状态栏浮在最上层，要一道更深的落影把它托起来 */
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 18px 44px -14px rgba(0, 0, 0, 0.66);
+}
+
+/* 顶部那道发丝高光（与 .glass::before 同一条，就地复制一份） */
+.jk-mini__card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    160deg,
+    var(--glass-border-lit),
+    transparent 32%,
+    transparent 68%,
+    var(--glass-border) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* 完全不支持 backdrop-filter 的浏览器：退回不透明面板，保证读得清 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .jk-mini__card {
+    background: var(--glass-fallback);
+  }
 }
 
 .jk-mini__head {
@@ -798,6 +911,8 @@
 
 /* 小转盘。沟槽那套渐变与唱盘台同源，只是尺寸小一号；转的动画直接复用 jk-spin */
 .jk-mini__disc {
+  /* 封面靠它定位 */
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -811,6 +926,27 @@
   box-shadow: inset 0 0 0 1px rgba(251, 251, 251, 0.12);
   animation: jk-spin 4s linear infinite;
   animation-play-state: paused;
+}
+
+/**
+ * 封面的小号版（R22①）。铺满转盘、把沟槽渐变整个盖住，所以这边不需要
+ * 舞台那种 `has-cover` 开关 —— 没图时它自己 hidden，露出来的就是原来那个盘。
+ * 它是转盘的子节点，`jk-spin` 在祖先上，所以跟着一起转（对应验收 10）。
+ */
+.jk-mini__cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  /* 盘心那圈内描边压在图上面，边缘才不显得是贴上去的 */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.jk-mini__cover[hidden] {
+  display: none;
 }
 
 .jk-mini.is-playing .jk-mini__disc {
@@ -885,8 +1021,12 @@
   gap: var(--sp-2);
 }
 
+/* 两个时间格。原来挂 `.meta` 拿等宽与字距，但那个类在 global.css 里、门上没有 ——
+   所以就地写全（`text-transform: uppercase` 不抄：这里只有数字与冒号） */
 .jk-mini__time {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
+  letter-spacing: 0.12em;
   font-variant-numeric: tabular-nums;
   color: var(--ink-faint);
 }
@@ -1018,5 +1158,73 @@
   .jk-line.is-on .jk-w.is-at {
     background-image: none;
     color: var(--ink);
+  }
+}
+
+/* --- 门（起始页）上的状态栏 ---------------------------------------------- */
+
+/**
+ * 门是全站唯一**不引 global.css** 的页面（它自己就是一整套视觉），而 R22④ 要状态栏
+ * 在那儿也露脸 —— 于是它在门上拿不到任何 token，玻璃、间距、字色全部失效。
+ * 这里就地补一份，钉的是 global.css 深色档的实测值。
+ *
+ * 选择器**落在 `.jk-mini` 上而不是 `[data-portal]` 上**：那面旗挂在 `<body>`，
+ * 而门自己的 `--ink: #fbfbfb`（门洞白光）定义在 `:root` 上 —— 写在 body 上的
+ * `--ink` 会赢过 `:root`，把「沉麟」两个字和那枚 ⌄ 的颜色一起改掉。
+ * 钉进状态栏自己的子树就没有这个问题：需要 token 的元素全在 `.jk-mini` 里面。
+ *
+ * 改 global.css 的 `--glass-*` / `--sand-*` 时这里要跟着改（两处是同一批值的两份拷贝，
+ * 拆一个公共 tokens.css 会把浅色档也带到门上、和门自己的 --ink 打架，代价更大）。
+ * `--jk-room` 与 `--p` 不用钉，它们由运行期写入；`--jk-stage` 是舞台的，门上没有舞台。
+ */
+[data-portal] .jk-mini {
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 1.0625rem;
+  --leading-normal: 1.6;
+
+  --r-lg: 20px;
+  --r-full: 999px;
+
+  --sand-990: #050505;
+  --ink: #d7d6d5;
+  --ink-soft: #9c9793;
+  --ink-faint: #847d75;
+  --seal: #c4ad97;
+  --seal-hover: #dcc9b4;
+  --rule-strong: rgba(251, 251, 251, 0.19);
+
+  --glass-bg: rgba(251, 251, 251, 0.045);
+  --glass-bg-strong: rgba(251, 251, 251, 0.075);
+  --glass-border: rgba(251, 251, 251, 0.1);
+  --glass-border-lit: rgba(251, 251, 251, 0.28);
+  --glass-blur: 20px;
+  --glass-saturate: 180%;
+  --glass-brightness: 100%;
+  --glass-fallback: #14130f;
+
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, 'PingFang SC',
+    monospace;
+}
+
+/**
+ * 窄屏上状态栏是贴底通栏的，而门那枚进站键在 `bottom: calc(84 * var(--u))`
+ * （812 高的屏上离底 64px）—— 正好被压住。
+ *
+ * 抬法是加 `margin-bottom` 而**不是重写 `bottom`**：门自己那个 bottom 有两档
+ * （横屏 84u、竖屏 `env(safe-area-inset-bottom) + 54m`），重写就得把两档都抄一遍，
+ * 抄漏一档键就会掉到刘海机的手势条底下。margin 只是在原位之上再加一截 ——
+ * 加的正是 `--jk-room`（room() 现量现写的状态栏实高，展开/收起/折行都算在内）。
+ * 状态栏藏起来时那个变量连同标志一起撤掉，`var(--jk-room, 0px)` 退回 0，键回原位。
+ */
+@media (max-width: 40rem) {
+  [data-portal] .go {
+    margin-bottom: var(--jk-room, 0px);
   }
 }

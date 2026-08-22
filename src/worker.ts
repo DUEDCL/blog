@@ -6,9 +6,10 @@
  * 所以每一条路径都要有兜底，宁可返回一句中文人话，不要让异常裸奔。
  * 这道「单向门」第 11 轮已批准（原定 R6 阶段②走，点歌台把它提前了）。
  *
- * 做什么：把浏览器不能直连的 `yinyueku.cn/api.php` 转成四条同源只读 GET。
- * 不做什么：**不中转音频字节**。直链自带 CORS 与 Range，浏览器直接去
- * `music.126.net` 拉，13 MB 的流量一个字节都不进 Worker 配额。
+ * 做什么：把浏览器不能直连的 `yinyueku.cn/api.php` 转成五条同源只读 GET。
+ * 不做什么：**不中转媒体字节**。音频与封面的直链都自带 CORS（音频还带 Range），
+ * 浏览器直接去 `music.126.net` / `p3.music.126.net` 拉，13 MB 的流量一个字节都不进
+ * Worker 配额。
  *
  * 上游契约、四条坑、榜单白名单全在 `src/data/jukebox.ts` 的顶部注释里，改这里之前先看那个。
  *
@@ -52,11 +53,21 @@ const API_PREFIX = '/api/music/';
  * 过期」这条不成立，R14 拿它排除过一次误判。但**更长的有效期仍然未知**，
  * 而缓存一个已失效的直链的代价是「点了没声音」，收益只是省一次上游往返，
  * 不划算。择优选源那条路更不能缓存：它的结果取决于当时能探到的候选。
+ *
+ * `list` 只有 5 分钟：歌单是活的 —— 站主往「沉麟推荐」里加一首歌，不该等一小时
+ * 才在站上看见（R23 就是这么报上来的：「改了歌单，刷新后没有变化」）。而且
+ * `wrangler dev` 下这层缓存由 miniflare 持久化到 `.wrangler/state/v3/cache/`，
+ * **重启进程也不清**，一小时的 TTL 在本地开发里就是一小时看不见改动。
+ * 5 分钟仍然挡住了「一屏点开十次歌单」那种连续往返。
+ *
+ * `pic` 一天：封面直链是长期地址（自带 `max-age=31536000`，路径里没有 token 也没有
+ * 时间戳），与 `url` 那条完全不同 —— 缓存它没有「过期了就没声音」的风险。
  */
 const CACHE = {
-  list: 'public, max-age=3600',
+  list: 'public, max-age=300',
   search: 'public, max-age=300',
   lyric: 'public, max-age=86400',
+  pic: 'public, max-age=86400',
   none: 'no-store',
 } as const;
 
@@ -141,6 +152,8 @@ function toJuke(raw: unknown): JukeTrack | null {
     album: txt(r.album),
     urlId,
     lyricId: txt(r.lyric_id) || songId,
+    // 封面 id **不进上面那道必填校验**：没有封面照样能播，不能因为缺它把整条候选判死
+    picId: txt(r.pic_id),
     source,
     sign,
   };
@@ -417,6 +430,23 @@ async function route(url: URL): Promise<Response> {
       // 空字符串交给前端 —— 前端拿到空的就只是不显示歌词，不会把错误话当歌词唱出来
       if (!HAS_STAMP.test(lyric)) return json({ lyric: '', tlyric: '' }, CACHE.none);
       return json({ lyric, tlyric: HAS_STAMP.test(tlyric) ? tlyric : '' }, CACHE.lyric);
+    }
+
+    case 'pic': {
+      const id = p.get('id') ?? '';
+      const source = p.get('source') ?? '';
+      const sign = p.get('sign') ?? '';
+      // 与 lyric 同一个坑：pic 把歌曲 id 算进签名校验，漏了 song 就永远只拿到「签名错误！」
+      const song = p.get('song') ?? '';
+      if (!id || !source || !sign || !song) return fail(400, '缺参数（封面还要 song）');
+
+      const data = await upstream({ types: 'pic', id, source, song, sign });
+      const link = pick(data, 'url');
+      // 「签名错误！」同样是 HTTP 200 + 合法 JSON + 对的字段名，所以看内容不看形状。
+      // 前端拿到 502 就一直用文字标签 —— 没封面不影响听
+      if (!link.startsWith('https://')) return fail(502, '这首没有封面');
+      // 字节不经过 Worker：直链自带 `acao: *` 与一年的缓存，浏览器直接去 p3.music.126.net 拉
+      return json({ url: link }, CACHE.pic);
     }
 
     default:

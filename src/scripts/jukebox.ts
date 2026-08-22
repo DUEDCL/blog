@@ -22,11 +22,13 @@
 import { TRACKS, parseLrc, segment, type LrcLine } from '../data/music';
 import type { JukeTrack } from '../data/jukebox';
 
-/** 点歌进来的曲目要靠这几个字段去取直链与歌词；本地那两段音垫没有 ref */
+/** 点歌进来的曲目要靠这几个字段去取直链与歌词；本地那首《特别的人》没有 ref */
 interface Ref {
   songId: string;
   urlId: string;
   lyricId: string;
+  /** 取封面用的 id。上游偶有记录不带它，空串就一直用文字标签 */
+  picId: string;
   source: string;
   sign: string;
   /** 择优选源要用它去搜同名候选。不能拿 subtitle 顶替 —— 那是「歌手 · 专辑」 */
@@ -39,6 +41,11 @@ interface Row {
   subtitle: string;
   /** 点歌进来的一开始是空的，等 /api/music/url 回来才填 */
   src: string;
+  /**
+   * 专辑封面。本地那首在 data/music.ts 里直接写死；点歌进来的一开始是空的，
+   * 等 /api/music/pic 回来才填 —— 空串就是「用唱片原来的文字标签」。
+   */
+  cover: string;
   /** 0 表示未知（点歌的曲目没有预知时长），靠 durationchange 回填 */
   duration: number;
   /**
@@ -49,6 +56,8 @@ interface Row {
   ref?: Ref;
   /** 歌词只取一次，失败也不重试 —— 否则每次切回这首都要打一遍上游 */
   lyricDone?: boolean;
+  /** 封面同理，只取一次 */
+  picDone?: boolean;
 }
 /**
  * 播放方式。0 顺序（播到队尾停下）／1 列表循环／2 单曲循环／3 随机。
@@ -163,7 +172,7 @@ export class WordRun {
    ========================================================================== */
 
 /**
- * 队列。开头是 data/music.ts 里那两段本地音垫，点歌只往**尾部**追加、
+ * 队列。开头是 data/music.ts 里那首本地曲目，点歌只往**尾部**追加、
  * 永不删除也永不重排 —— 视图靠这条不变量把下标当稳定 key 用。
  */
 const tracks: Row[] = TRACKS.map((t) => ({
@@ -171,6 +180,7 @@ const tracks: Row[] = TRACKS.map((t) => ({
   title: t.title,
   subtitle: t.subtitle,
   src: t.src,
+  cover: t.cover,
   duration: t.duration,
   lines: parseLrc(t.lrc),
 }));
@@ -192,7 +202,7 @@ let want = 0;
 /** 当前展示的搜索／榜单结果。视图按钮上只放下标，对象留在这里 */
 let found: JukeTrack[] = [];
 /** 点歌台那一行状态字。存着是为了 /music 重新挂载时能回填 */
-let msg = '挑个榜单，或者搜一下。';
+let msg = '挑个歌单，或者搜一下。';
 
 let raf = 0;
 /** 当前歌词行。-1 = 还在前奏；-2 是 relayout() 用来强制下一次广播算「换行」的哨兵 */
@@ -217,6 +227,8 @@ export const time = () => au?.currentTime ?? 0;
 /** 时长以配置值优先：点歌的曲目没有预知时长，才让 <audio> 说话 */
 export const dur = () => tracks[idx].duration || au?.duration || 0;
 export const lineAt = (k: number) => tracks[idx].lines[k]?.text ?? '';
+/** 当前曲目的封面路径／URL。空串 = 退回文字标签 */
+export const coverOf = () => tracks[idx].cover;
 /* ==========================================================================
    广播
    ========================================================================== */
@@ -400,7 +412,11 @@ async function api(path: string, params: Record<string, string>) {
 
   let res: Response;
   try {
-    res = await fetch(u, { headers: { accept: 'application/json' } });
+    // `cache: 'no-store'` —— 前端一律不吃 HTTP 缓存。Worker 给 list/search 的响应
+    // 带着 `max-age=300`，那条头对浏览器同样生效：不关掉的话「改了歌单刷新看不到变化」
+    // 会多出第二层原因（R23 报的就是这个，另一层在 Worker 的 caches.default）。
+    // 命中与否从此只由边缘那 5 分钟决定，一处可控。
+    res = await fetch(u, { headers: { accept: 'application/json' }, cache: 'no-store' });
   } catch {
     throw new Error('网络没通，等会儿再试');
   }
@@ -416,8 +432,9 @@ async function resolve(my: number, i: number, play: boolean) {
   const r = tracks[i].ref;
   if (!r || !au) return;
 
-  // 歌词与直链一起要，两条互不等待
+  // 歌词、封面与直链一起要，三条互不等待
   void loadLyric(i);
+  void loadPic(i);
   say('正在取「' + tracks[i].title + '」…');
 
   try {
@@ -481,11 +498,38 @@ async function loadLyric(i: number) {
   }
 }
 /**
- * 点一首 = 往队列尾部加一项，返回它落在队列里的下标。
- * 只动状态，DOM 由视图在 `added` 里自己接 —— 悬浮窗根本不需要接。
+ * 封面。**只在真的要播这一首时才取**，与 `url` 端点同一条既定原则 ——
+ * 列表接口一个字不改，一屏 30 条搜索结果不会变成 30 次上游往返（列表里也没有封面位）。
+ * 取过就不再取，取不到就一直用唱片原来的文字标签。
  */
-export function add(j: JukeTrack): number {
-  // 已经在队列里就直接跳过去，不加重复行
+async function loadPic(i: number) {
+  const t = tracks[i];
+  if (!t.ref?.picId || t.picDone) return;
+  t.picDone = true;
+
+  try {
+    const data = await api('pic', {
+      // song 漏了同样只会拿到「签名错误！」，见 data/jukebox.ts 顶部的坑 1
+      id: t.ref.picId,
+      source: t.ref.source,
+      song: t.ref.songId,
+      sign: t.ref.sign,
+    });
+    const url = txt(data.url);
+    // Worker 已经校验过前缀，这里再确认一次 —— 这个值下一步就进 img.src
+    if (!url.startsWith('https://')) return;
+    t.cover = url;
+    if (i === idx) syncAll();
+  } catch {
+    /* 没封面只是不换标签，不影响听 */
+  }
+}
+
+/**
+ * 纯入队，不广播。返回它在队列里的下标 —— 已经在队列里的就是原下标（不加重复行）。
+ * 拆出来是给 addAll() 用的：整张歌单入队时不能一首一广播。
+ */
+function push(j: JukeTrack): number {
   const had = tracks.findIndex((t) => t.ref?.songId === j.songId);
   if (had >= 0) return had;
 
@@ -495,20 +539,57 @@ export function add(j: JukeTrack): number {
     title: j.title,
     subtitle: [j.artist, j.album].filter(Boolean).join(' · ') || '点的歌',
     src: '',
+    cover: '',
     duration: 0,
     lines: [],
     ref: {
       songId: j.songId,
       urlId: j.urlId,
       lyricId: j.lyricId,
+      // 过一层 txt()：边缘缓存里可能还躺着 picId 上线前的列表响应（TTL 5 分钟），
+      // 那些记录没有这个字段
+      picId: txt(j.picId),
       source: j.source,
       sign: j.sign,
       artist: j.artist,
     },
   });
-
-  for (const v of views) v.added?.(i);
   return i;
+}
+
+/**
+ * 点一首 = 往队列尾部加一项，返回它落在队列里的下标。
+ * 只动状态，DOM 由视图在 `added` 里自己接 —— 悬浮窗根本不需要接。
+ */
+export function add(j: JukeTrack): number {
+  const was = tracks.length;
+  const i = push(j);
+  // 命中去重时下标会小于原长度，那就没有新行要建，也不必广播
+  if (i === was) for (const v of views) v.added?.(i);
+  return i;
+}
+
+/**
+ * 一键入队：把当前这批结果整个追加到队列尾，返回第一首的下标（没结果给 -1）。
+ *
+ * **不清空已有队列** —— 本地那首曲目和之前点的歌都留着，`push()` 本身去重，
+ * 所以重复点两次不会长出两份。
+ *
+ * 全程只广播一次 `sync`，不走 `added`：「沉麟推荐」有 324 首，一首一广播就是 324 次
+ * DOM append；而视图的 `sync()` 里有「行数与队列长度不一致就整块重铺」那一条，
+ * 一次重铺正好接住整批。
+ */
+export function addAll(): number {
+  if (!found.length) return -1;
+
+  let first = -1;
+  for (const j of found) {
+    const i = push(j);
+    if (first < 0) first = i;
+  }
+
+  syncAll();
+  return first;
 }
 
 /** 取一批结果。`what` 只用来拼提示语 */
@@ -524,7 +605,7 @@ export async function ask(
     for (const v of views) v.res?.();
     say(
       found.length
-        ? `${what}：${found.length} 首，点一首加到队列。`
+        ? `${what}：${found.length} 首，点一首加到队列，或者全部播放。`
         : what + '：一首都没有。',
     );
   } catch (e) {
@@ -545,7 +626,7 @@ export async function ask(
  * 多次修正 —— 只读一次就把时长钉死在 0:30，进度条也只能拖到 30 秒，
  * 看起来完全像「这首歌只有半分钟」（踩过，R14 就是这么误判成版权限制的）。
  *
- * 本地那两首以 data/music.ts 的配置值为准（音频一个字节没下载时列表就要显示时长），
+ * 本地那首以 data/music.ts 的配置值为准（音频一个字节没下载时列表就要显示时长），
  * 所以只有点歌进来的（有 ref）才让 <audio> 说话。差值门限 1 秒：避开每次修正都重画。
  */
 function syncDuration() {

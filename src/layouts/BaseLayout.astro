@@ -4,10 +4,8 @@ import '@fontsource-variable/fraunces/standard.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import '../styles/global.css';
-/* 播放器样式必须是全局的：它有大半 DOM 是脚本造的，吃不到 scoped 的
-   `data-astro-cid-*`；跨页面不间断播放又要求它在任何页面都长一样。
-   见 player.css 顶部注释。 */
-import '../styles/player.css';
+/* player.css 不在这里 —— 它由 MiniPlayer.astro 自己 import。
+   起始页（门）不走这个布局，而 R22④ 要它也显示状态栏，样式于是跟着视图走。 */
 
 import { ClientRouter } from 'astro:transitions';
 import BaseHead from '../components/BaseHead.astro';

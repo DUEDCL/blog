@@ -57,8 +57,20 @@ const first = TRACKS[0];
     <section class="jk-deck glass rise rise-1" data-deck aria-label="播放器">
       <div class="jk-vinyl" data-vinyl>
         <div class="jk-vinyl__disc">
-          <div class="jk-vinyl__label">
+          {/* 唱片中心那个圆标签。里面两层，同一时刻只露一层（R22①）：
+              有封面就是专辑图铺满整个圆，没有（或图挂了）就退回原来这行烫金文字。
+              `has-cover` 与 img 的 src/hidden 都由脚本的 paintCover() 写，
+              但**构建期就按第一首预填**：不预填的话每次进这一页都会先闪一下文字标签，
+              而且图要等脚本跑完才开始下载。 */}
+          <div class:list={['jk-vinyl__label', { 'has-cover': !!first.cover }]}>
             <span class="jk-vinyl__label-t" data-label>{first.title}</span>
+            <img
+              class="jk-vinyl__cover"
+              data-cover
+              src={first.cover || undefined}
+              alt=""
+              hidden={!first.cover}
+            />
           </div>
         </div>
         <div class="jk-vinyl__hole" aria-hidden="true"></div>
@@ -203,7 +215,8 @@ const first = TRACKS[0];
     <section class="jk-juke glass rise rise-2" aria-label="点歌">
       <h2 class="jk-juke__h">点歌</h2>
       <p class="jk-juke__note">
-        挑个榜单，或者搜歌名、歌手。点一首就加到上面的曲目里，接着往下放。
+        挑个歌单，或者搜歌名、歌手。点一首就加到上面的曲目里，接着往下放；
+        「全部播放」把整批都加进队列，从第一首开始。
       </p>
 
       {/* 不用 role="tablist"：那套要自己接方向键与 aria-selected，
@@ -235,8 +248,20 @@ const first = TRACKS[0];
         <button class="jk-juke__go" type="submit">搜</button>
       </form>
 
-      {/* 状态只有一处，出错、结果条数、正在取都走这里 */}
-      <p class="jk-juke__msg meta" data-msg aria-live="polite">挑个榜单，或者搜一下。</p>
+      {/* 状态只有一处，出错、结果条数、正在取都走这里；
+          「全部播放」跟它同一行 —— 有结果时才可按，所以挨着条数最好懂 */}
+      <div class="jk-juke__bar">
+        <p class="jk-juke__msg meta" data-msg aria-live="polite">挑个歌单，或者搜一下。</p>
+        <button
+          class="jk-juke__all"
+          type="button"
+          data-all
+          disabled
+          aria-label="全部加入队列并播放"
+        >
+          全部播放
+        </button>
+      </div>
 
       <ol class="jk-juke__res" data-res></ol>
     </section>
@@ -272,9 +297,11 @@ const first = TRACKS[0];
     MODES,
     WordRun,
     add,
+    addAll,
     ask,
     at,
     attach,
+    coverOf,
     cycleMode,
     detach,
     dur,
@@ -330,6 +357,10 @@ const first = TRACKS[0];
     const elTitle = pick('[data-title]');
     const elSub = pick('[data-sub]');
     const elLabel = pick('[data-label]');
+    /* 中心标签那张封面，以及它外面那个圆 —— `has-cover` 加在圆上，
+       文字与图靠它二选一（两个都在 `.jk-vinyl__label` 里） */
+    const elCover = pick<HTMLImageElement>('[data-cover]');
+    const elRing = elLabel.parentElement!;
     const elCur = pick('[data-cur]');
     const elDur = pick('[data-dur]');
     const btnPlay = pick('[data-play]');
@@ -345,6 +376,7 @@ const first = TRACKS[0];
     const elMsg = pick('[data-msg]');
     const elQ = pick<HTMLInputElement>('[data-q]');
     const form = pick<HTMLFormElement>('[data-find]');
+    const btnAll = pick<HTMLButtonElement>('[data-all]');
     const chips = [...scope.querySelectorAll<HTMLButtonElement>('[data-chart]')];
 
     const run = new WordRun();
@@ -497,9 +529,34 @@ const first = TRACKS[0];
       });
 
       elRes.append(frag);
+      /* 「全部播放」跟着结果走。attach() 进来先调一次 res()，
+         所以换页回来时按钮的可按状态自动对上，不用另存一份 */
+      btnAll.disabled = !hits().length;
     }
 
     // ---------- 挂进单例 ----------
+
+    /**
+     * 贴封面（R22①）。有图就让专辑图铺满中心标签、把那行烫金文字藏掉；
+     * 没图就原样退回文字标签 —— 点歌进来的曲目在 `/api/music/pic` 回来之前、
+     * 以及压根取不到封面的曲目，走的都是这条路。
+     *
+     * 加载失败时记住那个 URL 再重画一次：网络挂了不该在盘心留一个碎图标。
+     * 这个 `badCover` 随节点走（wire() 的局部量），换页重接就重新给上游一次机会。
+     */
+    let badCover = '';
+    const paintCover = () => {
+      const url = coverOf();
+      const on = !!url && url !== badCover;
+      // 同一个 URL 不重设 src —— 重设会重新发一次请求，盘心还会闪一下
+      if (on && elCover.getAttribute('src') !== url) elCover.setAttribute('src', url);
+      elCover.hidden = !on;
+      elRing.classList.toggle('has-cover', on);
+    };
+    elCover.addEventListener('error', () => {
+      badCover = elCover.getAttribute('src') || '';
+      paintCover();
+    });
 
     const view: View = {
       /** 状态变了就整体对一遍。单例在换曲、播放态、模式、音量、时长回填时都会叫它 */
@@ -521,6 +578,7 @@ const first = TRACKS[0];
         elTitle.textContent = t.title;
         elSub.textContent = t.subtitle;
         elLabel.textContent = t.title;
+        paintCover();
         elDur.textContent = d ? formatTime(d) : '—';
         seek.max = String(d || 0);
 
@@ -630,11 +688,17 @@ const first = TRACKS[0];
       if (j) load(add(j), true);
     });
 
+    btnAll.addEventListener('click', () => {
+      // 整批追加到队尾（已在队列里的不重复），再从这批的第一首放起
+      const i = addAll();
+      if (i >= 0) load(i, true);
+    });
+
     chips.forEach((c) => {
       c.addEventListener('click', () => {
         chips.forEach((o) => o.setAttribute('aria-pressed', String(o === c)));
         elQ.value = '';
-        void ask(c.textContent?.trim() || '榜单', 'list', { id: c.dataset.chart ?? '' });
+        void ask(c.textContent?.trim() || '歌单', 'list', { id: c.dataset.chart ?? '' });
       });
     });
 

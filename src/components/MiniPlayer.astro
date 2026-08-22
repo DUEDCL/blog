@@ -22,7 +22,13 @@
  *
  * 状态一律不存这里：队列、当前曲、播放方式、歌词全在 scripts/jukebox.ts 的
  * 单例闭包里。这个组件只是它的一个视图，负责把状态画成 DOM。
+ *
+ * 样式**由这个组件自己 import**（R22 从 BaseLayout 搬来的一行）：起始页不走 BaseLayout，
+ * 而 R22④ 要它也显示状态栏 —— 让样式跟着唯一的必需视图走，凡渲染状态栏的页面就一定有它，
+ * 顺带消灭「某一页忘了 import」这个故障模式。`/music` 舞台的样式也在这份文件里，
+ * 而舞台走 BaseLayout → 一定渲染状态栏 → 一定拿到样式。
  */
+import '../styles/player.css';
 ---
 
 <div class="jk-mini" data-mini hidden transition:persist="jk">
@@ -31,9 +37,12 @@
       没有 controls —— 控制键是下面那几个 */}
   <audio data-au preload="none"></audio>
 
-  <div class="jk-mini__card glass">
+  {/* 没有 `glass` / `meta` 这两个全局类：它们住在 global.css 里，而门不引 global.css。
+      两处需要的声明已经就地写进 player.css 的 .jk-mini__card / .jk-mini__time */}
+  <div class="jk-mini__card">
     <div class="jk-mini__head">
-      {/* 转盘兼收起键。播放时它在转（复用唱盘台那条 jk-spin） */}
+      {/* 转盘兼收起键。播放时它在转（复用唱盘台那条 jk-spin）；
+          有封面时那张图铺满转盘，跟着一起转 */}
       <button
         class="jk-mini__fold"
         type="button"
@@ -41,7 +50,9 @@
         aria-expanded="true"
         aria-label="收起播放器"
       >
-        <span class="jk-mini__disc" aria-hidden="true"></span>
+        <span class="jk-mini__disc" aria-hidden="true">
+          <img class="jk-mini__cover" data-cover alt="" hidden />
+        </span>
       </button>
 
       {/* 曲名与「歌手 · 专辑」。收起态只留曲名 —— 状态栏的本分是「一直告诉你在放什么」 */}
@@ -63,7 +74,7 @@
     <p class="jk-mini__line jk-line" data-line></p>
 
     <div class="jk-mini__seek">
-      <span class="jk-mini__time meta" data-cur>0:00</span>
+      <span class="jk-mini__time" data-cur>0:00</span>
       <input
         class="jk-rng jk-rng--mini"
         type="range"
@@ -74,7 +85,7 @@
         value="0"
         aria-label="播放进度"
       />
-      <span class="jk-mini__time meta" data-dur>0:00</span>
+      <span class="jk-mini__time" data-dur>0:00</span>
     </div>
 
     <div class="jk-mini__keys">
@@ -136,6 +147,7 @@
     MODES,
     WordRun,
     attach,
+    coverOf,
     cycleMode,
     dur,
     everPlayed,
@@ -168,6 +180,7 @@
     const play = pick('[data-play]');
     const modeKey = pick('[data-mode]');
     const fold = pick('[data-fold]');
+    const cover = pick<HTMLImageElement>('[data-cover]');
 
     /* ⚠ 把 `<audio>` 搬出 `<body>`，挂到 `<html>` 上直接当子节点。
        这不是洁癖，是绕开 Astro 自己的一个 bug —— 少了这一行，「跨页不间断播放」
@@ -221,6 +234,10 @@
      *
      * 标志与变量都落在 `<html>` 上，而 swap 会把根上的属性清光（`swapRootAttributes`）——
      * 不要紧：show() 每次 `astro:after-swap` 都跑，会重新写上。
+     *
+     * 门（起始页）是个例外：那儿 `html, body` 都是 `overflow: hidden`，没有可滚的内容
+     * 也没有页脚，`data-jk` 带来的那段 padding-bottom 毫无意义 —— 所以旗不写。
+     * 但 `--jk-room` 照写：窄屏下 player.css 靠它把进站键抬到状态栏上方（不然正好被压住）。
      */
     const room = () => {
       const he = document.documentElement;
@@ -229,34 +246,60 @@
         he.style.removeProperty('--jk-room');
         return;
       }
-      he.dataset.jk = '1';
+      if (document.querySelector('[data-portal]')) delete he.dataset.jk;
+      else he.dataset.jk = '1';
       he.style.setProperty('--jk-room', root.getBoundingClientRect().height + 'px');
     };
 
     /**
-     * 露不露脸。两个条件：**播过一次**（没听过歌的人不该被塞一个空播放器），
-     * 且**当前页没说「不要站内构件」**。后者有两种页面：
-     *   - `[data-deck]` —— /music，那儿有全尺寸的唱盘台，两个一起出现是重复；
-     *   - `[data-no-chrome]` —— 起始页（门）。R17 逐字要求那一页「不出现任何别的词」，
-     *     而曲名、歌词、时间都是词；它还是唯一一页不引 global.css 的，
-     *     真露出来连 token 都没有。音乐照放不受影响 —— `<audio>` 已经挪到 `<html>` 底下，
-     *     不靠这个视图活着。
+     * 露不露脸。三种页面各不相同：
+     *   - `[data-deck]`（/music）—— 那儿有全尺寸的唱盘台，两个一起出现是重复，永远让位；
+     *   - `[data-portal]`（起始页那道门）—— R22④ 逐字要求「在起始页面就……显示播放状态栏」，
+     *     所以门上**不设「播过一次」的门槛**，一进来就露脸，第一眼是暂停态的《特别的人》。
+     *     （这一条与 R17「那一页不出现任何别的词」相抵，是本轮站主的决定。门不引
+     *     global.css，token 由 player.css 末尾那个 `[data-portal]` 块就地补上。）
+     *   - 其余页面 —— 照旧「播过一次才出现」：没听过歌的人不该被塞一个空播放器。
      *
      * 判据用 DOM 里有没有这两面旗，不用 pathname：既不必操心 trailingSlash，
      * 又能在 swap 一落地时就判出来 —— 若改成等舞台挂上来再让位，
      * 导航到 /music 的头一两帧里悬浮窗会闪一下。
      */
     const show = () => {
+      const portal = !!document.querySelector('[data-portal]');
       root.hidden =
-        !everPlayed() || !!document.querySelector('[data-deck],[data-no-chrome]');
+        !!document.querySelector('[data-deck]') || (!portal && !everPlayed());
       room();
     };
+    /**
+     * 贴封面（R22①）。空 URL 就退回原来那个纯 CSS 转盘 —— 点歌进来的曲目在
+     * `/api/music/pic` 回来之前、以及压根取不到封面的曲目，走的都是这条路。
+     *
+     * 这里不需要 `has-cover` 那种类：图 `position:absolute; inset:0` 铺满转盘、
+     * 把沟槽渐变整个盖住，而它又是转盘的子节点，所以跟着 `jk-spin` 一起转。
+     * （舞台那边不同 —— 那儿标签里还有一行烫金文字要藏，见 music.astro）
+     *
+     * 加载失败时记住那个 URL 再重画一次：网络挂了不该在转盘中间留一个碎图标。
+     */
+    let badCover = '';
+    const paintCover = () => {
+      const url = coverOf();
+      const on = !!url && url !== badCover;
+      // 同一个 URL 不重设 src —— 重设会重新发一次请求，转盘还会闪一下
+      if (on && cover.getAttribute('src') !== url) cover.setAttribute('src', url);
+      cover.hidden = !on;
+    };
+    cover.addEventListener('error', () => {
+      badCover = cover.getAttribute('src') || '';
+      paintCover();
+    });
+
     const view: View = {
       sync() {
         const t = now();
         const on = playing();
         title.textContent = t.title;
         sub.textContent = t.subtitle;
+        paintCover();
         // is-playing 挂在根上，player.css 里 `.is-playing .jk-key__i--pause` 那对
         // 图标规则与转盘的 animation-play-state 就都吃到了
         root.classList.toggle('is-playing', on);
