@@ -22,14 +22,16 @@
 # （purge 对 Workers 静态资源的实际效果未核实，首次部署后实测）。
 #
 # 只有 `/xxx/*` 形式能覆盖到 slug 页。「splat 能否匹配空串」文档没写，这里原来记的是
-# 未核实、等部署后 curl —— R14 阶段⑥ 在本机 wrangler dev(8788) 上实测掉了：**吃空串**。
-#   curl /posts/ → Cache-Control: public, max-age=60, stale-while-revalidate=604800
-#   curl /home/  → 同上（下面只给它写了 /home/* 一条）
+# 未核实、等部署后 curl —— R14 阶段⑥ 先在本机 wrangler dev(8788) 上实测，
+# 部署后（Version d58a3c20）在线上复验，两处一致：**吃空串**。
+#   curl https://duchenlin.top/posts/ → public, max-age=60, stale-while-revalidate=604800
+#   curl https://duchenlin.top/home/  → 同上（下面只给它写了 /home/* 一条），CF-Cache-Status: HIT
 # 所以栏目首页不必再单独补精确规则，也就不会有重复合并的问题。
 #
-# 同一轮 curl 顺带照出一个真空档：
-#   curl /music/ → Cache-Control: max-age=0, must-revalidate   ← 没有任何规则命中
-# 这张表从来没给 /music/* 写过规则，音乐页吃的是 Workers 静态资源的默认头。
+# 同一轮 curl 顺带照出一个真空档，线上同样复验过：
+#   curl https://duchenlin.top/music/ → public, max-age=0, must-revalidate  ← 没有任何规则命中
+# 这张表从来没给 /music/* 写过规则，音乐页吃的是 Workers 静态资源的默认头 ——
+# 站上唯一的常驻功能页反倒是全站唯一吃不到 60s + 7 天 SWR 的一页。
 # 既有遗漏，不是阶段⑥ 造成的，补法就是照抄一条 /music/*，等沉麟发话。
 # 根路径。R14 阶段⑥ 之后这里是起始页（那一页搬到了 /），不再是正站首页
 /
