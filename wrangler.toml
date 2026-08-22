@@ -23,8 +23,23 @@ compatibility_date = "2026-08-19"
 # 在它出现之前本站没有一行服务端代码在跑。门第 11 轮已批准，点歌台把它提前了。
 main = "src/worker.ts"
 
-# 保留 <name>.<账号子域>.workers.dev，DNS 还没生效时用它先验证站点是否正常
-workers_dev = true
+# workers.dev 入口与版本预览 URL —— 两个都关，2026-08-23。
+#
+# 关的理由不是省钱：<name>.<账号子域>.workers.dev 里那段「账号子域」不由我们取名，
+# 它的取值本身就是一条账号标识（与账号邮箱同类），等于把账号信息挂在一个
+# 公开可访问的域名上。三个自定义域名都已 Active，原来留它的理由
+# （DNS 还没生效时用它先验证站点）已经不存在了。
+#
+# 两个键必须都写。wrangler 源码 getSubdomainValues() 里 defaultPreviewUrls = undefined，
+# 也就是**不写 preview_urls 时 deploy 压根不去动这个开关**；只关 workers_dev 会留下
+# https://<VERSION_PREFIX>-<name>.<账号子域>.workers.dev 这条按版本自动生成的公开链接
+# （wrangler 自己会为这种混合状态发警告，原文：「you may want to disable the
+# Preview URLs as well by setting `preview_urls = false`」）。
+#
+# 线上已先用 API 关掉（POST /accounts/{id}/workers/scripts/{name}/subdomain
+# → {"enabled":false,"previews_enabled":false}），这两行是为了让后续 deploy 不翻回来。
+workers_dev = false
+preview_urls = false
 
 [assets]
 directory = "./dist"
