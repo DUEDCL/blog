@@ -1,6 +1,10 @@
 # duchenlin.top
 
-沉麟的个人站点。Astro 静态生成，Markdown 写作，本地一条命令部署到 Cloudflare Workers。
+沉麟的个人站点。Astro 生成，Markdown 写作，本地一条命令部署到 Cloudflare Workers。
+
+页面绝大多数是构建时生成的静态 HTML，但**不再是纯静态站** —— 点歌台的 `/api/music/*`
+四条只读接口在 Worker 里跑（`src/worker.ts`）；全站换页走 SPA（`<ClientRouter />`），
+为的是「换页时音乐不断」。根路径 `/` 是起始页（一道门），正站首页在 `/home`。
 
 线上：<https://duchenlin.top> · 备用 <https://duchenlin.eu.cc>（国内不可达，仅境外）
 
@@ -13,9 +17,10 @@ npm run dev          # 本地预览 http://localhost:4321
 
 | 命令 | 作用 |
 | :--- | :--- |
-| `npm run dev` | 本地预览，改文件自动刷新，草稿可见 |
+| `npm run dev` | 本地预览，改文件自动刷新，草稿可见。**`/api/music/*` 在这里必然 404** |
 | `npm run build` | 构建到 `dist/`，上线前自检 |
 | `npm run preview` | 预览构建产物，最接近线上效果 |
+| `npm run build && npx wrangler dev` | 带 Worker 的本地预览 —— 要调点歌台接口只能用这个 |
 | `npm run build && npx wrangler deploy` | 发布上线 |
 
 ## 文档
