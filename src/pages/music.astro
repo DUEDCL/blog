@@ -1,0 +1,1126 @@
+---
+/**
+ * 唱片机 —— 一台能真的转起来的播放器。
+ *
+ * 三条硬约束，改的时候别破：
+ * ① **不自动播放**。浏览器会拦，拦了以后播放按钮的状态还得靠事件回填，
+ *    与其跟策略打架不如从设计上就要求先点一下。移动端流量也不该被偷走。
+ * ② **没 JS 也能听**。整页交互层用 `:root[data-js]` 开关，脚本没跑起来
+ *    就露出下面的 <audio controls> 原生播放器 + 纯文本随片文字。
+ *    开关用 CSS 而不是 JS 删节点：不会闪一下再消失。
+ * ③ **歌词与队列各是一个原生滚动容器，自动跟随只写 `scrollTop`**。
+ *    R14 之前这里是「窗口 overflow:hidden + 给整张歌词表写 transform」，改掉是因为
+ *    那套**没法用手滑** —— 用户的滚动手势没有能落到的滚动容器。换成原生滚动之后
+ *    位置只有一个事实来源（容器的 scrollTop），手滑与自动跟随不会互相打架；
+ *    scrollTop 和 transform 一样不触发重排，而且只在换行那一帧写一次。
+ *    仍然不许碰的是 margin/height 那类会引起重排的属性 —— 每帧都改能把 8 行字卡出锯齿。
+ *    手滑之后有 `HOLD_MS` 的静默期不抢位置，否则下一次换行就把人拽回去了；
+ *    静默期一结束就主动弹回当前行，不等下一次换行 —— 慢歌一行能唱七八秒，
+ *    干等换行会让人以为自动跟随坏了。点某一行歌词就从那儿播（事件委托在窗上）。
+ *
+ * 唱片纹路是纯 CSS：repeating-radial-gradient 画沟槽，conic-gradient 画反光。
+ * 反光那层**不能跟着盘一起转** —— 真唱片转起来时高光是钉在光源方向不动的，
+ * 一起转就变成风车了。所以沟槽在 .vinyl__disc（转），反光在 .vinyl__sheen（不转）。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { TRACKS, parseLrc, formatTime } from '../data/music';
+import { CHARTS, SEARCH_MAX_Q } from '../data/jukebox';
+
+const sheets = TRACKS.map((t) => ({ id: t.id, lines: parseLrc(t.lrc) }));
+
+// 送到客户端的字段：lrc 原文不用送，行已经渲染进 DOM 了，脚本读 data-t 就够
+const payload = TRACKS.map(({ id, title, subtitle, src, duration }) => ({
+  id,
+  title,
+  subtitle,
+  src,
+  duration,
+}));
+
+const first = TRACKS[0];
+
+// JSON 里只要出现 `</script>` 就会把这个标签提前关掉。现在的数据里不会有，
+// 但这是数据驱动的，别留这个口子 —— 转义 `<` 后 JSON.parse 照样能解
+const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+---
+
+<BaseLayout
+  title="唱片机"
+  description="在听什么 —— 一台自己写的播放器，随片文字跟着走。"
+  footerNote="听一点音乐吧，让时间慢下来。"
+>
+  {/* 必须是内联脚本且放在最前：body 里的内联脚本会阻塞解析，
+      所以下面的 .deck 在被解析之前 data-js 就已经在了，不会先闪一下降级版 */}
+  <script is:inline>
+    document.documentElement.dataset.js = '1';
+  </script>
+
+  {/* 这一页没有页头卡 —— 唱盘台自己就是标题，再压一张「在听什么／唱片机」的卡
+      只是把转盘往下推。那句「听一点音乐吧」搬去了页脚（footerNote）。
+      但 h1 不能跟着没：一页无 h1 会让读屏器与大纲失去落点，所以留一个视觉隐藏的 */}
+  <h1 class="visually-hidden">唱片机</h1>
+
+  {/* ---------- 有 JS：整台唱片机 ---------- */}
+  <div class="deck-only">
+    <section class="jk-deck glass rise rise-1" data-deck aria-label="播放器">
+      <div class="jk-vinyl" data-vinyl>
+        <div class="jk-vinyl__disc">
+          <div class="jk-vinyl__label">
+            <span class="jk-vinyl__label-t" data-label>{first.title}</span>
+          </div>
+        </div>
+        <div class="jk-vinyl__hole" aria-hidden="true"></div>
+        <div class="jk-vinyl__sheen" aria-hidden="true"></div>
+        <div class="jk-vinyl__arm" aria-hidden="true"></div>
+      </div>
+
+      <div class="jk-ctl">
+        <p class="jk-ctl__now">
+          <span class="jk-ctl__t" data-title>{first.title}</span>
+          <span class="jk-ctl__s" data-sub>{first.subtitle}</span>
+        </p>
+
+        <div class="jk-ctl__keys">
+          <button class="jk-key" type="button" data-prev aria-label="上一首">
+            <svg viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M7 6h2.1v12H7zM19 6.6v10.8L10.6 12z"></path></svg
+            >
+          </button>
+
+          <button
+            class="jk-key jk-key--play"
+            type="button"
+            data-play
+            aria-label="播放"
+            aria-pressed="false"
+          >
+            <svg class="jk-key__i jk-key__i--play" viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M8.4 5.4v13.2L19 12z"></path></svg
+            >
+            <svg class="jk-key__i jk-key__i--pause" viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M8 5.6h3v12.8H8zM13 5.6h3v12.8h-3z"></path></svg
+            >
+          </button>
+
+          <button class="jk-key" type="button" data-next aria-label="下一首">
+            <svg viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M14.9 6h2.1v12h-2.1zM5 6.6v10.8L13.4 12z"></path></svg
+            >
+          </button>
+
+          {/* 播放方式。四个图标叠在这一个键里，露哪个由脚本写的 data-m 决定 ——
+              和上面播放/暂停那对是同一套做法。data-m 与 aria-label 都由 paintMode() 写，
+              这里不预设：脚本要先从 localStorage 读回上次那档 */}
+          <button class="jk-key jk-key--mode" type="button" data-mode>
+            {/* 顺序：撞上一道墙就停 */}
+            <svg class="jk-key__i jk-key__i--m0" viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M3.5 11h9.6v2H3.5zM12.4 7.4L17.2 12l-4.8 4.6zM18.6 5.8h2v12.4h-2z"
+              ></path></svg
+            >
+            {/* 列表循环：上下两条回路 */}
+            <svg class="jk-key__i jk-key__i--m1" viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M7.6 7.2H16V9l3.6-2.8L16 3.4v1.8H5.6v6.4h2z"></path><path
+                d="M16.4 16.8H8V15l-3.6 2.8L8 20.6v-1.8h10.4v-6.4h-2z"
+              ></path></svg
+            >
+            {/* 单曲循环：同上，中间加个 1 */}
+            <svg class="jk-key__i jk-key__i--m2" viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M7.6 7.2H16V9l3.6-2.8L16 3.4v1.8H5.6v6.4h2z"></path><path
+                d="M16.4 16.8H8V15l-3.6 2.8L8 20.6v-1.8h10.4v-6.4h-2z"></path><path
+                d="M11 10.6l2.2-1.2v5.2h-1.6v-3.2z"
+              ></path></svg
+            >
+            {/* 随机：两条交叉的线各带一个箭头 */}
+            <svg class="jk-key__i jk-key__i--m3" viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M3.84 7.25L5.16 5.75l12.5 11-1.32 1.5z"></path><path
+                d="M3.84 16.75l1.32 1.5 12.5-11-1.32-1.5z"></path><path
+                d="M14.8 4.4h4.8v4.8z"></path><path d="M14.8 19.6h4.8v-4.8z"></path></svg
+            >
+          </button>
+        </div>
+
+        <div class="jk-ctl__seek">
+          <span class="jk-ctl__time meta" data-cur>0:00</span>
+          <input
+            class="jk-rng"
+            type="range"
+            data-seek
+            min="0"
+            max={first.duration}
+            step="0.05"
+            value="0"
+            aria-label="播放进度"
+          />
+          <span class="jk-ctl__time meta" data-dur>{formatTime(first.duration)}</span>
+        </div>
+
+        <div class="jk-ctl__vol">
+          <span class="meta">音量</span>
+          <input
+            class="jk-rng jk-rng--vol"
+            type="range"
+            data-vol
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.8"
+            aria-label="音量"
+          />
+        </div>
+      </div>
+
+      {/* 没有 controls：这一台的按钮就是上面那些。preload=metadata 不预抓音频 */}
+      <audio data-au src={first.src} preload="metadata"></audio>
+    </section>
+
+    <div class="jk-cols">
+      <section class="jk-lyr glass rise rise-2" aria-label="随片文字">
+        <div class="jk-lyr__win" data-win>
+          {sheets.map((s, i) => (
+            <ol class="jk-lines" data-sheet={s.id} hidden={i !== 0}>
+              {s.lines.map((ln) => (
+                <li class="jk-line" data-t={ln.time}>{ln.text}</li>
+              ))}
+            </ol>
+          ))}
+        </div>
+      </section>
+
+      <section class="jk-list glass rise rise-2" aria-label="曲目">
+        <ol class="jk-list__ol">
+          {TRACKS.map((t, i) => (
+            <li>
+              <button
+                class:list={['jk-row', { 'is-on': i === 0 }]}
+                type="button"
+                data-i={i}
+                aria-current={i === 0 ? 'true' : undefined}
+              >
+                <span class="jk-row__n meta">{String(i + 1).padStart(2, '0')}</span>
+                <span class="jk-row__body">
+                  <span class="jk-row__t">{t.title}</span>
+                  <span class="jk-row__s">{t.subtitle}</span>
+                </span>
+                <span class="jk-row__d meta">{formatTime(t.duration)}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
+
+    {/* ---------- 点歌台。整块在 .deck-only 里，所以天生只在有 JS 时出现 ---------- */}
+    <section class="jk-juke glass rise rise-2" aria-label="点歌">
+      <h2 class="jk-juke__h">点歌</h2>
+      <p class="jk-juke__note">
+        挑个榜单，或者搜歌名、歌手。点一首就加到上面的曲目里，接着往下放。
+      </p>
+
+      {/* 不用 role="tablist"：那套要自己接方向键与 aria-selected，
+          这里只是「按一下换一批结果」，aria-pressed 的按钮组更贴事实 */}
+      <div class="jk-juke__charts">
+        {CHARTS.map((c) => (
+          <button
+            class="jk-chip"
+            type="button"
+            data-chart={c.id}
+            aria-pressed="false"
+          >
+            {c.name}
+          </button>
+        ))}
+      </div>
+
+      <form class="jk-juke__find" data-find>
+        <input
+          class="jk-juke__q"
+          type="search"
+          data-q
+          name="q"
+          placeholder="搜歌名或歌手"
+          maxlength={SEARCH_MAX_Q}
+          autocomplete="off"
+          aria-label="搜索歌曲"
+        />
+        <button class="jk-juke__go" type="submit">搜</button>
+      </form>
+
+      {/* 状态只有一处，出错、结果条数、正在取都走这里 */}
+      <p class="jk-juke__msg meta" data-msg aria-live="polite">挑个榜单，或者搜一下。</p>
+
+      <ol class="jk-juke__res" data-res></ol>
+    </section>
+  </div>
+
+  {/* ---------- 没 JS：原生播放器 + 纯文本 ---------- */}
+  <div class="bare-only">
+    {TRACKS.map((t) => (
+      <section class="bare glass">
+        <h2 class="bare__t">{t.title}</h2>
+        <p class="bare__s">{t.subtitle}</p>
+        <audio controls preload="none" src={t.src}></audio>
+        <ol class="bare__lines">
+          {parseLrc(t.lrc).map((ln) => (
+            <li>
+              <span class="meta">{formatTime(ln.time)}</span>
+              <span>{ln.text}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+  </div>
+
+  <script type="application/json" id="mx-tracks" set:html={payloadJson} is:inline></script>
+</BaseLayout>
+
+<script>
+  import { formatTime, parseLrc, segment, type LrcLine } from '../data/music';
+  import { SEARCH_MAX_N, type JukeTrack } from '../data/jukebox';
+
+  /** 点歌进来的曲目要靠这几个字段去取直链与歌词；本地那两段音垫没有 ref */
+  interface Ref {
+    songId: string;
+    urlId: string;
+    lyricId: string;
+    source: string;
+    sign: string;
+    /** 择优选源要用它去搜同名候选。不能拿 subtitle 顶替 —— 那是「歌手 · 专辑」 */
+    artist: string;
+  }
+
+  interface Row {
+    id: string;
+    title: string;
+    subtitle: string;
+    /** 点歌进来的一开始是空的，等 /api/music/url 回来才填 */
+    src: string;
+    /** 0 表示未知（点歌的曲目没有预知时长），靠 loadedmetadata 回填 */
+    duration: number;
+    ref?: Ref;
+    /** 歌词只取一次，失败也不重试 —— 否则每次切回这首都要打一遍上游 */
+    lyricDone?: boolean;
+  }
+
+  const deck = document.querySelector<HTMLElement>('[data-deck]');
+  const raw = document.getElementById('mx-tracks')?.textContent;
+
+  if (deck && raw) {
+    const tracks: Row[] = JSON.parse(raw);
+    const q = <T extends HTMLElement>(s: string) => deck.querySelector(s) as T;
+
+    const au = q<HTMLAudioElement>('[data-au]');
+    const elTitle = q('[data-title]');
+    const elSub = q('[data-sub]');
+    const elLabel = q('[data-label]');
+    const elCur = q('[data-cur]');
+    const elDur = q('[data-dur]');
+    const btnPlay = q<HTMLButtonElement>('[data-play]');
+    const btnMode = q<HTMLButtonElement>('[data-mode]');
+    const seek = q<HTMLInputElement>('[data-seek]');
+    const vol = q<HTMLInputElement>('[data-vol]');
+
+    const scope = deck.parentElement as HTMLElement;
+    const rows = [...scope.querySelectorAll<HTMLButtonElement>('[data-i]')];
+    const sheets = [...scope.querySelectorAll<HTMLElement>('.jk-lines')];
+    const win = scope.querySelector<HTMLElement>('[data-win]');
+    const listOl = scope.querySelector<HTMLElement>('.jk-list__ol');
+
+    // 点歌台那半边
+    const elRes = scope.querySelector<HTMLElement>('[data-res]');
+    const elMsg = scope.querySelector<HTMLElement>('[data-msg]');
+    const chips = [...scope.querySelectorAll<HTMLButtonElement>('[data-chart]')];
+    const form = scope.querySelector<HTMLFormElement>('[data-find]');
+    const elQ = scope.querySelector<HTMLInputElement>('[data-q]');
+
+    /** 当前展示的搜索／榜单结果。按钮上只放下标，对象留在这里 */
+    let found: JukeTrack[] = [];
+    /** 取直链的竞态令牌：连点两首时，先回来的旧结果要丢掉 */
+    let want = 0;
+
+    let idx = 0;
+    /** `text` 是这一行的原文：当前行会被拆成逐段 <span>，离开时要拿它还原 */
+    let lines: { t: number; el: HTMLElement; text: string }[] = [];
+    let onIdx = -1;
+    /** 当前行拆出来的逐段 <span>，以及正在唱的那一段的下标 */
+    let words: HTMLElement[] = [];
+    let wordAt = -1;
+    let dragging = false;
+    let raf = 0;
+
+    /**
+     * 手滑歌词之后的静默期：这段时间内自动跟随不抢滚动位置。
+     * 没有它，人刚往回翻两行，下一次换行就把位置夺走了 —— 歌词根本读不成。
+     * 只认 wheel／touchmove（真的在滑），不认 pointerdown：点一下不算滑。
+     *
+     * 静默期结束**主动弹回**当前行（`snap`），不等下一次换行。
+     * 只靠「静默期过后允许跟随」是不够的：慢歌一行能唱七八秒，手放开之后
+     * 那七八秒里歌词停在人翻到的地方不动，看着就像自动跟随坏了。
+     */
+    const HOLD_MS = 2600;
+    let hold = 0;
+    let snap = 0;
+
+    if (win) {
+      const holdOn = () => {
+        hold = performance.now() + HOLD_MS;
+        // 连续滑动时反复推后，以「最后一次滑」为起点计时
+        clearTimeout(snap);
+        snap = window.setTimeout(() => {
+          hold = 0;
+          center();
+        }, HOLD_MS);
+      };
+      // 挂在 win 上而不是 window 上，所以不存在监听累积的问题
+      win.addEventListener('wheel', holdOn, { passive: true });
+      win.addEventListener('touchmove', holdOn, { passive: true });
+
+      /**
+       * 点某一行歌词就从那儿播。事件委托在窗上，所以取回来的歌词行不用各自绑。
+       * 占位行没有 `data-t`（见 mkLine），点了不动。
+       *
+       * 键盘可达性靠进度条 —— 每行都塞进 Tab 序列会让几十行歌词淹掉页面的焦点顺序，
+       * 而这里提供的是与进度条等价的便捷入口，不是唯一入口。
+       */
+      win.addEventListener('click', (e) => {
+        const li = (e.target as HTMLElement | null)?.closest<HTMLElement>('.jk-line');
+        const t = Number(li?.dataset.t);
+        if (!li || !Number.isFinite(t)) return;
+
+        // 点了就等于「翻歌词这件事结束了」：立刻交回自动跟随，
+        // 否则跳过去之后还要干等一个静默期才回中线
+        clearTimeout(snap);
+        hold = 0;
+
+        au.currentTime = t;
+        // 暂停时 rAF 不转，时间、滑块、歌词都得自己画一次，
+        // 不然要等下次播放才看到跳过去了
+        if (au.paused) {
+          paintTime();
+          paintLyric(t);
+        }
+      });
+    }
+
+    /**
+     * 把当前行推到歌词窗的垂直中线。
+     * offsetTop 以 `.jk-lyr__win` 为原点（它是 relative），所以这个值可以直接当
+     * scrollTop —— 越界由浏览器自己夹住，不用手算 max。
+     */
+    function center() {
+      const cur = onIdx >= 0 ? lines[onIdx]?.el : null;
+      if (!win || !cur) return;
+      win.scrollTop = cur.offsetTop + cur.offsetHeight / 2 - win.clientHeight / 2;
+    }
+
+    /**
+     * 把队列里的某一行拽进视野。队列限了高，第 12 首的高亮不这么办就在视野外，
+     * 看着像「点了没反应」。
+     * 不用 `scrollIntoView`：它会顺着所有可滚动祖先一路对齐，可能把整页也带着跳。
+     * 这里只动 listOl 自己的 scrollTop，且只在真的看不见时动。
+     */
+    function revealRow(i: number) {
+      const li = rows[i]?.parentElement;
+      if (!li || !listOl) return;
+      const top = li.offsetTop;
+      const bottom = top + li.offsetHeight;
+      if (top < listOl.scrollTop) listOl.scrollTop = top;
+      else if (bottom > listOl.scrollTop + listOl.clientHeight) {
+        listOl.scrollTop = bottom - listOl.clientHeight;
+      }
+    }
+
+    /** 进度条／音量条的已填充比例，交给 CSS 画 */
+    const fill = (el: HTMLElement, r: number) =>
+      el.style.setProperty('--p', String(Math.min(1, Math.max(0, r))));
+
+    /**
+     * 播放方式。0 顺序（播到队尾停下）／1 列表循环／2 单曲循环／3 随机。
+     * 默认 1 —— 这一档就是本轮之前的既有行为（`ended` 里写死的 `load(idx + 1)`
+     * 加上 load() 自带的环绕），所以默认档不改变任何人已经习惯的观感。
+     * 存的是数字而不是名字：它要直接当 `data-m` 用，CSS 靠它决定露哪个图标。
+     */
+    const MODES = ['顺序播放', '列表循环', '单曲循环', '随机播放'] as const;
+    let mode = 1;
+
+    /**
+     * 随机走**洗牌袋**（打乱的下标数组 + 指针），不是每次 `Math.random()` ——
+     * 后者会连着抽到同一首，十几首的队列里撞上的概率相当高。
+     * 洗牌袋保证一轮之内每首恰好放一次，走完重洗。
+     */
+    let bag: number[] = [];
+    let bagAt = 0;
+
+    function reshuffle(exclude: number) {
+      bag = tracks.map((_, i) => i);
+      // Fisher-Yates
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      // 新一轮的头一首别正好是刚播完的那首，否则两轮交界处会连着响两遍同一首
+      if (bag.length > 1 && bag[0] === exclude) [bag[0], bag[1]] = [bag[1], bag[0]];
+      bagAt = 0;
+    }
+
+    function nextRandom(): number {
+      // 长度不等说明点歌又加进来了。不重洗的话新加的那几首这一轮永远抽不到
+      if (bagAt >= bag.length || bag.length !== tracks.length) reshuffle(idx);
+      return bag[bagAt++];
+    }
+
+    /** 把当前模式画到键上。`au.loop` 也在这儿设，理由见 ended 那条注释 */
+    function paintMode() {
+      btnMode.dataset.m = String(mode);
+      const label = '播放方式：' + MODES[mode];
+      btnMode.setAttribute('aria-label', label);
+      btnMode.title = label;
+      au.loop = mode === 2;
+    }
+
+    function collect() {
+      const sheet = sheets[idx];
+      // 上次离开这首时留在这张词表上的高亮要先擦掉：换歌只把 onIdx 归 -1，
+      // 那一行的 is-on 没人负责删，切回来就会看到两行同时亮着（旧的 + 新的）。
+      // 逐段 <span> 也要一起折回纯文本 —— 下面读 textContent 当原文，
+      // 留着 span 不影响读，但留着会让「离开时还原」这条不变量对不上
+      sheet?.querySelectorAll<HTMLElement>('.jk-line.is-on').forEach((el) => {
+        el.classList.remove('is-on');
+        el.textContent = el.textContent;
+      });
+      lines = sheet
+        ? [...sheet.querySelectorAll<HTMLElement>('.jk-line')].map((el) => ({
+            t: Number(el.dataset.t),
+            el,
+            text: el.textContent ?? '',
+          }))
+        : [];
+      onIdx = -1;
+      words = [];
+      wordAt = -1;
+    }
+
+    function load(i: number, play: boolean) {
+      idx = (i + tracks.length) % tracks.length;
+      const t = tracks[idx];
+      // 换歌就作废上一首还在路上的取直链请求 —— 连点两首时旧的会后回来
+      const my = ++want;
+
+      elTitle.textContent = t.title;
+      elSub.textContent = t.subtitle;
+      elLabel.textContent = t.title;
+      elDur.textContent = t.duration ? formatTime(t.duration) : '—';
+      elCur.textContent = '0:00';
+      seek.max = String(t.duration || 0);
+      seek.value = '0';
+      fill(seek, 0);
+
+      rows.forEach((r, n) => {
+        const on = n === idx;
+        r.classList.toggle('is-on', on);
+        if (on) r.setAttribute('aria-current', 'true');
+        else r.removeAttribute('aria-current');
+      });
+      revealRow(idx);
+      sheets.forEach((s, n) => {
+        s.hidden = n !== idx;
+      });
+      // 换歌回到词首，并把上一首留下的静默期一起清掉 —— 换首歌就该重新跟随了
+      if (win) win.scrollTop = 0;
+      hold = 0;
+      collect();
+
+      if (t.src) {
+        // 同一首就别重设 src —— 重设会丢掉已缓冲的数据，重新发一次请求
+        if (au.getAttribute('src') !== t.src) au.setAttribute('src', t.src);
+        // 自动播放被策略拦掉就安静地停在暂停态，不弹任何东西
+        if (play) au.play().catch(() => {});
+        return;
+      }
+
+      // 点歌进来的还没有直链。先把上一首彻底卸掉：只 pause 的话，取直链失败时
+      // 按一下播放会放出上一首的声音，而标题写着这一首
+      au.pause();
+      au.removeAttribute('src');
+      au.load();
+      void resolve(my, idx, play);
+    }
+
+    // ---------- 点歌台 ----------
+
+    const txt = (v: unknown) => (typeof v === 'string' ? v : '');
+
+    /** 只写一处状态。空字符串就是清掉 */
+    const say = (s: string) => {
+      if (elMsg) elMsg.textContent = s;
+    };
+
+    /**
+     * 打自己的 Worker。抛出的 Error.message 一律是能直接显示给人看的一句中文 ——
+     * Worker 的错误体就是 `{error:"…"}`，那些话都是我自己写的，可以原样转出来。
+     */
+    async function api(path: string, params: Record<string, string>) {
+      const u = new URL('/api/music/' + path, location.origin);
+      for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+
+      let res: Response;
+      try {
+        res = await fetch(u, { headers: { accept: 'application/json' } });
+      } catch {
+        throw new Error('网络没通，等会儿再试');
+      }
+
+      const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!res.ok) throw new Error(txt(data?.error) || `没取到（${res.status}）`);
+      if (!data) throw new Error('返回的不是 JSON');
+      return data;
+    }
+
+    /**
+     * 歌词行。**只用 textContent** —— 上游的文本是数据，一个字都不进 innerHTML。
+     * `plain` 是给「（正在取歌词…）」这类占位行用的：不写 `data-t`，
+     * 于是点它不会跳播（否则点一下就回到 0 秒，看起来像播放器抽了一下）。
+     */
+    function mkLine(t: number, text: string, plain = false) {
+      const li = document.createElement('li');
+      li.className = 'jk-line';
+      if (!plain) li.dataset.t = String(t);
+      li.textContent = text;
+      return li;
+    }
+
+    /** 这一首取不到：只在它自己那行留一句话。不弹窗、不清队列、不动播放态 */
+    function markBad(i: number, why: string) {
+      const r = rows[i];
+      if (!r) return;
+      r.classList.add('is-bad');
+      const s = r.querySelector('.jk-row__s');
+      if (s) s.textContent = why;
+    }
+
+    /** 拿直链。`my` 是进函数时的令牌，回来发现已经换歌了就整份丢掉 */
+    async function resolve(my: number, i: number, play: boolean) {
+      const r = tracks[i].ref;
+      if (!r) return;
+
+      // 歌词与直链一起要，两条互不等待
+      void loadLyric(i);
+      say('正在取「' + tracks[i].title + '」…');
+
+      try {
+        const data = await api('url', {
+          id: r.urlId,
+          source: r.source,
+          sign: r.sign,
+          // 这两个是让 Worker 去同名候选里择优的。上游同一次搜索里完整版与几十秒的
+          // 片段是并排的，不给这两个参数就只能听天由命 —— R14 的「VIP 播不全」
+          // 就是这么来的，见 worker.ts 里「择优选源」那段注释
+          name: tracks[i].title,
+          artist: r.artist,
+        });
+        if (my !== want) return;
+
+        // Worker 已经拦过「签名错误！」了，这里再确认一次形状，别把一句话塞进 <audio>
+        const link = txt(data.url);
+        if (!link.startsWith('https://')) throw new Error('这首现在拿不到，换一首');
+
+        tracks[i].src = link;
+        au.setAttribute('src', link);
+        // 候选里最长的也偏短时 Worker 会标 short。如实说一句，不假装是完整版；
+        // 时长本身由 durationchange 回填，显示的是真实长度
+        say(data.short ? '上游这首只有片段，能播多少算多少' : '');
+        if (play) au.play().catch(() => {});
+      } catch (e) {
+        if (my !== want) return;
+        const why = e instanceof Error ? e.message : '这首现在拿不到，换一首';
+        markBad(i, why);
+        say(why);
+      }
+    }
+
+    /** 歌词。取过就不再取 —— 失败也算取过，否则每次切回这首都要打一遍上游 */
+    async function loadLyric(i: number) {
+      const t = tracks[i];
+      const r = t.ref;
+      const sheet = sheets[i];
+      if (!r || !sheet || t.lyricDone) return;
+      t.lyricDone = true;
+
+      let got: LrcLine[] = [];
+      try {
+        const data = await api('lyric', {
+          // song 漏了就永远只拿到「签名错误！」，见 jukebox.ts 顶部的坑 1
+          id: r.lyricId,
+          source: r.source,
+          song: r.songId,
+          sign: r.sign,
+        });
+        got = parseLrc(txt(data.lyric));
+      } catch {
+        /* 没歌词只是不显示歌词，不影响听 */
+      }
+
+      sheet.textContent = '';
+      if (got.length) for (const ln of got) sheet.append(mkLine(ln.time, ln.text));
+      else sheet.append(mkLine(0, '（这首没有歌词）', true));
+
+      if (i === idx) {
+        collect();
+        paintLyric(au.currentTime);
+      }
+    }
+
+    /**
+     * 点一首 = 往 tracks／rows／sheets 尾部各加一项。三个数组的下标天然对齐，
+     * 这是现有代码的既有假设 —— 所以 load()／collect()／上一首下一首／ended
+     * 自动接下一首全都不用改。返回它落在队列里的下标。
+     */
+    function add(j: JukeTrack): number {
+      // 已经在队列里就直接跳过去，不加重复行
+      const had = tracks.findIndex((t) => t.ref?.songId === j.songId);
+      if (had >= 0) return had;
+
+      const i = tracks.length;
+      const sub = [j.artist, j.album].filter(Boolean).join(' · ') || '点的歌';
+      tracks.push({
+        id: 'juke-' + j.songId,
+        title: j.title,
+        subtitle: sub,
+        src: '',
+        duration: 0,
+        ref: {
+          songId: j.songId,
+          urlId: j.urlId,
+          lyricId: j.lyricId,
+          source: j.source,
+          sign: j.sign,
+          artist: j.artist,
+        },
+      });
+
+      // 曲目列表里加一行。结构与构建期那几行一致，.jk-row 那套样式与 is-on 全部复用
+      const btn = document.createElement('button');
+      btn.className = 'jk-row';
+      btn.type = 'button';
+      btn.dataset.i = String(i);
+      btn.append(
+        span('jk-row__n meta', String(i + 1).padStart(2, '0')),
+        body(j.title, sub),
+        // 时长要等 loadedmetadata 才知道，先占个位
+        span('jk-row__d meta', '—'),
+      );
+      btn.addEventListener('click', () => load(i, true));
+
+      const li = document.createElement('li');
+      li.append(btn);
+      listOl?.append(li);
+      rows.push(btn);
+
+      // 歌词窗里加一页，先放一行占位，等 loadLyric 换掉
+      const ol = document.createElement('ol');
+      ol.className = 'jk-lines';
+      ol.dataset.sheet = 'juke-' + j.songId;
+      ol.hidden = true;
+      ol.append(mkLine(0, '（正在取歌词…）', true));
+      win?.append(ol);
+      sheets.push(ol);
+
+      return i;
+    }
+
+    function span(cls: string, text: string) {
+      const el = document.createElement('span');
+      el.className = cls;
+      el.textContent = text;
+      return el;
+    }
+
+    function body(title: string, sub: string) {
+      const el = span('jk-row__body', '');
+      el.append(span('jk-row__t', title), span('jk-row__s', sub));
+      return el;
+    }
+
+    /** 取一批结果铺到下面。`what` 只用来拼提示语 */
+    async function ask(what: string, path: string, params: Record<string, string>) {
+      say('正在取' + what + '…');
+      elRes?.setAttribute('aria-busy', 'true');
+      try {
+        const data = await api(path, params);
+        found = Array.isArray(data.items) ? (data.items as JukeTrack[]) : [];
+        paint();
+        say(found.length ? `${what}：${found.length} 首，点一首加到队列。` : what + '：一首都没有。');
+      } catch (e) {
+        found = [];
+        paint();
+        say(e instanceof Error ? e.message : '没取到');
+      } finally {
+        elRes?.removeAttribute('aria-busy');
+      }
+    }
+
+    /** 结果列表。按钮上只放下标，对象留在 found 里，不往 DOM 上塞 sign */
+    function paint() {
+      if (!elRes) return;
+      elRes.textContent = '';
+      const frag = document.createDocumentFragment();
+
+      found.forEach((j, k) => {
+        const b = document.createElement('button');
+        b.className = 'jk-hit';
+        b.type = 'button';
+        b.dataset.k = String(k);
+        b.append(
+          span('jk-hit__t', j.title),
+          span('jk-hit__a meta', [j.artist, j.album].filter(Boolean).join(' · ')),
+        );
+        const li = document.createElement('li');
+        li.append(b);
+        frag.append(li);
+      });
+
+      elRes.append(frag);
+    }
+
+    // 一个委托监听顶掉几十个 —— 结果列表整块重画，逐行挂监听没意义
+    elRes?.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-k]');
+      if (!b) return;
+      const j = found[Number(b.dataset.k)];
+      if (j) load(add(j), true);
+    });
+
+    chips.forEach((c) => {
+      c.addEventListener('click', () => {
+        chips.forEach((o) => o.setAttribute('aria-pressed', String(o === c)));
+        if (elQ) elQ.value = '';
+        void ask(c.textContent?.trim() || '榜单', 'list', { id: c.dataset.chart ?? '' });
+      });
+    });
+
+    form?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const kw = elQ?.value.trim() ?? '';
+      if (!kw) {
+        say('要搜什么');
+        return;
+      }
+      chips.forEach((o) => o.setAttribute('aria-pressed', 'false'));
+      void ask('「' + kw + '」', 'search', { q: kw, n: String(SEARCH_MAX_N) });
+    });
+
+    // 页面打开时不预取任何东西：每个访客都白打一次上游不值得，也不是需求要的
+
+    /**
+     * 离开某一行：撤掉高亮，把逐段 <span> 折回一个纯文本节点。
+     * 必须还原 —— 不还原的话这一行会一直挂着上次唱到哪儿的 is-on／is-at，
+     * 而且行里堆着几十个只在当前行有意义的节点。
+     */
+    function plain(i: number) {
+      const ln = lines[i];
+      if (!ln) return;
+      ln.el.classList.remove('is-on');
+      ln.el.textContent = ln.text;
+    }
+
+    /**
+     * 把整行的进度 p（0–1）画到逐段 <span> 上：已唱的整段亮、未唱的整段暗、
+     * 正在唱的那一段内部再走一道渐变（写它自己的 `--p`）。
+     *
+     * 为什么不能像 R18 之前那样在整行上铺一道渐变：background 的渐变按元素**盒子**的
+     * 宽度铺，一行折成两个行盒时两行共用同一道，第二行会跟着第一行同步点亮 ——
+     * 这就是第 18 轮报的「第二行跟着第一行滚动」。详见 player.css 里那段注释。
+     *
+     * 每帧只改 color 与 background-image，两个都不参与布局，所以不重排。
+     * 跨段时把整行的 class 刷一遍（一行几十段、一秒最多跨几次），比维护增量便宜，
+     * 而且拖动进度条往回跳时也自然对齐，不会留下已亮的段。
+     */
+    function paintWords(p: number) {
+      const n = words.length;
+      if (!n) return;
+      const at = Math.min(n - 1, Math.floor(p * n));
+      if (at !== wordAt) {
+        words.forEach((w, i) => {
+          w.classList.toggle('is-on', i < at);
+          w.classList.toggle('is-at', i === at);
+        });
+        wordAt = at;
+      }
+      // 段内进度：整行的 p 落在这一段里的那一小截
+      words[at].style.setProperty('--p', (p * n - at) * 100 + '%');
+    }
+
+    function paintLyric(time: number) {
+      if (!lines.length || !win) return;
+
+      let k = -1;
+      for (const [n, ln] of lines.entries()) {
+        if (ln.t <= time + 0.06) k = n;
+        else break;
+      }
+
+      // 换行时才动 class、DOM 与滚动位置
+      if (k !== onIdx) {
+        if (onIdx >= 0) plain(onIdx);
+        onIdx = k;
+
+        if (k < 0) {
+          words = [];
+          wordAt = -1;
+          win.scrollTop = 0;
+          return;
+        }
+
+        const cur = lines[k].el;
+        /* 把这一行拆成逐段 <span>。textContent 逐段写入 —— 上游歌词一个字都不进
+           innerHTML，安全边界与拆段之前一样。
+           必须在 center() **之前**做完：拆完才是这一行最终的盒子，
+           offsetTop/offsetHeight 要在那之后才准。 */
+        words = segment(lines[k].text).map((s) => {
+          const w = document.createElement('span');
+          w.className = 'jk-w';
+          w.textContent = s;
+          return w;
+        });
+        wordAt = -1;
+        cur.textContent = '';
+        cur.append(...words);
+        cur.classList.add('is-on');
+
+        // 刚手滑过就不抢位置，让人把那几行读完（静默期结束时 snap 会自己弹回来）
+        if (performance.now() >= hold) center();
+      }
+
+      if (k < 0) return;
+
+      /* 逐字淡化：LRC 只有行级时间戳，所以按「这一行从 t[k] 到 t[k+1]」线性插值。
+         最后一行没有下一行，用总时长收尾；连总时长也不知道时给 4 秒兜底，
+         免得 span<=0 让最后一行永远停在 0%。 */
+      const from = lines[k].t;
+      const next = lines[k + 1]?.t;
+      const end = next ?? (tracks[idx].duration || au.duration || from + 4);
+      const span = end - from;
+      const p = span > 0 ? (time - from) / span : 1;
+      paintWords(Math.min(1, Math.max(0, p)));
+    }
+
+    /**
+     * 进度条与已播时间。抽出来是因为 rAF 不是唯一的调用者：暂停时点歌词行跳播
+     * （见上面 win 的 click），rAF 不转，这两个数字得自己画一次，
+     * 不然时间与滑块停在跳之前的位置。
+     */
+    function paintTime() {
+      const d = tracks[idx].duration || au.duration || 0;
+      seek.value = String(au.currentTime);
+      fill(seek, d ? au.currentTime / d : 0);
+      elCur.textContent = formatTime(au.currentTime);
+    }
+
+    function tick() {
+      if (au.paused) {
+        raf = 0;
+        return;
+      }
+      if (!dragging) paintTime();
+      // timeupdate 只有 4Hz，歌词会慢半拍，所以播放中走 rAF；暂停即停，不空转
+      paintLyric(au.currentTime);
+      raf = requestAnimationFrame(tick);
+    }
+
+    au.addEventListener('play', () => {
+      deck.classList.add('is-playing');
+      btnPlay.setAttribute('aria-pressed', 'true');
+      btnPlay.setAttribute('aria-label', '暂停');
+      if (!raf) raf = requestAnimationFrame(tick);
+    });
+
+    au.addEventListener('pause', () => {
+      deck.classList.remove('is-playing');
+      btnPlay.setAttribute('aria-pressed', 'false');
+      btnPlay.setAttribute('aria-label', '播放');
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    });
+
+    /**
+     * 时长回填。**必须听 `durationchange` 而不是 `loadedmetadata`**：
+     * 流式 MP3 没有 XING/VBRI 头时，`loadedmetadata` 那一刻的 `au.duration`
+     * 是浏览器按已下载部分外推的估算值（常见就是几十秒），随着数据到达会被
+     * 多次修正 —— 只读一次就把时长钉死在 0:30，进度条也只能拖到 30 秒，
+     * 看起来完全像「这首歌只有半分钟」（踩过，R14 就是这么误判成版权限制的）。
+     *
+     * 本地那两首以 `data/music.ts` 的配置值为准（音频一个字节没下载时列表就要
+     * 显示时长），所以只有点歌进来的（有 ref）才让 <audio> 说话。
+     * 差值门限 1 秒：避开每次修正都重写一遍 DOM。
+     */
+    function syncDuration() {
+      const t = tracks[idx];
+      if (!t.ref || !Number.isFinite(au.duration) || au.duration <= 0) return;
+      if (Math.abs((t.duration || 0) - au.duration) < 1) return;
+
+      t.duration = au.duration;
+      seek.max = String(t.duration);
+      elDur.textContent = formatTime(t.duration);
+      const d = rows[idx]?.querySelector('.jk-row__d');
+      if (d) d.textContent = formatTime(t.duration);
+    }
+
+    au.addEventListener('durationchange', syncDuration);
+
+    /**
+     * 一首播完之后去哪。单曲循环**不在这里**处理 —— 那一档走 `au.loop`，
+     * 浏览器自己首尾相接，`ended` 根本不触发。写成 `au.currentTime = 0; play()`
+     * 也能循环，但那样每一圈之间都有一个可听见的停顿，而且要多绕一趟解码。
+     */
+    au.addEventListener('ended', () => {
+      if (mode === 3) return load(nextRandom(), true);
+      // 顺序：播到队尾就停在那儿。load() 自带环绕，所以边界得在这里自己判
+      if (mode === 0 && idx === tracks.length - 1) return;
+      load(idx + 1, true);
+    });
+
+    btnMode.addEventListener('click', () => {
+      mode = (mode + 1) % MODES.length;
+      paintMode();
+      try {
+        localStorage.setItem('music:mode', String(mode));
+      } catch {
+        /* 同音量：隐私模式下记不住而已，不该让播放器挂掉 */
+      }
+    });
+
+    btnPlay.addEventListener('click', () => {
+      if (au.paused) au.play().catch(() => {});
+      else au.pause();
+    });
+
+    // 上一首刻意保持线性：随机模式下「上一首」按理该是播放历史里的上一首，
+    // 那得维护一个历史栈 —— 超出这轮的需求，就让它按队列顺序退一格
+    q('[data-prev]').addEventListener('click', () => load(idx - 1, !au.paused));
+    q('[data-next]').addEventListener('click', () =>
+      load(mode === 3 ? nextRandom() : idx + 1, !au.paused),
+    );
+    rows.forEach((r, n) => r.addEventListener('click', () => load(n, true)));
+
+    seek.addEventListener('pointerdown', () => (dragging = true));
+    seek.addEventListener('input', () => {
+      const v = Number(seek.value);
+      const d = tracks[idx].duration || 1;
+      fill(seek, v / d);
+      elCur.textContent = formatTime(v);
+      if (!dragging) au.currentTime = v; // 键盘方向键改值时没有 pointerdown
+    });
+    seek.addEventListener('change', () => {
+      au.currentTime = Number(seek.value);
+      dragging = false;
+      paintLyric(au.currentTime);
+    });
+
+    vol.addEventListener('input', () => {
+      au.volume = Number(vol.value);
+      fill(vol, au.volume);
+      try {
+        localStorage.setItem('music:vol', vol.value);
+      } catch {
+        /* 隐私模式下 localStorage 会抛，音量不记住而已，不该让播放器挂掉 */
+      }
+    });
+
+    // 初始音量：记住上次的。
+    // 注意 getItem 缺键返回 null 而 Number(null) === 0，且 0 是合法音量 ——
+    // 不先判 null 的话首次访问会静音开局，看着就像播放器坏了（踩过）
+    let v0 = 0.8;
+    try {
+      const saved = localStorage.getItem('music:vol');
+      if (saved !== null) {
+        const n = Number(saved);
+        if (Number.isFinite(n) && n >= 0 && n <= 1) v0 = n;
+      }
+    } catch {
+      /* 同上 */
+    }
+    au.volume = v0;
+    vol.value = String(v0);
+    fill(vol, v0);
+
+    // 初始播放方式：同样记住上次那档。缺键时 `Number(null) === 0` 而 0 是「顺序」
+    // 这个合法值 —— 所以这里也必须先判 null，不然默认档会被悄悄换掉（音量那个坑的同款）
+    try {
+      const saved = localStorage.getItem('music:mode');
+      if (saved !== null) {
+        const n = Number(saved);
+        if (Number.isInteger(n) && n >= 0 && n < MODES.length) mode = n;
+      }
+    } catch {
+      /* 同上 */
+    }
+    paintMode();
+
+    fill(seek, 0);
+    collect();
+
+    // 窗口尺寸变了，居中偏移与折行都要重算。强制下一次 paintLyric 认为「行变了」
+    addEventListener('resize', () => {
+      const t = onIdx;
+      onIdx = -2;
+      if (t >= 0) plain(t);
+      paintLyric(au.currentTime);
+    });
+  }
+</script>
+
+<style>
+  /* --- 有 JS / 没 JS 的开关。CSS 控制，避免降级版先闪一下 --- */
+  .deck-only {
+    display: none;
+  }
+
+  :global(:root[data-js]) .deck-only {
+    display: block;
+  }
+
+  :global(:root[data-js]) .bare-only {
+    display: none;
+  }
+
+  /* --- 降级版 ----------------------------------------------------------- */
+  .bare {
+    margin-top: var(--sp-6);
+    padding: var(--sp-6);
+    border-radius: var(--r-xl);
+  }
+
+  .bare__t {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+  }
+
+  .bare__s {
+    margin-top: var(--sp-1);
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+  }
+
+  .bare audio {
+    width: 100%;
+    margin-top: var(--sp-4);
+  }
+
+  .bare__lines {
+    list-style: none;
+    margin: var(--sp-6) 0 0;
+    padding: 0;
+    color: var(--ink-soft);
+  }
+
+  .bare__lines li {
+    display: flex;
+    gap: var(--sp-4);
+    padding: var(--sp-1) 0;
+  }
+
+  /* --- 窄屏 ------------------------------------------------------------- */
+  /* 唱盘台、点歌台、歌词窗的窄屏调整全在 styles/player.css 里 —— 那些类已经
+     全局化了，媒体查询也得跟着走，留在这儿会因为 scoped 属性选择器而落空。
+     这一页剩下的（降级版那几条）在窄屏下不用改，所以这里没有媒体查询 */
+</style>

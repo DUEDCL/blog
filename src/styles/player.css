@@ -1,0 +1,826 @@
+/* ==========================================================================
+   唱片机（jukebox）—— 播放器样式，全局而非 scoped
+
+   为什么必须是全局的：Astro 的 scoped CSS 编译成属性选择器
+   （`.row[data-astro-cid-adrqmx6s]`），而播放器有大半 DOM 是
+   `document.createElement` 造出来的 —— 点歌加进队列的行、搜索结果、
+   取回来的歌词行。那些节点身上没有 `data-astro-cid-*`，于是整套规则落空：
+   榜单与队列露出 UA 默认的 `ButtonFace` 浅灰底、`<ol>` 露出十进制标记
+   （看起来就是「歌词前面多了行号」）、当前行高亮从未生效过。
+   R14 三个症状同一个根因，修法就是把这些规则搬出页面作用域。
+
+   另一条更硬的理由：跨页面不间断播放要求播放器脱离单页 —— 它挂在布局上，
+   在任何页面都要长一样。所以这些样式最终**必须**是全局的。
+
+   类名统一 `jk-` 前缀（jukebox）。`.row` `.hit` `.chip` `.key` `.line`
+   这种通用词一旦全局化就会和全站撞车，前缀是唯一的隔离手段。
+   状态类沿用 `.is-on` / `.is-playing` / `.is-bad`，但一律写成
+   `.jk-x.is-on` 的复合选择器，不单独暴露。
+   ========================================================================== */
+
+/* --- 唱盘台 ------------------------------------------------------------ */
+.jk-deck {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-12);
+  margin-top: var(--sp-8);
+  padding: var(--sp-8);
+  border-radius: var(--r-xl);
+}
+
+/* 这台的按钮就是 .jk-ctl 里那些，所以 <audio> 没有 controls。
+   各家 UA 样式表里 audio:not([controls]) 都是 display:none，
+   这条只是把它写明，免得它变成 .jk-deck 的第三个网格项撑出一行空白 */
+.jk-deck audio {
+  display: none;
+}
+
+.jk-vinyl {
+  --disc: clamp(11rem, 24vw, 16rem);
+  position: relative;
+  width: var(--disc);
+  height: var(--disc);
+}
+
+/* 沟槽：1px 亮线 + 3px 空隙，一圈圈往外排。转的是这一层 */
+.jk-vinyl__disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image: repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(251, 251, 251, 0.055) 0 1px,
+      rgba(0, 0, 0, 0) 1px 4px
+    ),
+    radial-gradient(circle at 50% 50%, #17150f 0 27%, #0a0a08 28% 100%);
+  box-shadow: inset 0 0 0 1px rgba(251, 251, 251, 0.09),
+    0 22px 48px -18px rgba(0, 0, 0, 0.8);
+  display: grid;
+  place-items: center;
+  animation: jk-spin 4s linear infinite;
+  animation-play-state: paused;
+}
+
+.jk-deck.is-playing .jk-vinyl__disc {
+  animation-play-state: running;
+}
+
+@keyframes jk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.jk-vinyl__label {
+  width: 38%;
+  height: 38%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding: 6%;
+  text-align: center;
+  background: radial-gradient(circle at 38% 32%, var(--sand-250), var(--brass-deep));
+  box-shadow: inset 0 0 0 1px rgba(5, 5, 5, 0.35);
+}
+
+/* 中心孔。挂在 .jk-vinyl 上而不是 label 里：label 是 grid item，
+   绝对定位子元素的静态位置在网格里说不清，浏览器之间会飘 */
+.jk-vinyl__hole {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--sand-990);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.jk-vinyl__label-t {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.3;
+  color: #17130d;
+  overflow: hidden;
+}
+
+/* 反光：钉在光源方向不动。跟着盘转就成风车了 */
+.jk-vinyl__sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 202deg,
+    rgba(251, 251, 251, 0.13),
+    rgba(0, 0, 0, 0) 16%,
+    rgba(0, 0, 0, 0) 54%,
+    rgba(251, 251, 251, 0.08) 68%,
+    rgba(0, 0, 0, 0) 86%
+  );
+}
+
+/* 唱臂：右上角为轴，停时抬起、播时落到盘面 */
+.jk-vinyl__arm {
+  position: absolute;
+  right: -6%;
+  top: 9%;
+  width: 62%;
+  height: 4px;
+  border-radius: var(--r-full);
+  transform-origin: calc(100% - 5px) 50%;
+  transform: rotate(-34deg);
+  background: linear-gradient(to bottom, var(--sand-200), var(--sand-500));
+  transition: transform 0.9s cubic-bezier(0.3, 0.8, 0.25, 1);
+}
+
+/* 轴心 */
+.jk-vinyl__arm::before {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  width: 17px;
+  height: 17px;
+  margin-top: -8.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, var(--sand-200), var(--sand-600));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* 唱头 */
+.jk-vinyl__arm::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: -3px;
+  width: 15px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--sand-100);
+}
+
+.jk-deck.is-playing .jk-vinyl__arm {
+  transform: rotate(5deg);
+}
+
+/* --- 控制区 ------------------------------------------------------------ */
+.jk-ctl {
+  min-width: 0;
+}
+
+.jk-ctl__now {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.jk-ctl__t {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.jk-ctl__s {
+  color: var(--ink-faint);
+  font-size: var(--text-sm);
+}
+
+.jk-ctl__keys {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-top: var(--sp-6);
+  /* 兜底：真装不下就让最后那个键换行。比被 flex 压扁好看 —— 圆键一压就成椭圆 */
+  flex-wrap: wrap;
+}
+
+.jk-key {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  /* 圆键不许被压缩：默认的 flex-shrink 会在窄屏上把它压成椭圆（加了第四个键之后
+     320px 那一档正好差十几个像素） */
+  flex: none;
+  padding: 0;
+  border-radius: var(--r-full);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease,
+    background-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.jk-key:hover {
+  color: var(--ink);
+  border-color: var(--glass-border-lit);
+  background: var(--glass-bg-strong);
+  transform: translateY(-2px);
+}
+
+.jk-key:active {
+  transform: none;
+}
+
+.jk-key svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: currentColor;
+}
+
+.jk-key--play {
+  width: 3.5rem;
+  height: 3.5rem;
+  background: var(--seal);
+  border-color: transparent;
+  color: var(--sand-990);
+}
+
+.jk-key--play:hover {
+  background: var(--seal-hover);
+  color: var(--sand-990);
+  border-color: transparent;
+}
+
+.jk-key--play svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.jk-key__i--pause,
+.is-playing .jk-key__i--play {
+  display: none;
+}
+
+.is-playing .jk-key__i--pause {
+  display: block;
+}
+
+/* 播放方式键：四个图标叠在同一个按钮里，露哪个由脚本写的 data-m 决定 ——
+   和播放/暂停那对是同一套做法，不新引入机制。
+   没有 data-m 时（脚本还没跑到 paintMode）四个都藏着，键是空的但不会四个一起冒出来 */
+.jk-key--mode .jk-key__i {
+  display: none;
+}
+
+.jk-key--mode[data-m='0'] .jk-key__i--m0,
+.jk-key--mode[data-m='1'] .jk-key__i--m1,
+.jk-key--mode[data-m='2'] .jk-key__i--m2,
+.jk-key--mode[data-m='3'] .jk-key__i--m3 {
+  display: block;
+}
+
+.jk-ctl__seek {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-6);
+}
+
+.jk-ctl__time {
+  flex: none;
+  min-width: 2.6rem;
+}
+
+.jk-ctl__time:last-child {
+  text-align: right;
+}
+
+.jk-ctl__vol {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+/* 滑杆：--p 由脚本写入，是已播放/已填充的比例 */
+.jk-rng {
+  --p: 0;
+  flex: 1;
+  min-width: 0;
+  height: 1.25rem;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.jk-rng--vol {
+  flex: none;
+  width: 7.5rem;
+}
+
+.jk-rng::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: var(--r-full);
+  background: linear-gradient(
+    to right,
+    var(--seal) 0 calc(var(--p) * 100%),
+    var(--rule-strong) calc(var(--p) * 100%) 100%
+  );
+}
+
+.jk-rng::-moz-range-track {
+  height: 3px;
+  border-radius: var(--r-full);
+  background: linear-gradient(
+    to right,
+    var(--seal) 0 calc(var(--p) * 100%),
+    var(--rule-strong) calc(var(--p) * 100%) 100%
+  );
+}
+
+.jk-rng::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.jk-rng::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.jk-rng:focus-visible {
+  outline: 2px solid var(--seal);
+  outline-offset: 4px;
+  border-radius: var(--r-full);
+}
+
+/* --- 随片文字 + 曲目 --------------------------------------------------- */
+/* `--jk-stage` 是两张卡片的**内容**高度，歌词窗与曲目列表共用同一个值 ——
+   这就是「桌面下左右对称」的全部机制：两边同 padding、同内容高度，卡片自然齐平。
+   队列长到十几首也不会把右边拉长，多出来的行进它自己的滚动区。
+   要改高度只改这一个值，别去两个地方各写一遍。 */
+.jk-cols {
+  --jk-stage: 19rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-6);
+  margin-top: var(--sp-6);
+}
+
+.jk-lyr,
+.jk-list {
+  padding: var(--sp-6);
+  border-radius: var(--r-xl);
+}
+
+/* 歌词窗是**原生滚动容器**，不是被裁掉的盒子。
+   自动跟随由脚本写 `scrollTop`（换行时一次），手滑就是浏览器自己的滚动 ——
+   同一个位置只有一个事实来源，两者天然不会打架。
+   （上线时这里是 `overflow: hidden` + 给 .jk-lines 写 transform，
+   那套没法手滑：用户的滚动手势根本没有能落到的滚动容器。）
+
+   `position: relative` 是给脚本用的：这样 `.jk-line` 的 offsetTop 就以这个盒子
+   为原点，可以直接当 scrollTop 的目标值。少了这句 offsetParent 会跑到外面某个
+   定位祖先上，算出来的偏移会差一大截。 */
+.jk-lyr__win {
+  position: relative;
+  height: var(--jk-stage);
+  overflow-y: auto;
+  /* 刻意**不**写 `overscroll-behavior: contain`。窄屏上两栏各占一屏的一小半，
+     手指落在歌词里想滑页面是常事 —— contain 会在边界处把手势吞掉，看起来就是
+     「页面卡住了」。滚到底顺势带着页面走是原生链式滚动，人本来就熟 */
+  /* 自动跟随的平滑靠它。html 上那条 smooth 不继承（scroll-behavior 非继承属性），
+     所以必须在这儿再写一次 */
+  scroll-behavior: smooth;
+  /* 上下淡出，看起来像一扇窗而不是一个被裁掉的盒子 */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 20%,
+    #000 80%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 20%,
+    #000 80%,
+    transparent
+  );
+}
+
+.jk-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.jk-line {
+  padding: var(--sp-2) 0;
+  color: var(--ink-faint);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  /* 点这一行就从那儿播（委托在 .jk-lyr__win 上），所以要有可点的手感 */
+  cursor: pointer;
+  /* 字号刻意不变 —— 换字号会重排，滚动就跳。只换颜色和标记 */
+  transition: color 0.3s ease;
+}
+
+/* 悬停提亮。必须排除当前行：`.jk-line.is-on` 靠 `color: transparent` 让
+   background-clip 的逐字渐变露出来，同特异性的 :hover 写在它后面会把它盖掉，
+   当前行一碰鼠标逐字效果就没了 */
+.jk-line:not(.is-on):hover {
+  color: var(--ink-soft);
+}
+
+.jk-line::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-right: var(--sp-2);
+  margin-bottom: 3px;
+  border-radius: 50%;
+  background: var(--seal);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* 逐字淡化。LRC 只有行级时间戳（一行一个 `[01:23.45]`，见 data/music.ts 的
+   parseLrc），所以「同步到字」只能按行内时长线性插值。
+
+   R18 之前这道渐变是铺在**整行**上的，第 18 轮实测证明那样不行：background 的渐变
+   按元素**盒子**的宽度铺，而一行歌词在窄屏折成两个行盒时两行共用同一道渐变 ——
+   于是第二行跟着第一行同步被点亮，看不出逐行推进（沉麟的原话是「第二行会跟着第一行
+   滚动，无法达到真实的歌词波动」）。竖屏 `--jk-stage` 只有 13.5rem，一行折两行是常态。
+
+   改法：当前行由脚本切成一个个 `.jk-w`（CJK 一字、拉丁一词，见 data/music.ts 的
+   segment），每段是独立的 inline 盒子 —— 已唱的整段亮、未唱的整段暗、正在唱的那一段
+   内部再走一道渐变。段落各自成盒，折行于是与渐变无关。
+
+   拆 span 只发生在**换行那一帧**（而且只拆当前行），每帧改的仍然只有 color 与
+   background-image，两个都不参与布局 —— 所以「歌词每帧不重排」这条仍然成立。
+   上游文本走 textContent 逐段写入，`innerHTML` 一次都没用到，安全边界也没松。
+
+   字号刻意不跟着变大：`.jk-line` 上面那条注释是硬约束，加 is-on 的瞬间行高一变，
+   paintLyric 算的 offsetTop/offsetHeight 就跟着变，滚动会跳。
+
+   8% 的过渡带是段内的百分比（一个汉字宽 ≈ 1px 多），看着像笔尖走过而不是色块跳格。
+   整行仍留一条 `color: var(--ink)` 兜底：万一某行没被拆段（空行、脚本还没画），
+   它至少是亮的，不会整行发灰。 */
+.jk-line.is-on {
+  color: var(--ink);
+}
+
+.jk-line.is-on .jk-w {
+  color: var(--ink-faint);
+}
+
+.jk-line.is-on .jk-w.is-on {
+  color: var(--ink);
+}
+
+.jk-line.is-on .jk-w.is-at {
+  background-image: linear-gradient(
+    90deg,
+    var(--ink) calc(var(--p, 0%) - 8%),
+    var(--ink-faint) calc(var(--p, 0%) + 8%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.jk-line.is-on::before {
+  opacity: 1;
+}
+
+/* 队列也是滚动容器，高度与歌词窗同一个变量 —— 点了十几首之后这张卡片
+   一点都不会变长，多出来的行往里滚。`position: relative` 同上：脚本换歌时要把
+   当前行拽进视野，靠 li 相对这个盒子的 offsetTop 算，不能让它跑到外层去 */
+.jk-list__ol {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: var(--jk-stage);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.jk-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.24s ease, border-color 0.18s ease;
+}
+
+.jk-row:hover {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+
+.jk-row.is-on {
+  background: var(--seal-wash);
+  border-color: var(--glass-border);
+}
+
+.jk-row__n {
+  flex: none;
+  color: var(--ink-faint);
+}
+
+.jk-row.is-on .jk-row__n {
+  color: var(--seal);
+}
+
+.jk-row__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.jk-row__t {
+  color: var(--ink-soft);
+  font-size: var(--text-base);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jk-row.is-on .jk-row__t {
+  color: var(--ink);
+}
+
+.jk-row__s {
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jk-row__d {
+  flex: none;
+}
+
+.jk-row.is-bad .jk-row__s {
+  color: var(--seal);
+}
+
+/* --- 点歌台 ----------------------------------------------------------- */
+.jk-juke {
+  margin-top: var(--sp-6);
+  padding: var(--sp-6);
+  border-radius: var(--r-xl);
+}
+
+.jk-juke__h {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+}
+
+.jk-juke__note {
+  margin-top: var(--sp-1);
+  color: var(--ink-faint);
+  font-size: var(--text-sm);
+}
+
+.jk-juke__charts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-5);
+}
+
+.jk-chip {
+  padding: 0.35em 0.85em;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-full);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease,
+    background-color 0.24s ease;
+}
+
+.jk-chip:hover {
+  color: var(--ink);
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border-lit);
+}
+
+/* 选中的那个榜单。aria-pressed 就是事实来源，不另加 class */
+.jk-chip[aria-pressed='true'] {
+  color: var(--ink);
+  background: var(--seal-wash);
+  border-color: var(--glass-border-lit);
+}
+
+.jk-juke__find {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
+.jk-juke__q {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5em 0.9em;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.jk-juke__q::placeholder {
+  color: var(--ink-faint);
+}
+
+.jk-juke__go {
+  flex: none;
+  padding: 0.5em 1.1em;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease,
+    background-color 0.24s ease;
+}
+
+.jk-juke__go:hover {
+  color: var(--ink);
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border-lit);
+}
+
+.jk-juke__msg {
+  margin-top: var(--sp-4);
+  color: var(--ink-faint);
+  /* 状态文字来回换长短会把下面的列表顶上顶下，先占住一行 */
+  min-height: 1.5em;
+}
+
+.jk-juke__res {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  /* 一屏 30 条会把页面拉得很长，圈在自己的滚动区里 */
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.jk-juke__res[aria-busy='true'] {
+  opacity: 0.5;
+}
+
+.jk-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.24s ease, border-color 0.18s ease;
+}
+
+.jk-hit:hover {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+
+.jk-hit__t {
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jk-hit:hover .jk-hit__t {
+  color: var(--ink);
+}
+
+.jk-hit__a {
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- 窄屏 ------------------------------------------------------------- */
+@media (max-width: 52rem) {
+  .jk-cols {
+    /* 竖屏是上下堆叠，两栏各自都不能太高，不然要划半天才到点歌台 */
+    --jk-stage: 16rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 40rem) {
+  .jk-cols {
+    --jk-stage: 13.5rem;
+  }
+
+  .jk-deck,
+  .jk-juke {
+    padding: var(--sp-6);
+  }
+
+  .jk-deck {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: var(--sp-8);
+  }
+
+  .jk-vinyl {
+    --disc: min(62vw, 15rem);
+  }
+
+  .jk-ctl {
+    width: 100%;
+  }
+
+  .jk-ctl__keys {
+    justify-content: center;
+  }
+
+  .jk-ctl__now {
+    align-items: center;
+    text-align: center;
+  }
+}
+
+/* 320px 那一档（iPhone SE 一代那种）：四个圆键加三个 sp-4 间隙差十几个像素装不下。
+   缩间隙、主键收小一圈，实测 320 视口还余 6px；375 那档不受影响，主键仍是 3.5rem */
+@media (max-width: 22rem) {
+  .jk-ctl__keys {
+    gap: var(--sp-3);
+  }
+
+  .jk-key--play {
+    width: 3rem;
+    height: 3rem;
+  }
+}
+
+/* 转盘与唱臂是装饰性动画，减少动态偏好下一律停掉 */
+@media (prefers-reduced-motion: reduce) {
+  .jk-vinyl__disc,
+  .jk-deck.is-playing .jk-vinyl__disc {
+    animation: none;
+  }
+
+  .jk-vinyl__arm {
+    transition: none;
+  }
+
+  /* 歌词与队列的自动跟随改成瞬移。html 上那条 reduce 只管 html 自己，
+     这两个滚动容器要各自再声明一次 */
+  .jk-lyr__win,
+  .jk-list__ol {
+    scroll-behavior: auto;
+  }
+
+  /* 逐字推进也是动效 —— 一行字上一直有个东西在扫过去。退回整行高亮，
+     就是这个功能上线前的样子。段落仍然会被拆出来（脚本只有一条路径），
+     但每一段都是同一个亮色，看起来就是整行齐亮 */
+  .jk-line.is-on .jk-w,
+  .jk-line.is-on .jk-w.is-at {
+    background-image: none;
+    color: var(--ink);
+  }
+}

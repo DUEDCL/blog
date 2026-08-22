@@ -11,9 +11,17 @@
 # 3. Cloudflare 的 NS 是按 zone 随机分配的，两个域名拿到的是不同的一对。
 #    照抄另一个域名的 NS 会导致永远激活不了（踩过：duchenlin.top 填了
 #    duchenlin.eu.cc 的 alfred/itzel，而它自己分到的是 gloria/watson）。
+#
+# 4. 有了 main 之后，线上多了**运行期故障面**：以前构建失败只是不部署、线上不受影响，
+#    现在 Worker 抛异常就是 500。所以 src/worker.ts 里每条路径都要兜底，
+#    并且非 /api/music/* 一律 return env.ASSETS.fetch(request) 交回静态资源。
 
 name = "duchenlin-blog"
 compatibility_date = "2026-08-19"
+
+# 点歌台的取数接口（/api/music/*）。这一行是 R6 那道「单向门」——
+# 在它出现之前本站没有一行服务端代码在跑。门第 11 轮已批准，点歌台把它提前了。
+main = "src/worker.ts"
 
 # 保留 <name>.<账号子域>.workers.dev，DNS 还没生效时用它先验证站点是否正常
 workers_dev = true
@@ -22,6 +30,11 @@ workers_dev = true
 directory = "./dist"
 # Workers 不会自动认出 404.html，必须显式声明；Pages 是自动的，这是两者的差异
 not_found_handling = "404-page"
+# 有了 main 就必须给 assets 一个绑定名，否则 Worker 里没法把请求交回静态资源
+binding = "ASSETS"
+# 只有这些路径先进 Worker，其余请求连 Worker 都不唤起（省调用数，也少一个故障点）。
+# 数组形式要 wrangler >= 4.20.0（官方 changelog 确认），本项目 ^4.124.0 满足
+run_worker_first = [ "/api/music/*" ]
 
 # 裸域直接指向本 Worker。Cloudflare 会自动创建 DNS 记录并签发证书，
 # 不需要手工加 A/CNAME 记录（裸域按 DNS 规范不能用 CNAME，这里由 Cloudflare 内部解决）
