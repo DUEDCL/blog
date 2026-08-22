@@ -28,3 +28,6 @@ pnpm-debug.log*
 
 # wrangler 本地状态
 .wrangler/
+
+# 调色/取帧用的临时产物（起始页配色与视频抽帧时生成，一次性，不进仓库）
+.tmpcolor/
