@@ -6,9 +6,8 @@ import avatar from '../assets/avatar.jpg';
 
 const path = Astro.url.pathname;
 
-/** 首页只在完全相等时高亮，栏目页匹配前缀 */
+/** 栏目页匹配前缀。首页那项（R14 阶段⑥ 起是 '/home'）被下面的 nav 滤掉，走不到这里 */
 function isCurrent(href: string) {
-  if (href === '/') return path === '/';
   return path === href || path.startsWith(`${href}/`);
 }
 ---
@@ -16,21 +15,29 @@ function isCurrent(href: string) {
 <header class="site-header" id="site-header">
   <div class="wrap">
     <div class="bar glass">
-      <a href="/" class="brand" aria-label={`${SITE_TITLE} 首页`}>
-        <Image
-          src={avatar}
-          alt=""
-          width={72}
-          height={72}
-          loading="eager"
-          class="brand__avatar"
-        />
-        <span class="brand__name">{SITE_TITLE}</span>
-      </a>
+      {/* 品牌位是两个独立链接，不是一个：头像 → 关于，站名 → 首页（R12）。
+          「关于」从 NAV 摘掉后，头像是它唯一的入口；而下面那段 nav 又把首页那项滤掉了，
+          所以站名必须自己承担回首页 —— 合成一个 <a> 就等于顶栏没有回首页的入口。
+          R14 阶段⑥ 起首页是 /home（根路径让给了起始页），这里跟着改。 */}
+      <div class="brand">
+        <a class="brand__face" href="/about" aria-label={`关于 ${SITE_TITLE}`}>
+          <Image
+            src={avatar}
+            alt=""
+            width={72}
+            height={72}
+            loading="eager"
+            class="brand__avatar"
+          />
+        </a>
+        <a class="brand__home" href="/home" aria-label={`${SITE_TITLE} 首页`}>
+          <span class="brand__name">{SITE_TITLE}</span>
+        </a>
+      </div>
 
       <nav class="nav" aria-label="主导航">
         {
-          NAV.filter((item) => item.href !== '/').map((item) => (
+          NAV.filter((item) => item.href !== '/home').map((item) => (
             <a
               href={item.href}
               class:list={['nav__link', { 'is-current': isCurrent(item.href) }]}
@@ -82,9 +89,18 @@ function isCurrent(href: string) {
     display: inline-flex;
     align-items: center;
     gap: var(--sp-3);
-    text-decoration: none;
     margin-right: auto;
     min-width: 0;
+  }
+
+  .brand a {
+    text-decoration: none;
+  }
+
+  /* 头像那条链接自己是 flex，否则 <a> 的行内基线会在图下方留一道缝 */
+  .brand__face {
+    display: flex;
+    flex-shrink: 0;
   }
 
   .brand__avatar {
@@ -100,7 +116,7 @@ function isCurrent(href: string) {
       box-shadow 0.3s ease;
   }
 
-  .brand:hover .brand__avatar {
+  .brand__face:hover .brand__avatar {
     transform: scale(1.06) rotate(-4deg);
     box-shadow: 0 4px 18px -4px var(--seal);
   }
@@ -156,8 +172,12 @@ function isCurrent(href: string) {
     transform: translateX(-50%);
   }
 
-  /* 窄屏：导航换到品牌下方（四个栏目 320px 都放得下，不做汉堡菜单）。
-     overflow-x 只是导航将来变长的兜底，不溢出时它什么也不做。 */
+  /* 窄屏：导航换到品牌下方，五项折成两行（3 + 2）。
+     算过的账：320px 视口下 .nav 可用 238px（R10 真视口实测）／228px（本次同源 iframe 实测，
+     少的 10px 是滚动条），而五项一行实测要 276px —— 两种量法都塞不下，四项时才刚好。
+     所以 R12 加「图库」时必须折行。不走「一行 + 横向滚动」：没有蒙版提示的横滑等于隐藏交互，
+     而蒙版本身已被 R10 删掉（纯 CSS 判断不了溢出，它会无条件啃掉首末项）。折行让五项全部可见。
+     导航因此多占 44px，global.css 的窄屏 --header-offset 已同步重测为 12.25rem。 */
   @media (max-width: 46rem) {
     .bar {
       height: auto;
@@ -170,17 +190,13 @@ function isCurrent(href: string) {
     .nav {
       order: 3;
       width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: var(--sp-1);
-      overflow-x: auto;
-      scrollbar-width: none;
-      /* 这里曾有一层边缘淡出蒙版（linear-gradient 左右各 1.5rem 透明）用来暗示还能滑。
-         删掉了：栏目从六项收到四项后，320px 下 scrollWidth 也等于 clientWidth，
-         永远不溢出，蒙版却照旧啃掉首项左边与末项右边各 24px —— 表现为「左边被吞」。
-         真要做淡出，前提是先判断溢出，不值得为四项导航上这套机器。 */
     }
 
-    .nav::-webkit-scrollbar {
-      display: none;
+    .nav__link {
+      text-align: center;
     }
   }
 </style>

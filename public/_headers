@@ -21,11 +21,23 @@
 # 代价：发新内容后最长 60 秒才对老访客生效，等不了就去面板 Purge Everything
 # （purge 对 Workers 静态资源的实际效果未核实，首次部署后实测）。
 #
-# 只有 `/xxx/*` 形式能覆盖到 slug 页，而「splat 能否匹配空串」文档没写，
-# 所以栏目首页（/posts/ 这类）是否被覆盖属未核实 —— 部署后 curl 一下，
-# 没覆盖到就再补一条精确的 `/posts/` 之类（那时也就顺带证明了 splat 不吃空串，
-# 补上去不会造成重复合并）。
+# 只有 `/xxx/*` 形式能覆盖到 slug 页。「splat 能否匹配空串」文档没写，这里原来记的是
+# 未核实、等部署后 curl —— R14 阶段⑥ 在本机 wrangler dev(8788) 上实测掉了：**吃空串**。
+#   curl /posts/ → Cache-Control: public, max-age=60, stale-while-revalidate=604800
+#   curl /home/  → 同上（下面只给它写了 /home/* 一条）
+# 所以栏目首页不必再单独补精确规则，也就不会有重复合并的问题。
+#
+# 同一轮 curl 顺带照出一个真空档：
+#   curl /music/ → Cache-Control: max-age=0, must-revalidate   ← 没有任何规则命中
+# 这张表从来没给 /music/* 写过规则，音乐页吃的是 Workers 静态资源的默认头。
+# 既有遗漏，不是阶段⑥ 造成的，补法就是照抄一条 /music/*，等沉麟发话。
+# 根路径。R14 阶段⑥ 之后这里是起始页（那一页搬到了 /），不再是正站首页
 /
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+# 正站首页。它 R14 阶段⑥ 从 / 搬到了 /home，上面那条 `/` 已经归起始页所有，
+# 所以必须单独给一条，否则整站最重要的一页反倒吃不到这套短鲜期 + 长 SWR
+/home/*
   Cache-Control: public, max-age=60, stale-while-revalidate=604800
 
 /about/*
@@ -54,6 +66,11 @@
 /now/*
   Cache-Control: public, max-age=60, stale-while-revalidate=604800
 
+# /start 现在只剩一张 meta-refresh 跳转页（R14 阶段⑥ 起，起始页本体在 /）。
+# 也是 HTML，也该短鲜期 —— 而且它更该有 SWR：老链接的访客不必等回源就被送走
+/start/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
 /rss.xml
   Cache-Control: public, max-age=60, stale-while-revalidate=604800
 
@@ -62,3 +79,12 @@
 # 所以可以放心让浏览器长期缓存 —— 内容一改文件名就变，不存在缓存不失效的问题。
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
+
+# --- 起始页的背景视频：中等长效，且**刻意不加 immutable** --------------------
+# /video/ 下的文件是手工放进 public/ 的，文件名里没有内容哈希。
+# 加 immutable + max-age=1y 就等于：换掉 portal.mp4 之后，老访客一年内都拿不到新的，
+# 连强制刷新都绕不过（immutable 的语义就是「别问了，不会变」）。
+# 30 天是折中：重复访问基本命中缓存（1.0 MB 的 webm 不用反复下），
+# 真要换文件就改个文件名（portal-v2.*）或去面板 Purge，都比赌 immutable 稳。
+/video/*
+  Cache-Control: public, max-age=2592000

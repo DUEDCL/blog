@@ -1,430 +1,772 @@
 ---
+/**
+ * 起始页 / —— 一道门。整页只有背景画面、一张头像、两个字、一句题词。
+ *
+ * R17 把这一页清空了。原先这里有：顶栏五项导航、右上「进入站内」药丸、竖屏汉堡抽屉、
+ * 大标题「对细节挑剔／对「差不多」没耐心」、一句副标题、两枚 CTA、底部一条读站内
+ * 真实条目的带子。需求逐字是「把启动页上面的所有字都去掉，只保留我的头像和沉麟两个字，
+ * 将这两个字放到一个合适大小的位置，我希望我的启动页更加简洁一点，不要出现任何别的词」，
+ * 所以那些是**整块删掉**的，不是藏起来。
+ *
+ * 于是进站的动作也换了：不再点某一枚按钮，而是**整页点一下或滑一下**就进去。
+ * 提示因此只能是图形 —— 底部那枚呼吸的 ⌄ 就是「往里走」这句话的图形版本。
+ * 头像也不再链到 /about：一页两个去处会让「点哪儿都能进」变成骗人，
+ * 而「关于」在正站顶栏与页脚都有入口。
+ *
+ * R19 又往回加了三笔，需求逐字是「把启动页面中我头像的边框给去掉，适当放大启动页中我头像
+ * 占的比例，再在启动页中加一句话『沉舟莫断鹏程路，金鳞岂为池中物』，这句话用合适的特殊
+ * 字体颜色表现出来」：
+ *   1. 头像那圈 1px 白描边删掉（原本是为了把它从近黑的底上「切」出来）。
+ *   2. 头像 72u → 96u，`.mark` 的间隙跟着 18u → 22u。放大之后它比「沉麟」两个字还高，
+ *      签名块的主体从「字」变成「脸」—— 那句「占的比例」要的就是这个。
+ *   3. 加了那句题词。**这一条推翻了 R17 的「不要出现任何别的词」** —— 是沉麟自己改的主意，
+ *      不是这里放宽了标准，所以除这一句之外仍然一个多余的词都没有（那枚 ⌄ 依旧是图形，
+ *      不是文字）。题词与标识合成一个纵向的签名块（.sign），绝对定位与出场动画都从
+ *      .mark 搬到了 .sign 上，题词压同一条左界线。
+ *      颜色用 --verse = #c4ad97，逐位等于站内的 --brass / --seal，而那一档的出处正是
+ *      这一页的画面（见下面色板处的注释）—— 「特殊」但不外来。
+ *
+ * R14 阶段⑥ 把这一页搬到了根路径：**这个文件就是 src/pages/index.astro**，
+ * 正站首页（原来的 index）搬成了 /home。需求逐字是「解决输入域名跳转的不是启动页问题」——
+ * 输入 duchenlin.top 落到的是这道门，而不是正站首页。旧地址 /start 由 astro.config.mjs
+ * 的 redirects 接住（静态输出下是一张 meta-refresh 跳转页），老链接不会断。
+ * 两个跟着来的后果，沉麟在选这条路之前已经看过：
+ *   1. 每次打开 duchenlin.top 都先过一道门，回正站首页的地址是 /home。
+ *   2. 根路径的 SEO 内容变薄 —— 搜索引擎抓 / 抓到的只有一张头像、两个字和一句题词，
+ *      原先那些自我介绍、最新文章、入口卡都在 /home 了。所以这一页反倒必须留住
+ *      <title> 与 <meta description>（见下面 head 里的注释），它们现在是根路径的全部文字。
+ *
+ * 这一页刻意**不使用 BaseLayout**，也不引入 global.css：
+ * global.css 会给 body 铺光晕底、设中文字体栈、注入顶栏页脚，本页需要的是纯黑舞台。
+ * 所以本页自成一份完整文档，样式全部走 `is:global`（本页专属 CSS 产物，不外溢）。
+ *
+ * 单位系统是规格的核心，改任何数值前先读懂它：
+ *   参考画布 1487 × 1058。--u = 视口高 / 1058，即「1 设计像素锁定在高度上」，
+ *   所以竖向节奏永远刚好铺满一屏、不出现滚动。
+ *   --h 在 --u 基础上按宽度轻微放大，上限 +16%，超宽屏字号跟着长一点，但绝不小于 --u。
+ *   横屏用 --u/--h，竖屏（aspect ≤ 11/10）单位换成 --m，所有 calc(N * var(--u)) 自动换算。
+ *
+ * 对原始规格的两处有意偏离（都是本项目的既有硬约束，不是随手改的）：
+ *   1. 中文一律走系统字体栈（--font-cn / --font-cn-body），与站内 --font-display /
+ *      --font-body 逐字相同 —— 两页于是共用同一套字形。原先还自托管了
+ *      @fontsource-variable/manrope 给西文与数字用，这一轮页面上一个西文字符都不剩，
+ *      那个导入跟着删了（首屏少一个 woff2 请求）。
+ *   2. 背景视频不热链原始 CloudFront 地址，改为自托管 /video/portal.*。理由三条：
+ *      CloudFront 在本机实测直连不可达（只有走代理才 200），国内访客同理；
+ *      那是别人账号下的生成物，随时可能消失；热链地址也吃不到本站 _headers 的缓存规则。
+ *      → 已重编码为 webm(1.0 MB) + mp4(1.2 MB)，并用交叉淡化把首尾接缝做成无缝循环。
+ *
+ * 站内那套色阶当初就是从这一页的屏幕像素上量出来的（见 global.css 顶部的色阶注释）。
+ * 顶栏与带子删掉后，--nav/--strip/--accent/--pill 那几档在本页没有用户了，一并删；
+ * 色阶的出处仍记在 global.css，不会因为这一页变空而失传。
+ */
 import { Image } from 'astro:assets';
-import BaseLayout from '../layouts/BaseLayout.astro';
-import EntryCard from '../components/EntryCard.astro';
-import { getPublished } from '../utils/content';
-import {
-  SITE_TITLE,
-  SITE_DESCRIPTION,
-  BIO,
-  SOCIAL,
-  SECTIONS,
-  PORTALS,
-} from '../consts';
 import avatar from '../assets/avatar.jpg';
+import { SITE_TITLE } from '../consts';
 
-const posts = (await getPublished('posts')).slice(0, 3);
-const notes = (await getPublished('notes')).slice(0, 2);
-const projects = (await getPublished('projects')).filter((p) => p.data.featured).slice(0, 2);
-
-const socialLinks = [
-  { label: 'GitHub', href: SOCIAL.github },
-  { label: '邮箱', href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
-  { label: 'RSS', href: SOCIAL.rss },
-].filter((l) => l.href);
+/**
+ * 点或滑之后去哪。整页只有这一个去处，所以不再需要一张链接表。
+ * 写进 data-enter 给脚本读 —— bundled script 拿不到 frontmatter 变量。
+ * R14 阶段⑥ 之后这里是 /home：这一页自己占了根路径，正站首页搬去了 /home。
+ */
+const ENTER = '/home';
 ---
 
-<BaseLayout description={SITE_DESCRIPTION}>
-  {/* ---------- 开篇 ---------- */}
-  <section class="hero">
-    <div class="hero__card glass rise rise-1">
-      <div class="hero__portrait">
-        <Image
-          src={avatar}
-          alt={`${SITE_TITLE}的头像`}
-          width={320}
-          height={320}
-          loading="eager"
-          class="hero__avatar"
-        />
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* R14 阶段⑥ 之后这是根路径的标题，也就是搜到本站时排在最前的那一行。
+        「· 入口」留着是如实描述 —— 这一页是门，不是正站首页；正站首页在 /home，
+        标题只有「沉麟」两个字（BaseHead 的规则：首页不重复站名）。 */}
+    <title>沉麟 · 入口</title>
+    {/* description 是 <head> 元数据、不显示在页面上，所以「不要出现任何别的词」
+        不管它 —— 搜索结果里这一页总得有一句话，否则抓到的就只有一个标题。
+        阶段⑥ 之后这一条更要紧：根路径的正文只剩头像、两个字和一句题词，
+        这句话是搜索引擎能从 / 读到的唯一一段完整介绍。 */}
+    <meta
+      name="description"
+      content="对细节挑剔，对「差不多」没耐心。这里存放做过的东西，和把它们做对的过程。"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#050505" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {/* 这一页不走 BaseHead，canonical 只能自己写死。阶段⑥ 之后是根路径，
+        不再是 /start（那个地址现在是一张跳到这儿的 meta-refresh 页）。 */}
+    <link rel="canonical" href="https://duchenlin.top/" />
+  </head>
+
+  <body>
+    {/* 舞台：整页唯一的定位参照系，同时是那块「点哪儿都能进」的热区 */}
+    <div class="stage" id="stage" data-enter={ENTER}>
+      {/* ① 背景层：视频 + 两道渐变遮罩（遮罩在 .plate::after 上，见样式） */}
+      <div class="plate">
+        <video
+          class="plate-video"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="auto"
+          poster="/video/portal-poster.webp"
+          aria-hidden="true"
+          tabindex="-1"
+        >
+          <source src="/video/portal.webm" type="video/webm" />
+          <source src="/video/portal.mp4" type="video/mp4" />
+        </video>
       </div>
 
-      <div class="hero__text">
-        <p class="meta hero__eyebrow">个人站点</p>
+      {/* 前景层：标识、题词与提示装在一个不占事件的壳里。
+          壳存在的唯一理由是出场那段动画 —— 里面的元素各自都有 keyframes 在跑，
+          而 CSS 动画会盖掉普通声明，直接给它们写 opacity:0 是不生效的；
+          淡出挂在没有动画的壳上，两边就不打架了（详见样式里出场那一段）。 */}
+      <div class="fore">
+        {/* ② 标识与题词。R19 把题词加了进来，于是这两块合成一个纵向的签名块：
+            绝对定位与出场动画都挂在 .sign 上，题词跟在标识下面、压同一条左界线，
+            不需要去算标识有多高。 */}
+        <div class="sign">
+          {/* 一张脸、两个字。用 <h1> 承担它：这一页总得有个标题层级，而「沉麟」就是那个标题。
+              题词刻意留在 h1 **外面** —— 它是一句题词不是标题的一部分，
+              塞进去会让文档大纲与读屏器把标题读成「沉麟沉舟莫断鹏程路…」。 */}
+          <h1 class="mark">
+            <Image
+              class="mark__face"
+              src={avatar}
+              alt=""
+              widths={[128, 256]}
+              sizes="128px"
+              format="webp"
+              loading="eager"
+            />
+            <span class="mark__name">{SITE_TITLE}</span>
+          </h1>
 
-        <h1 class="hero__title">
-          <span class="hero__name">{SITE_TITLE}</span>
-        </h1>
-
-        <div class="hero__bio">
-          {BIO.map((line) => <p>{line}</p>)}
+          {/* ③ 题词。R17 定的「这一页不出现任何别的词」到这里为止 —— R19 逐字要求
+              「再在启动页中加一句话『沉舟莫断鹏程路，金鳞岂为池中物』，这句话用合适的
+              特殊字体颜色表现出来」，是沉麟自己改的主意，照新的做。
+              两个半句各包一个 <span>：窄到装不下时只许折在中间那个逗号后面，
+              不许折在半句当中（对句折行本来就该折在句读上）。 */}
+          <p class="verse">
+            <span>沉舟莫断鹏程路，</span><span>金鳞岂为池中物</span>
+          </p>
         </div>
 
-        {socialLinks.length > 0 && (
-          <ul class="hero__links">
-            {socialLinks.map((l) => (
-              <li>
-                <a href={l.href} target={l.href.startsWith('http') ? '_blank' : undefined}>
-                  {l.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
+        {/* ④ 进站提示。需求要求页面上不出现「别的词」，所以「点一下或滑一下」
+            这句话只能变成一枚呼吸的 ⌄（那句题词是沉麟指名要加的，不在此列）。
+            做成 <button> 是给键盘和读屏器用的：整页点击对鼠标和手指够了，但 Tab 得有落点，
+            aria-label 只进无障碍树、不渲染成可见文字，不算「出现的词」。 */}
+        <button
+          class="go"
+          id="go"
+          type="button"
+          aria-label={`进入 ${SITE_TITLE} 的站内`}
+        >
+          <i></i>
+        </button>
       </div>
     </div>
-  </section>
 
-  {/* ---------- 文章 ---------- */}
-  <section class="block">
-    <div class="block__head">
-      <h2 class="block__title">{SECTIONS.posts.title}</h2>
-      <a href="/posts" class="block__more meta">全部 →</a>
-    </div>
+    <script>
+      /**
+       * 整页唯一的脚本：点一下或滑一下就进站。视频靠 autoplay 属性自己播，不需要脚本。
+       *
+       * 走一段过场再导航（`.is-leaving`：镜头往门里推、白光从门口漫上来），不是原地跳走 ——
+       * 这一页的隐喻就是「走进门」，那段动画是这句话的动作部分。
+       * 减少动态偏好下直接跳，不让人干等那 620ms。
+       */
+      const stage = document.getElementById('stage')!;
+      // 兜底跟着 ENTER 走。阶段⑥ 之后不能再写 '/' —— 那就是这一页自己，
+      // 属性万一丢了，点一下会变成「原地刷新」，看起来像门坏了
+      const to = stage.dataset.enter || '/home';
 
-    {posts.length > 0 ? (
-      <ul class="entries glass">
-        {posts.map((p) => (
-          <EntryCard
-            href={`/posts/${p.id}`}
-            title={p.data.title}
-            pubDate={p.data.pubDate}
-          />
-        ))}
-      </ul>
-    ) : (
-      <p class="empty glass">{SECTIONS.posts.empty}</p>
-    )}
-  </section>
+      let leaving = false;
 
-  {/* ---------- 随笔 ---------- */}
-  <section class="block">
-    <div class="block__head">
-      <h2 class="block__title">{SECTIONS.notes.title}</h2>
-      <a href="/notes" class="block__more meta">全部 →</a>
-    </div>
+      function enter() {
+        if (leaving) return;
+        leaving = true;
 
-    {notes.length > 0 ? (
-      <ul class="entries glass">
-        {notes.map((n) => (
-          <EntryCard
-            href={`/notes/${n.id}`}
-            title={n.data.title}
-            pubDate={n.data.pubDate}
-          />
-        ))}
-      </ul>
-    ) : (
-      <p class="empty glass">{SECTIONS.notes.empty}</p>
-    )}
-  </section>
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          location.href = to;
+          return;
+        }
 
-  {/* ---------- 精选作品（无精选时整块不出现） ---------- */}
-  {projects.length > 0 && (
-    <section class="block">
-      <div class="block__head">
-        <h2 class="block__title">{SECTIONS.projects.title}</h2>
-        <a href="/projects" class="block__more meta">全部 →</a>
-      </div>
+        stage.classList.add('is-leaving');
+        // 620ms 与样式里 .is-leaving 那组 transition 同长，改一个要改另一个
+        setTimeout(() => (location.href = to), 620);
+      }
 
-      <ul class="works glass">
-        {projects.map((pr) => (
-          <li class="work">
-            <a href={`/projects/${pr.id}`}>
-              <span class="work__title">{pr.data.title}</span>
-              <span class="work__desc">{pr.data.description}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )}
-  {/* ---------- 入口 ---------- */}
-  <section class="block">
-    <div class="block__head">
-      <h2 class="block__title">别处</h2>
-    </div>
+      // 整页热区。<button> 的点击也冒泡到这里，不必单独绑
+      stage.addEventListener('click', enter);
 
-    <ul class="portals">
-      {PORTALS.map((p) => (
-        <li>
-          <a href={p.href} class="portal glass">
-            <span class="portal__label">{p.label}</span>
-            <span class="portal__desc">{p.description}</span>
-            <span class="portal__arrow" aria-hidden="true">→</span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  </section>
-</BaseLayout>
+      /* 滚轮当「滑动」：这一页没有可滚的内容，滑的意思只能是「走」，所以不看方向。
+         攒到 60 才触发 —— 鼠标一格滚轮就有 100，一次就走；触控板的轻微擦碰
+         只有个位数，得连着好几下才算，免得手放上去就被送走 */
+      let wheeled = 0;
+      window.addEventListener(
+        'wheel',
+        (e) => {
+          wheeled += Math.abs(e.deltaY) + Math.abs(e.deltaX);
+          if (wheeled > 60) enter();
+        },
+        { passive: true }
+      );
 
-<style>
-  /* ---------- 开篇 ---------- */
-  .hero {
-    padding-top: var(--sp-8);
+      // 触摸：记起点，移动超过 24px 才算滑，免得把点击时手指的轻微位移当成滑
+      let y0: number | null = null;
+      window.addEventListener(
+        'touchstart',
+        (e) => {
+          y0 = e.touches[0].clientY;
+        },
+        { passive: true }
+      );
+      window.addEventListener(
+        'touchmove',
+        (e) => {
+          if (y0 !== null && Math.abs(e.touches[0].clientY - y0) > 24) enter();
+        },
+        { passive: true }
+      );
+
+      /* 从站内按「返回」回来时，页面可能是从 bfcache 里原样恢复的 ——
+         那会连 .is-leaving 一起恢复：白光糊满、pointer-events 关掉，看起来就是死页。
+         恢复时把状态清干净 */
+      window.addEventListener('pageshow', (e) => {
+        if (!e.persisted) return;
+        leaving = false;
+        wheeled = 0;
+        stage.classList.remove('is-leaving');
+      });
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  /* ==========================================================================
+     单位与色板
+     --u 锁在视口高度上：整页永远刚好一屏，任何缩放都不出现滚动条。
+     --h 是「字号单位」：在 --u 基础上掺 35% 的宽度分量，超宽屏字略大，上限 +16%，
+         下限就是 --u（clamp 的第一个参数），所以窄屏永远不会把字压小。
+     ========================================================================== */
+  :root {
+    --u: calc(100vh / 1058);
+    --uw: calc(100vw / 1487);
+    --h: clamp(
+      var(--u),
+      calc(var(--u) * 0.65 + var(--uw) * 0.35),
+      calc(var(--u) * 1.16)
+    );
+
+    /* 中文字体栈与 global.css 的 --font-display / --font-body **逐字相同**。
+       这是「两页共用同一套字形」最省事也最不会走散的做法：字体是设计语言里
+       最容易被察觉的一层，比配色还容易。
+       西文的 Fraunces 没有汉字、本页也没引入，所以标题栈直接从宋体开始 ——
+       写上一个没加载的族名只会白占一格。 */
+    --font-cn: 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC',
+      'Songti TC', 'SimSun', serif;
+    --font-cn-body: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+      'Source Han Sans SC', 'Noto Sans CJK SC', 'Heiti SC', sans-serif;
+
+    /* 灰阶带一点点暖偏移（r−b = 3，饱和度 3% 上下）。
+       原规格这几档是纯灰（S=0），而画面里所有暖色桶的色相都锁在 29°–31° ——
+       给灰阶同样一点点色相，文字就跟画面属于同一族了，肉眼分辨不出「偏黄」。
+       R17 之后本页只剩两个颜色用户：字标（--ink）与那枚 ⌄（--muted）。 */
+    --ink: #fbfbfb; /* 门洞白光实测值 */
+    --muted: #a8a5a2;
+    --stage: #050505;
+
+    /* 题词那一档。需求要「合适的特殊字体颜色」，这里逐位等于 global.css 的 --brass ——
+       也就是站内强调色 --seal 的原值，而它的出处正是这一页：H30 / S28 / L68 是把画面里
+       暖色的天花板 #8b755d 沿同色相提亮得到的（见 global.css 顶部那段色阶注释）。
+       所以它「特殊」但不外来：整页只有这一处是有彩色的，落在近黑舞台上像一枚印，
+       而色相与门洞的暖光同族，不会显得是别处贴过来的颜色。 */
+    --verse: #c4ad97;
+
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* 竖屏的流式单位。在这里就定义好（而不是只写在竖屏媒体查询里），
+       是为了让任何 calc(N * var(--m)) 在所有视口下都能解析 ——
+       未定义的自定义属性会让整条声明作废。 */
+    --m: min(calc(100vw / 430), 1.34px);
   }
 
-  .hero__card {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-12);
-    padding: var(--sp-12);
-    border-radius: var(--r-xl);
+  /* 移动端浏览器的 100vh 含地址栏，滚动时会跳；dvh 才是真实可视高度。
+     必须写在竖屏媒体查询**之前** —— 同优先级下后写的胜，否则会把 --m 覆盖掉。 */
+  @supports (height: 100dvh) {
+    :root {
+      --u: calc(100dvh / 1058);
+    }
   }
 
-  .hero__portrait {
-    position: relative;
-    flex-shrink: 0;
+  * {
+    box-sizing: border-box;
   }
 
-  /* 头像背后一团同色光晕，把纯黑的方图从玻璃面上「托」起来 */
-  .hero__portrait::before {
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    /* 这一页是「幕」，不是文档：任何方向都不给滚动 */
+    overflow: hidden;
+    background: var(--stage);
+  }
+
+  body {
+    /* 页面上一个西文字符都没有了，所以字体栈从中文黑体开始 ——
+       原来打头的 Manrope 连同它的 @fontsource 导入一起删了 */
+    font-family: var(--font-cn-body), system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: geometricPrecision;
+  }
+
+  /* ==========================================================================
+     舞台与背景
+     层序：plate 1 < 标识与提示 2 < 出场白光 3。
+     ========================================================================== */
+  .stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage);
+    /* 整页都是热区，光标得把这件事说出来 —— 这也是「有提示」的一半 */
+    cursor: pointer;
+  }
+
+  .plate {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  /* 视频比舞台略宽（1492 × 1054u），再往左偏 0.5u：
+     规格给的取景偏移，让人物落在右侧、左边留出排版空间 */
+  .plate-video {
+    position: absolute;
+    left: 50%;
+    top: calc(1 * var(--u));
+    width: calc(1492 * var(--u));
+    height: calc(1054 * var(--u));
+    transform: translateX(calc(-50% - 0.5 * var(--u)));
+    object-fit: cover;
+    pointer-events: none;
+  }
+
+  /* 两道渐变：竖向把底部压成纯黑，横向把左右两侧收进黑场。
+     横向那道用 calc(50% ± Nu) 定位色标，所以黑边宽度跟着 --u 走、不随视口宽度漂。 */
+  .plate::after {
     content: '';
     position: absolute;
-    inset: -18%;
-    border-radius: 50%;
-    background: radial-gradient(circle, var(--seal-wash), transparent 68%);
-    filter: blur(12px);
-    z-index: 0;
-  }
-
-  .hero__avatar {
-    position: relative;
-    z-index: 1;
-    width: 8.5rem;
-    height: 8.5rem;
-    border-radius: var(--r-full);
-    object-fit: cover;
-    border: 1px solid var(--glass-border-lit);
-    box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.7);
-  }
-
-  .hero__text {
-    min-width: 0;
-  }
-
-  .hero__eyebrow {
-    margin-bottom: var(--sp-3);
-  }
-
-  .hero__title {
-    font-size: var(--text-4xl);
-    font-variation-settings: 'opsz' 60, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
-    line-height: 1.05;
-  }
-
-  /* 名字用渐变填充，比纯色更有层次 */
-  .hero__name {
+    inset: 0;
+    pointer-events: none;
     background: linear-gradient(
-      120deg,
-      var(--ink) 20%,
-      var(--seal) 60%,
-      var(--ink) 95%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+        to bottom,
+        rgba(5, 5, 5, 0) 78.8%,
+        rgba(5, 5, 5, 0.23) 79.6%,
+        rgba(5, 5, 5, 0.45) 81.4%,
+        rgba(5, 5, 5, 0.75) 83.3%,
+        rgba(5, 5, 5, 0.84) 85.2%,
+        rgba(5, 5, 5, 0.888) 88%,
+        rgba(5, 5, 5, 0.905) 91%,
+        rgba(5, 5, 5, 0.96) 95%,
+        #050505 100%
+      ),
+      linear-gradient(
+        to right,
+        #050505 calc(50% - 746 * var(--u)),
+        transparent calc(50% - 676 * var(--u)),
+        transparent calc(50% + 676 * var(--u)),
+        #050505 calc(50% + 746 * var(--u))
+      );
   }
 
-  .hero__bio {
-    margin-top: var(--sp-6);
-    color: var(--ink-soft);
-    font-size: var(--text-lg);
-    max-width: 34rem;
-  }
+  /* ==========================================================================
+     签名块：一张脸 + 两个字 + 一句题词
+     位置从左上角挪到左侧垂直居中 —— 一页只剩这一块时，把它留在原来顶栏那个高度
+     会像「顶栏被删剩一个角」。47% 而不是 50%：视觉中心比几何中心略高，正中反而显得偏下。
 
-  .hero__bio p + p {
-    margin-top: var(--sp-3);
-  }
+     左界仍是 75u，与原先的顶栏、标题、底部带子同一条竖线 —— 那条线是这一页的骨架，
+     画面的取景本来就是按它构图的（人物在右、左侧留黑），所以字压在左边最清楚。
 
-  .hero__links {
+     R19 加了题词，于是绝对定位与出场动画从 .mark 搬到了这层 .sign 上：
+     两块纵向叠着、共压 75u 那条左界线，谁高谁矮都不用算 —— 换成 flex 列以后
+     题词自己跟在标识下面。.mark 因此退回普通的 flex 行（它不再需要知道自己在哪）。
+     ========================================================================== */
+  .sign {
+    position: absolute;
+    left: calc(75 * var(--u));
+    top: 47%;
+    transform: translateY(-50%);
+    z-index: 2;
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-3);
-    margin: var(--sp-8) 0 0;
-    padding: 0;
-    list-style: none;
+    flex-direction: column;
+    /* 列方向默认 stretch，会把两块都拉到最宽那块（题词）的宽度。视觉上没差别，
+       但写明 flex-start 才是这里真实的意图：两块各按自身宽度、左缘对齐 */
+    align-items: flex-start;
+    gap: calc(16 * var(--u));
   }
 
-  .hero__links a {
-    display: inline-block;
-    padding: var(--sp-2) var(--sp-4);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    letter-spacing: 0.06em;
-    text-decoration: none;
-    color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    transition: color 0.18s ease, border-color 0.18s ease,
-      background-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
-  }
-
-  .hero__links a:hover {
+  .mark {
+    display: flex;
+    align-items: center;
+    /* 头像放大到 96u 之后 18u 的间隙显得挤，跟着放到 22u */
+    gap: calc(22 * var(--u));
+    margin: 0;
     color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
+    /* h1 自带的 2em 加粗在这儿都不作数：字号由 .mark__name 自己定 */
+    font-size: inherit;
+    font-weight: 400;
   }
 
-  /* ---------- 区块 ---------- */
-  .block {
-    margin-top: var(--sp-24);
+  /* 头像 R19 从 72u 放到 96u（×1.33）。需求逐字是「适当放大启动页中我头像占的比例」——
+     96u 之后它比「沉麟」两个字（38h，双字连字距约 80h）还高一截，
+     签名块的主体于是从「字」变成「脸」，这是「占的比例」那句话要的效果。
+     那圈描边（box-shadow: 0 0 0 1px rgba(251,251,251,.22)）按需求删了：
+     它原本是把头像从近黑的底上「切」出来，去掉之后边缘直接融进舞台，
+     照片自己的亮度已经够把轮廓交代清楚。 */
+  .mark__face {
+    display: block;
+    width: calc(96 * var(--u));
+    height: calc(96 * var(--u));
+    border-radius: 50%;
+    object-fit: cover;
   }
 
-  .block__head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--sp-4);
-    margin-bottom: var(--sp-6);
-    padding-inline: var(--sp-2);
+  .mark__name {
+    font-family: var(--font-cn);
+    font-size: calc(38 * var(--h));
+    font-weight: 500;
+    /* 两个汉字当字标用，字距要放开才不像从正文里抠出来的 */
+    letter-spacing: calc(3.6 * var(--h));
+    /* letter-spacing 会在最后一个字右边也补一份，整块看着偏左，减回来 */
+    margin-right: calc(-3.6 * var(--h));
   }
 
-  .block__title {
-    font-size: var(--text-xl);
-    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
+  /* 题词。字号 17h ≈ 字标的 45%，够小到不与「沉麟」争主体，又够大到一眼读完。
+     max(12.5px, …) 是给窄屏的地板：320px 宽时 --m 只有 0.744，纯按单位算会掉到
+     12.6px 上下，再小就开始费眼（同 .go i 用 max() 兜住线宽那一手）。
+     宋体栈与字标同一族 —— 一句题词跟着签名走，不该换字形。 */
+  .verse {
+    margin: 0;
+    /* letter-spacing 的尾部补偿，同 .mark__name */
+    margin-right: calc(-1.6 * var(--h));
+    color: var(--verse);
+    font-family: var(--font-cn);
+    font-size: max(12.5px, calc(17 * var(--h)));
+    font-weight: 400;
+    line-height: 1.75;
+    letter-spacing: calc(1.6 * var(--h));
   }
 
-  .block__more {
-    text-decoration: none;
+  /* 两个半句各自不许断。实测三档视口都装得下整句（430px 手机上整句约 280px、
+     320px 上约 208px），所以这条是保险不是常态；真窄到装不下时，
+     折点只会落在中间那个逗号后面 —— 对句本来就该折在句读上，不该折在半句当中。 */
+  .verse span {
     white-space: nowrap;
-    transition: color 0.18s ease;
   }
 
-  .block__more:hover {
-    color: var(--seal);
-  }
-
-  /* 条目列表整体是一块玻璃，内部只有分隔线 —— 比每条一块玻璃省 GPU */
-  .entries {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-  }
-
-  .empty {
-    padding: var(--sp-8);
-    color: var(--ink-faint);
-    font-size: var(--text-sm);
-  }
-
-  /* ---------- 作品 ---------- */
-  .works {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-  }
-
-  .work + .work {
-    border-top: 1px solid var(--rule);
-  }
-
-  .work a {
+  /* ==========================================================================
+     进站提示
+     整页可点，但总得有个东西说出「这页要往里走」。需求不许出现任何别的词，
+     所以那句话变成了底部居中的一枚 ⌄：向下是「继续／往里」的通用手势方向。
+     ⌄ 由两条边框转 45° 拼出来，比塞一个 SVG 省事。
+     圆形轮廓给它可点的手感与足够的触摸面积（46u 在竖屏是 46px，过得了 44px 那条线）。
+     ========================================================================== */
+  .go {
+    position: absolute;
+    left: 50%;
+    bottom: calc(84 * var(--u));
+    transform: translateX(-50%);
+    z-index: 2;
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--sp-4);
-    padding: var(--sp-5) var(--sp-6);
-    text-decoration: none;
-    transition: background-color 0.2s ease, padding-left 0.24s ease;
-  }
-
-  .work a:hover {
-    background: var(--seal-wash);
-    padding-left: var(--sp-8);
-  }
-
-  .work__title {
-    font-family: var(--font-display);
-    font-size: var(--text-lg);
-    font-weight: 600;
-    transition: color 0.18s ease;
-  }
-
-  .work a:hover .work__title {
-    color: var(--seal);
-  }
-
-  .work__desc {
-    font-size: var(--text-sm);
-    color: var(--ink-soft);
-  }
-
-  /* ---------- 入口 ---------- */
-  .portals {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: var(--sp-4);
-    list-style: none;
-    margin: 0;
+    align-items: center;
+    justify-content: center;
+    width: calc(46 * var(--u));
+    height: calc(46 * var(--u));
     padding: 0;
+    border: 1px solid rgba(251, 251, 251, 0.16);
+    border-radius: 999px;
+    background: rgba(251, 251, 251, 0.05);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.25s var(--ease), border-color 0.25s var(--ease),
+      background-color 0.25s var(--ease);
   }
 
-  .portal {
-    display: grid;
-    /* 箭头固定在右上，标题与描述占左栏 */
-    grid-template-columns: 1fr auto;
-    align-content: start;
-    gap: var(--sp-2) var(--sp-4);
-    height: 100%;
-    padding: var(--sp-6);
-    text-decoration: none;
-    transition: background-color 0.24s ease, border-color 0.18s ease,
-      transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.3s ease;
-  }
-
-  .portal:hover {
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lift);
-  }
-
-  .portal__label {
-    font-family: var(--font-display);
-    font-size: var(--text-lg);
-    font-weight: 600;
+  .go:hover {
     color: var(--ink);
-    transition: color 0.18s ease;
+    border-color: rgba(251, 251, 251, 0.32);
+    background: rgba(251, 251, 251, 0.1);
   }
 
-  .portal:hover .portal__label {
-    color: var(--seal);
+  .go:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: calc(5 * var(--u));
   }
 
-  .portal__desc {
-    grid-column: 1 / -1;
-    font-size: var(--text-sm);
-    line-height: var(--leading-normal);
-    color: var(--ink-soft);
+  .go i {
+    display: block;
+    width: calc(11 * var(--u));
+    height: calc(11 * var(--u));
+    /* 只留右下两条边再转 45°，就是一枚 ⌄。线宽给个 1.4px 下限，
+       不然小视口下 --u < 1 会把它渲染成若有若无的一根灰丝 */
+    border-right: max(1.4px, calc(1.6 * var(--u))) solid currentColor;
+    border-bottom: max(1.4px, calc(1.6 * var(--u))) solid currentColor;
+    /* 转完之后视觉重心偏右下，往回挪一点点才像居中 */
+    transform: rotate(45deg) translate(-14%, -14%);
   }
 
-  .portal__arrow {
-    color: var(--rule-strong);
-    font-size: var(--text-sm);
-    transition: color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+  /* 前景壳：不占布局、不吃事件，只是出场时统一淡出的把手。
+     .go 得把事件收回来，否则键盘 Tab 到了却点不动 */
+  .fore {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
   }
 
-  .portal:hover .portal__arrow {
-    color: var(--seal);
-    transform: translateX(0.25rem);
+  .go {
+    pointer-events: auto;
   }
 
-  @media (max-width: 52rem) {
-    .hero__card {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: var(--sp-8);
-      padding: var(--sp-8);
+  /* ==========================================================================
+     进场
+     整段包在 no-preference 里 —— 减少动态偏好下这些 keyframes 根本不会生成，
+     比声明完再用 !important 把时长压成 0.01ms 干净（后者会留下一帧跳变）。
+
+     镜头缓缓推近（6.5s 走完 7% 的放大）是这一页新加的那一层动画：门在慢慢靠近。
+     它用**独立的 scale 属性**而不是 transform —— .plate-video 的 transform 里
+     装着取景偏移（桌面那个 translateX），写进 transform 就会把偏移冲掉。
+     ========================================================================== */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes pushIn {
+      from {
+        scale: 1.07;
+      }
     }
 
-    .hero__avatar {
-      width: 6rem;
-      height: 6rem;
+    /* .sign 自带 translateY(-50%) 居中，from 里必须把它带上；
+       to 由元素自身的计算值隐式补全，所以那 -50% 不会被动画写坏。
+       R19 之前这段叫 markIn、挂在 .mark 上；定位搬到 .sign 之后动画必须跟着搬，
+       否则 .mark 上的 -50% 已经不存在，from 里那一笔就会把它平白挪下去半个身位。 */
+    @keyframes signIn {
+      from {
+        opacity: 0;
+        transform: translateY(calc(-50% + 16 * var(--u)));
+      }
     }
 
-    .hero__title {
-      font-size: var(--text-3xl);
+    /* 题词单独进场，比签名块晚半拍 —— 先看见脸和名字，再读到那句话，
+       次序对了才像「题」上去的，一起浮现会让它像名字的一部分。
+       .verse 身上没有自带的 transform，所以这里不必带 -50%。 */
+    @keyframes verseIn {
+      from {
+        opacity: 0;
+        transform: translateY(calc(8 * var(--u)));
+      }
     }
 
-    .block {
-      margin-top: var(--sp-16);
+    /* .go 自带 translateX(-50%)，同理。终值刻意停在 0.55 —— 与下面 hint 的
+       首帧对齐，两段动画接上时不跳 */
+    @keyframes goIn {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(calc(14 * var(--u)));
+      }
+      to {
+        opacity: 0.55;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+
+    /* 呼吸：上下浮 7u、亮度来回。这枚 ⌄ 是页面上唯一的「提示」，
+       不动的话它只是个静止的图形，动起来才读得出「往这儿走」 */
+    @keyframes hint {
+      0%,
+      100% {
+        opacity: 0.55;
+        transform: translateX(-50%) translateY(0);
+      }
+      50% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(calc(7 * var(--u)));
+      }
+    }
+
+    .plate-video {
+      animation: pushIn 6.5s var(--ease) both;
+    }
+
+    .sign {
+      animation: signIn 1s var(--ease) 0.12s both;
+    }
+
+    /* 0.62s 起：签名块 1.12s 才走完，题词在它收尾前一点接上，两段是搭着的、不是排队的 */
+    .verse {
+      animation: verseIn 0.9s var(--ease) 0.62s both;
+    }
+
+    /* 两段接力：goIn 进场到 1.85s 结束，hint 正好从 1.85s 起接手。
+       后声明的动画在同属性上胜过前一个，所以顺序不能反。
+       R19 把这两个数从 1.4s 顺延到 1.85s —— 题词插在中间，⌄ 得等它出来再冒头，
+       否则三样东西挤在一秒内一起浮，层次就没了 */
+    .go {
+      animation: goIn 0.9s var(--ease) 0.95s both,
+        hint 2.8s ease 1.85s infinite;
     }
   }
+
+  /* ==========================================================================
+     出场：走进门里
+     点或滑之后不是原地跳走 —— 镜头往门里推、遮罩让开、白光从门口漫上来，
+     620ms 后脚本才真的导航（那个 setTimeout 与这里的时长是一对，改一个要改另一个）。
+     减少动态偏好下脚本直接跳转，这一整组根本不会被挂上。
+
+     放大挂在 .plate 而不是 .plate-video 上：视频身上有 pushIn 在跑，
+     动画会盖掉普通声明，写在它自己身上的 scale 过渡不会生效。父层没有动画，
+     缩放父层等于缩放画面，同时把遮罩一起带走。
+     ========================================================================== */
+  .stage.is-leaving {
+    /* 动画期间再点也没用，免得连点两次触发两次导航 */
+    pointer-events: none;
+  }
+
+  .stage.is-leaving .plate {
+    scale: 1.16;
+    /* 前慢后快：起步像被吸进去，收尾干脆 */
+    transition: scale 0.62s cubic-bezier(0.5, 0, 0.75, 0);
+  }
+
+  /* 遮罩让开一点，门口的亮度先浮上来 */
+  .stage.is-leaving .plate::after {
+    opacity: 0.35;
+    transition: opacity 0.62s ease-out;
+  }
+
+  .stage.is-leaving .fore {
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+  }
+
+  /* 白光。径向渐变的中心对准门洞（画面偏上，约 50% 44%），
+     所以看起来是从门里漫出来的，而不是整屏刷白 */
+  .stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(
+      circle at 50% 44%,
+      rgba(255, 255, 255, 0.96) 0%,
+      rgba(255, 255, 255, 0.72) 34%,
+      rgba(255, 255, 255, 0) 72%
+    );
+  }
+
+  .stage.is-leaving::after {
+    opacity: 1;
+    transition: opacity 0.62s ease-in;
+  }
+
+  /* ==========================================================================
+     竖屏 / 近方屏（aspect ≤ 11/10）
+     --u 与 --h 直接接到 --m 上，这样上面所有 calc(N * var(--u)) 自动换算，
+     不需要为每条规则再写一遍竖屏版本 —— 这一页只剩签名块与那枚 ⌄，于是这里也只剩
+     背景取景与这两处的边距要管（题词在签名块里，跟着一起走）。
+     位置很关键：必须排在前面那个 @supports(100dvh) 之后 —— 同优先级后写的胜。
+     ========================================================================== */
+  @media (max-aspect-ratio: 11 / 10) {
+    :root {
+      --u: var(--m);
+      --h: var(--m);
+    }
+
+    /* 背景改成铺满并把取景点往左推到 43%：竖幅里人物本来会被裁到画面外 */
+    .plate-video {
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      transform: none;
+      object-position: 43% center;
+    }
+
+    /* 竖屏遮罩换成「左重右轻 + 上下压暗」：字压在左侧，右侧留出画面 */
+    .plate::after {
+      background: linear-gradient(
+          to right,
+          rgba(5, 5, 5, 0.86) 0%,
+          rgba(5, 5, 5, 0.66) 42%,
+          rgba(5, 5, 5, 0.2) 78%,
+          rgba(5, 5, 5, 0.1) 100%
+        ),
+        linear-gradient(
+          to bottom,
+          rgba(5, 5, 5, 0.72) 0%,
+          rgba(5, 5, 5, 0.34) 24%,
+          rgba(5, 5, 5, 0.34) 56%,
+          rgba(5, 5, 5, 0.8) 82%,
+          rgba(5, 5, 5, 0.97) 94%,
+          #050505 100%
+        );
+    }
+
+    /* 75m 的左界在手机上太靠里（那是给 1487 宽画布定的），收到 26m，
+       并让开刘海屏的左侧安全区。题词跟着 .sign 走，不必单独再写一条 */
+    .sign {
+      left: calc(env(safe-area-inset-left) + 26 * var(--m));
+    }
+
+    /* 底部要让开小白条／手势条 */
+    .go {
+      bottom: calc(env(safe-area-inset-bottom) + 54 * var(--m));
+    }
+  }
+
+  /* ==========================================================================
+     平板竖屏（≥600px 且仍是竖屏）：空间够了，把桌面的取景决定拿回来一部分
+     ========================================================================== */
+  @media (min-width: 600px) and (max-aspect-ratio: 11 / 10) {
+    :root {
+      /* 三者取小：宽度、高度、绝对上限。高度也要参与，否则近方屏会撑出滚动 */
+      --m: min(calc(100vw / 860), calc(100vh / 760), 1.25px);
+    }
+
+    .plate-video {
+      object-position: 44% center;
+    }
+
+    /* 屏幕宽了，遮罩可以轻一档，让画面透出来更多 */
+    .plate::after {
+      background: linear-gradient(
+          to right,
+          rgba(5, 5, 5, 0.84) 0%,
+          rgba(5, 5, 5, 0.6) 42%,
+          rgba(5, 5, 5, 0.16) 78%,
+          rgba(5, 5, 5, 0.06) 100%
+        ),
+        linear-gradient(
+          to bottom,
+          rgba(5, 5, 5, 0.66) 0%,
+          rgba(5, 5, 5, 0.28) 24%,
+          rgba(5, 5, 5, 0.3) 56%,
+          rgba(5, 5, 5, 0.78) 82%,
+          rgba(5, 5, 5, 0.96) 94%,
+          #050505 100%
+        );
+    }
+  }
+
+  /* 这一页没有 prefers-reduced-motion: reduce 段，是想清楚了才没有的：
+     进场与呼吸的 keyframes 全在 no-preference 里（reduce 下不生成），
+     出场那一组只有脚本加上 .is-leaving 才生效、而脚本在 reduce 下直接导航，
+     剩下的 transition 只是 .go 的悬停变色 —— 没有东西需要在这里压掉。 */
 </style>

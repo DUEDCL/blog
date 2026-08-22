@@ -1,12 +1,28 @@
 ---
 import { SITE_TITLE, SOCIAL } from '../consts';
 
+interface Props {
+  /**
+   * 版权行右边那句随页面走的话。只有需要的页面才传 —— `/music` 的
+   * 「听一点音乐吧，让时间慢下来。」原来是页面顶部的一张页头卡，
+   * 但那一页的标题本来就是转盘自己，卡片只是把转盘往下推，于是这句话搬到了这儿。
+   * R19 起文章／随笔／作品／摄影四页也各有一句，同样是从页头卡搬下来的
+   * （四句写在 consts.ts 的 SECTIONS.note 里，五句合起来是一组）。
+   */
+  note?: string;
+}
+
+const { note } = Astro.props;
+
 const year = new Date().getFullYear();
 
-// 归档与标签不进顶栏（顶栏只放栏目），入口在首页与这里
+// 归档与标签不进顶栏（顶栏放栏目 + 音乐），入口在首页与这里。
+// 启动页也挂在这里 —— 页脚每页都有，是「进站后还能回去再看一眼」最直接的解法（R12）。
+// R14 阶段⑥ 起它的地址是 '/'：那一页搬去了根路径，正站首页搬到了 /home。
 const indexLinks = [
   { label: '归档', href: '/archive' },
   { label: '标签', href: '/tags' },
+  { label: '启动页', href: '/' },
 ];
 
 // 只渲染填了值的社交链接
@@ -23,7 +39,12 @@ const links = [
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot glass">
-      <p class="meta">© {year} {SITE_TITLE}</p>
+      {/* 左簇：版权 + 那句随页面走的话。包一层是为了让 space-between 仍然只分
+          「左簇 / 右簇链接」两段 —— 直接把 note 作为第三个 flex 项会把链接挤到中间 */}
+      <div class="foot__brand">
+        <p class="meta">© {year} {SITE_TITLE}</p>
+        {note && <p class="foot__note">{note}</p>}
+      </div>
 
       {/* 两组链接并排靠右：站内索引在前，站外社交在后。
           分成两个 ul 是语义上的分组，视觉上仍是一行胶囊文字 */}
@@ -70,6 +91,19 @@ const links = [
     gap: var(--sp-4);
     padding: var(--sp-5) var(--sp-8);
     border-radius: var(--r-full);
+  }
+
+  .foot__brand {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-2) var(--sp-4);
+    min-width: 0;
+  }
+
+  .foot__note {
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
   }
 
   /* 两组链接之间留一道比组内更宽的空隙，读起来是「站内 / 站外」两簇 */

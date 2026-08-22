@@ -12,7 +12,21 @@ export default defineConfig({
   // duchenlin.eu.cc 也绑在同一个 Worker 上，但它在国内被 RST，不能当主域。
   site: 'https://duchenlin.top',
 
-  integrations: [mdx(), sitemap()],
+  // /start 是起始页的旧地址。R14 阶段⑥ 把它搬到了根路径（需求逐字是「解决输入域名
+  // 跳转的不是启动页问题」），旧链接不能断 —— 页脚指过它、外部也可能已经收录。
+  // 静态输出下 Astro 为它生成一张 meta-refresh 跳转页并带上指向目标的 canonical，
+  // 不依赖任何平台能力，所以选它而不是 Cloudflare 的 _redirects 文件。
+  redirects: {
+    '/start': '/',
+  },
+
+  integrations: [
+    mdx(),
+    // 不再排除 /start：那一页现在就是站点门面（根路径），本该进 sitemap。
+    // 排除它的旧理由（「一张全英文的入口幕，标题与本站无关」）在 R17 之后也不成立了 ——
+    // 页面上现在只有中文：站名、题词。
+    sitemap(),
+  ],
 
   image: {
     // 全局响应式：自动生成 srcset / sizes，摄影栏目依赖此项
