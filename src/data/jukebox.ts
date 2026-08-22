@@ -102,7 +102,11 @@ export interface JukeTrack {
   /** 取直链用的 id，与 songId 常相等但不保证 */
   urlId: string;
   lyricId: string;
-  /** 目前恒为 netease（榜单与搜索实测都是），但按上游返回值透传，不写死 */
+  /**
+   * 上游返回的源名，按返回值透传、不写死。
+   * 榜单恒为 netease；搜索会混着 netease 与 tencent（R14 的择优选源就在这两个源之间挑，
+   * 所以「恒为 netease」那句旧口径已经不成立了）。
+   */
   source: string;
   sign: string;
 }

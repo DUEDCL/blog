@@ -1,5 +1,6 @@
 ---
 import { SITE_TITLE, SITE_DESCRIPTION, SITE_URL } from '../consts';
+import ThemeBoot from './ThemeBoot.astro';
 
 interface Props {
   title?: string;
@@ -62,19 +63,7 @@ const ogImage = image ? new URL(image, SITE_URL) : undefined;
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#050505" />
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eae9e7" />
 
-{/* 主题在样式加载前同步确定，避免切换时的闪烁。本站以深色为默认 */}
-<script is:inline>
-  (function () {
-    try {
-      var stored = localStorage.getItem('theme');
-      var theme =
-        stored ||
-        (window.matchMedia('(prefers-color-scheme: light)').matches
-          ? 'light'
-          : 'dark');
-      document.documentElement.dataset.theme = theme;
-    } catch (e) {
-      document.documentElement.dataset.theme = 'dark';
-    }
-  })();
-</script>
+{/* 两个 <html> 属性（data-theme / data-js）在样式加载前同步确定，避免闪烁。
+    脚本本体在 ThemeBoot.astro —— 起始页不走 BaseLayout，得自己引同一个组件，
+    而 SPA 导航按脚本 textContent 逐字去重，两处必须一模一样才只跑一次。 */}
+<ThemeBoot />

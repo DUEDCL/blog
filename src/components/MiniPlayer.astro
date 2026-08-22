@@ -1,0 +1,340 @@
+---
+/**
+ * 悬浮窗 —— 全站那条实时状态栏，也是全站唯一那个 `<audio>` 的出生地。
+ *
+ * 为什么 `<audio>` 写在这里而不是 /music 页：R14 要「在网站其他地方正在播放的音乐
+ * 不会停止」。这个根节点带 `transition:persist="jk"`，SPA 换页时 Astro 把这棵子树
+ * **原样搬进新文档**（是同一个节点对象，不是重建），视图的事件与状态一并保住。
+ * 换页存进度再续播那条路不行 —— 声音会有可听见的裂口。
+ *
+ * 但 `<audio>` 光靠 persist 保不住：Astro 7.2.x 的 `reifyMediaElements` 会在换页
+ * 最后一步把新 body 里的 audio 全换成克隆，连刚搬过来的那个也换。所以下面那段脚本
+ * 一上来就把它挪去 `<html>` 底下，彻底站到那个扫描范围之外（详情见脚本里的长注释）。
+ * 这一页的模板里它仍然写在这儿，只是**运行期第一件事就是搬家**。
+ *
+ * 两条约束因此固定下来：
+ * ① 根节点**必须始终存在**（persist 靠名字配对，目标页面没有同名节点就不搬、
+ *    老节点连着旧 body 一起丢），所以「不显示」只能用 `hidden`，也所以起始页
+ *    这种不走 BaseLayout 的页面同样得渲染它。
+ * ② 下面那段脚本是 bundled module，**全站只执行一次**；而它要操作的节点又是被
+ *    persist 保住的同一批。两件事对齐，所以事件只在模块顶层绑一次，
+ *    不需要 `astro:page-load`（放进去反而会每导航一次累积一层监听）。
+ *
+ * 状态一律不存这里：队列、当前曲、播放方式、歌词全在 scripts/jukebox.ts 的
+ * 单例闭包里。这个组件只是它的一个视图，负责把状态画成 DOM。
+ */
+---
+
+<div class="jk-mini" data-mini hidden transition:persist="jk">
+  {/* preload="none"：这东西每一页都挂着，不该为一个可能没人点开的播放器去抓
+      metadata；时长本来也来自 data/music.ts 的配置值，不指望 metadata 给。
+      没有 controls —— 控制键是下面那几个 */}
+  <audio data-au preload="none"></audio>
+
+  <div class="jk-mini__card glass">
+    <div class="jk-mini__head">
+      {/* 转盘兼收起键。播放时它在转（复用唱盘台那条 jk-spin） */}
+      <button
+        class="jk-mini__fold"
+        type="button"
+        data-fold
+        aria-expanded="true"
+        aria-label="收起播放器"
+      >
+        <span class="jk-mini__disc" aria-hidden="true"></span>
+      </button>
+
+      {/* 曲名与「歌手 · 专辑」。收起态只留曲名 —— 状态栏的本分是「一直告诉你在放什么」 */}
+      <p class="jk-mini__now">
+        <span class="jk-mini__t" data-title></span>
+        <span class="jk-mini__s" data-sub></span>
+      </p>
+
+      <a class="jk-key jk-key--sm" data-open href="/music" aria-label="打开唱片机">
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M5 5h6v2H7v10h10v-4h2v6H5z"></path><path
+            d="M13 4h7v7h-2V7.41l-7.3 7.3-1.41-1.41L18.59 6H13z"></path></svg
+        >
+      </a>
+    </div>
+    {/* 正在唱的那一行。刻意带上 `jk-line` —— player.css 里 `.jk-line.is-on .jk-w`
+        那套逐字渐变、还有减少动态偏好下的退化规则，舞台与这里就此共用一份，
+        不另写第二套（WordRun 往宿主上加的也正是 `is-on`） */}
+    <p class="jk-mini__line jk-line" data-line></p>
+
+    <div class="jk-mini__seek">
+      <span class="jk-mini__time meta" data-cur>0:00</span>
+      <input
+        class="jk-rng jk-rng--mini"
+        type="range"
+        data-seek
+        min="0"
+        max="0"
+        step="0.05"
+        value="0"
+        aria-label="播放进度"
+      />
+      <span class="jk-mini__time meta" data-dur>0:00</span>
+    </div>
+
+    <div class="jk-mini__keys">
+      <button class="jk-key jk-key--sm" type="button" data-prev aria-label="上一首">
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M7 6h2.1v12H7zM19 6.6v10.8L10.6 12z"></path></svg
+        >
+      </button>
+
+      <button
+        class="jk-key jk-key--sm jk-key--play"
+        type="button"
+        data-play
+        aria-label="播放"
+        aria-pressed="false"
+      >
+        <svg class="jk-key__i jk-key__i--play" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M8.4 5.4v13.2L19 12z"></path></svg
+        >
+        <svg class="jk-key__i jk-key__i--pause" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M8 5.6h3v12.8H8zM13 5.6h3v12.8h-3z"></path></svg
+        >
+      </button>
+
+      <button class="jk-key jk-key--sm" type="button" data-next aria-label="下一首">
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M14.9 6h2.1v12h-2.1zM5 6.6v10.8L13.4 12z"></path></svg
+        >
+      </button>
+      {/* 播放方式。四个图标叠在这一个键里，露哪个由脚本写的 data-m 决定 ——
+          和唱盘台那个键是同一套图标、同一套 CSS，两处显示的必然是同一档 */}
+      <button class="jk-key jk-key--sm jk-key--mode" type="button" data-mode>
+        <svg class="jk-key__i jk-key__i--m0" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M3.5 11h9.6v2H3.5zM12.4 7.4L17.2 12l-4.8 4.6zM18.6 5.8h2v12.4h-2z"
+          ></path></svg
+        >
+        <svg class="jk-key__i jk-key__i--m1" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M7.6 7.2H16V9l3.6-2.8L16 3.4v1.8H5.6v6.4h2z"></path><path
+            d="M16.4 16.8H8V15l-3.6 2.8L8 20.6v-1.8h10.4v-6.4h-2z"></path></svg
+        >
+        <svg class="jk-key__i jk-key__i--m2" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M7.6 7.2H16V9l3.6-2.8L16 3.4v1.8H5.6v6.4h2z"></path><path
+            d="M16.4 16.8H8V15l-3.6 2.8L8 20.6v-1.8h10.4v-6.4h-2z"></path><path
+            d="M11 10.6l2.2-1.2v5.2h-1.6v-3.2z"></path></svg
+        >
+        <svg class="jk-key__i jk-key__i--m3" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M3.84 7.25L5.16 5.75l12.5 11-1.32 1.5z"></path><path
+            d="M3.84 16.75l1.32 1.5 12.5-11-1.32-1.5z"></path><path
+            d="M14.8 4.4h4.8v4.8z"></path><path d="M14.8 19.6h4.8v-4.8z"></path></svg
+        >
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { formatTime } from '../data/music';
+  import {
+    MODES,
+    WordRun,
+    attach,
+    cycleMode,
+    dur,
+    everPlayed,
+    getMode,
+    init,
+    lineAt,
+    next,
+    now,
+    playing,
+    prev,
+    seekTo,
+    time,
+    toggle,
+    type View,
+  } from '../scripts/jukebox';
+
+  const root = document.querySelector<HTMLElement>('[data-mini]');
+  const au = root?.querySelector<HTMLAudioElement>('[data-au]');
+
+  if (root && au) {
+    /* 非空断言在这里是安全的：这些节点就在上面那段模板里，
+       而模板与这段脚本同属一个组件，不存在「页面没放它们」的情形 */
+    const pick = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+    const title = pick('[data-title]');
+    const sub = pick('[data-sub]');
+    const line = pick('[data-line]');
+    const cur = pick('[data-cur]');
+    const durEl = pick('[data-dur]');
+    const seek = pick<HTMLInputElement>('[data-seek]');
+    const play = pick('[data-play]');
+    const modeKey = pick('[data-mode]');
+    const fold = pick('[data-fold]');
+
+    /* ⚠ 把 `<audio>` 搬出 `<body>`，挂到 `<html>` 上直接当子节点。
+       这不是洁癖，是绕开 Astro 自己的一个 bug —— 少了这一行，「跨页不间断播放」
+       整套机制在换页那一刻就废掉。
+
+       实测的因果（读的是本仓库装着的 astro 7.2.2，
+       `node_modules/astro/dist/transitions/swap-functions.js`）：
+       `swapBodyElement()` 的最后一步是 `reifyMediaElements(newElement)`，而它
+       **无条件**把新 body 里所有 `video, audio` 换成一个新造的克隆
+       （`document.createElement` + 抄属性 + `media.replaceWith(fresh)`）。
+       这一步排在「把 persist 节点搬回新 body」**之后**，且没有任何 persist 豁免 ——
+       于是刚被原样搬过来的、**正在播的**那个 `<audio>` 正好落在扫描范围里，被换掉。
+       老节点一脱离 document，按 HTML 规范就要跑 internal pause steps：
+       音乐停、`currentTime` 归零、jukebox 手里的 `au` 指向一个已经离场的节点、
+       所有控制键跟着失灵。这正是「点到别的页面歌就断」的机制。
+
+       上游已经修了，但**没发布**：GitHub main 的 `swap-functions.ts` 改成先
+       `const liveMedia = new Set(oldElement.querySelectorAll('video, audio'))`，
+       再在 reify 里 `if (liveMedia.has(media)) continue;`（按节点身份豁免，
+       不是按选择器）。而 `npm pack astro@7.2.4` 解包 grep 过，7.2.4 仍是单参数的
+       `reifyMediaElements(newElement)` —— 升级躲不过去，只能自己躲。
+
+       躲法就是站到它的扫描范围之外：reify 只扫新 body，`<html>` 的直接子节点它
+       永远看不见。而这么搬没有代价 ——
+       ① 元素仍然 connected，播放不受影响（搬的这一刻还没有 src，更不会有事）；
+       ② `audio:not([controls])` 在各家 UA 样式表里都是 `display: none`，
+          它本来就没有盒子，挪去哪都不影响布局；
+       ③ Astro 自己就往 `documentElement` 上寄存 persist 节点（见上面那个函数里的
+          `moveBefore(docEl, el, null)` / `docEl.appendChild(el)`），这条路它自己在走。
+
+       于是 `.jk-mini` 只剩「状态栏视图」这一个身份：它照旧靠 persist 跨页保命
+       （事件、折叠态、WordRun 的宿主都在它身上），但音频不再依赖它。
+       新页面模板里那个空的 `<audio data-au>` 会连同新的 `.jk-mini` 一起被 persist
+       逻辑整棵丢掉（`newTarget.replaceWith(el)`），不会留下第二个音频源。 */
+    document.documentElement.appendChild(au);
+
+    init(au);
+
+    const run = new WordRun();
+    /** 拖进度条时别让 tick 把滑块拽回去 */
+    let drag = false;
+
+    /**
+     * 页脚的滚动余量。悬浮窗浮在最上层、**不占布局流** —— 代价是滚到页面最底时，
+     * 它正好压在页脚那一行链接上（375×812 实测：五个链接全被盖住）。
+     *
+     * 补法不是把它塞回布局流，而是量出它实际占多高（展开还是收起、窄屏折行都算在内），
+     * 写成 `<html>` 上的 `--jk-room`，由 player.css 补给 `body` 的 padding-bottom：
+     * 不挪任何元素的位置，只把可滚区域往下拉长一截，滚到底时页脚就从它下面出来了。
+     * 藏起来的时候连标志一起撤掉，不留下一段莫名的空白。
+     *
+     * 标志与变量都落在 `<html>` 上，而 swap 会把根上的属性清光（`swapRootAttributes`）——
+     * 不要紧：show() 每次 `astro:after-swap` 都跑，会重新写上。
+     */
+    const room = () => {
+      const he = document.documentElement;
+      if (root.hidden) {
+        delete he.dataset.jk;
+        he.style.removeProperty('--jk-room');
+        return;
+      }
+      he.dataset.jk = '1';
+      he.style.setProperty('--jk-room', root.getBoundingClientRect().height + 'px');
+    };
+
+    /**
+     * 露不露脸。两个条件：**播过一次**（没听过歌的人不该被塞一个空播放器），
+     * 且**当前页没说「不要站内构件」**。后者有两种页面：
+     *   - `[data-deck]` —— /music，那儿有全尺寸的唱盘台，两个一起出现是重复；
+     *   - `[data-no-chrome]` —— 起始页（门）。R17 逐字要求那一页「不出现任何别的词」，
+     *     而曲名、歌词、时间都是词；它还是唯一一页不引 global.css 的，
+     *     真露出来连 token 都没有。音乐照放不受影响 —— `<audio>` 已经挪到 `<html>` 底下，
+     *     不靠这个视图活着。
+     *
+     * 判据用 DOM 里有没有这两面旗，不用 pathname：既不必操心 trailingSlash，
+     * 又能在 swap 一落地时就判出来 —— 若改成等舞台挂上来再让位，
+     * 导航到 /music 的头一两帧里悬浮窗会闪一下。
+     */
+    const show = () => {
+      root.hidden =
+        !everPlayed() || !!document.querySelector('[data-deck],[data-no-chrome]');
+      room();
+    };
+    const view: View = {
+      sync() {
+        const t = now();
+        const on = playing();
+        title.textContent = t.title;
+        sub.textContent = t.subtitle;
+        // is-playing 挂在根上，player.css 里 `.is-playing .jk-key__i--pause` 那对
+        // 图标规则与转盘的 animation-play-state 就都吃到了
+        root.classList.toggle('is-playing', on);
+        play.setAttribute('aria-pressed', String(on));
+        play.setAttribute('aria-label', on ? '暂停' : '播放');
+        const d = dur();
+        seek.max = String(d || 0);
+        durEl.textContent = formatTime(d);
+        modeKey.dataset.m = String(getMode());
+        modeKey.setAttribute('aria-label', '播放方式：' + MODES[getMode()]);
+        show();
+      },
+
+      tick() {
+        const t = time();
+        cur.textContent = formatTime(t);
+        if (!drag) seek.value = String(t);
+      },
+
+      /** 只画当前这一行。换行才动 DOM，其余每帧只改 color 与 background-image */
+      lyric(k, p, changed) {
+        if (changed) {
+          const text = k >= 0 ? lineAt(k) : '';
+          if (text) run.mount(line, text);
+          else {
+            run.unmount();
+            // 前奏与间奏给个音符占位；这首压根没歌词就留空（高度由 CSS 撑住，不跳）
+            line.textContent = now().lines.length ? '♪' : '';
+          }
+        }
+        // 没挂在任何行上时 paint 是空操作，所以不必再判一次
+        run.paint(p);
+      },
+    };
+    /* 控制键。节点是被 persist 保住的同一批，所以只绑这一次 */
+    pick('[data-prev]').addEventListener('click', prev);
+    pick('[data-next]').addEventListener('click', next);
+    play.addEventListener('click', toggle);
+    modeKey.addEventListener('click', cycleMode);
+
+    seek.addEventListener('pointerdown', () => {
+      drag = true;
+    });
+    seek.addEventListener('input', () => seekTo(Number(seek.value)));
+    seek.addEventListener('change', () => {
+      drag = false;
+      seekTo(Number(seek.value));
+    });
+
+    /** 收起／展开。收起后只剩转盘、曲名与播放键 —— 状态栏仍在说「正在放什么」 */
+    const setFold = (on: boolean) => {
+      root.classList.toggle('is-fold', on);
+      fold.setAttribute('aria-expanded', String(!on));
+      fold.setAttribute('aria-label', on ? '展开播放器' : '收起播放器');
+      // 收起/展开会改高度，页脚那段余量得跟着重量一次
+      room();
+    };
+
+    fold.addEventListener('click', () => {
+      const on = !root.classList.contains('is-fold');
+      setFold(on);
+      try {
+        localStorage.setItem('music:mini', on ? '1' : '0');
+      } catch {
+        /* 隐私模式下不可写：记不住折叠状态而已 */
+      }
+    });
+
+    try {
+      setFold(localStorage.getItem('music:mini') === '1');
+    } catch {
+      /* 同上 */
+    }
+
+    attach(view);
+
+    /* swap 之后「这一页有没有唱盘台」可能变了，要在 paint 之前重判一次。
+       这个监听留在模块顶层，全站只加一次（放进 astro:page-load 会每导航累积一层） */
+    document.addEventListener('astro:after-swap', show);
+  }
+</script>

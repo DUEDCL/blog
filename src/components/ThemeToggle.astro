@@ -76,16 +76,28 @@
 </style>
 
 <script>
-  const btn = document.getElementById('theme-toggle');
-  btn?.addEventListener('click', () => {
-    const root = document.documentElement;
-    // 以 light 为判据：属性缺失时视作深色，点击后进浅色，一定有可见变化
-    const next = root.dataset.theme === 'light' ? 'dark' : 'light';
-    root.dataset.theme = next;
-    try {
-      localStorage.setItem('theme', next);
-    } catch {
-      /* 隐私模式下 localStorage 不可写，忽略即可 */
-    }
-  });
+  /* 换主题这件事本身与 SPA 无关，绑事件却得跟着导航重来一遍：
+     这段是 bundled module，**全站只执行一次**，而顶栏（连这枚键）每次
+     swap 都被换成新节点 —— 顶层绑一次的话，从第二页起点它就没反应了。
+
+     监听加在 document 上，只加这一次；里面每次取到的是新按钮，
+     所以不会在同一个节点上累积。**不额外调一次 `bind()`** ——
+     `astro:page-load` 首屏那一次也会触发（Astro 把它挂在 window 的 `load` 上），
+     再手动调就成了绑两遍，点一下切过去又切回来，等于键坏了。 */
+  const bind = () => {
+    const btn = document.getElementById('theme-toggle');
+    btn?.addEventListener('click', () => {
+      const root = document.documentElement;
+      // 以 light 为判据：属性缺失时视作深色，点击后进浅色，一定有可见变化
+      const next = root.dataset.theme === 'light' ? 'dark' : 'light';
+      root.dataset.theme = next;
+      try {
+        localStorage.setItem('theme', next);
+      } catch {
+        /* 隐私模式下 localStorage 不可写，忽略即可 */
+      }
+    });
+  };
+
+  document.addEventListener('astro:page-load', bind);
 </script>

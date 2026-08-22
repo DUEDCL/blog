@@ -204,36 +204,45 @@ function isCurrent(href: string) {
 <script>
   /* 滚动后玻璃变实、玻璃条上移。rAF 节流，避免 scroll 里做布局读写。
      两个阈值形成回差：超过 ON 才加类，低于 OFF 才去类，中间地带保持原状。
-     单阈值会自激 —— 类名切换本身会微调滚动位置，在阈值上来回穿越（踩过）。 */
-  const header = document.getElementById('site-header');
-  if (header) {
-    const ON = 12;
-    const OFF = 4;
-    let scrolled = false;
-    let ticking = false;
+     单阈值会自激 —— 类名切换本身会微调滚动位置，在阈值上来回穿越（踩过）。
 
-    const sync = () => {
-      const y = window.scrollY;
-      if (!scrolled && y > ON) {
-        scrolled = true;
-        header.classList.add('is-scrolled');
-      } else if (scrolled && y < OFF) {
-        scrolled = false;
-        header.classList.remove('is-scrolled');
+     R14 阶段⑤ 起全站走 SPA 导航，这段拆成两半：
+     - **scroll 监听留在模块顶层**，全站只加一次。放进 `astro:page-load` 会
+       每导航累积一层，十次导航后一帧要跑十遍 sync。
+     - 顶栏本身每次 swap 都是新节点，所以 `header` 引用要在
+       `astro:page-load` 里重取；回差状态也按新页的滚动位置重新定档，
+       否则可能带着上一页的 `scrolled = true` 落在中间地带，
+       新顶栏没有类名却以为已经加过，直到再次越过 ON 才修正。 */
+  const ON = 12;
+  const OFF = 4;
+  let header: HTMLElement | null = null;
+  let scrolled = false;
+  let ticking = false;
+
+  const sync = () => {
+    ticking = false;
+    if (!header) return;
+    const y = window.scrollY;
+    if (!scrolled && y > ON) scrolled = true;
+    else if (scrolled && y < OFF) scrolled = false;
+    // force 与现状相同时 toggle 不改 DOM，所以每帧调也不产生写入
+    header.classList.toggle('is-scrolled', scrolled);
+  };
+
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(sync);
       }
-      ticking = false;
-    };
+    },
+    { passive: true }
+  );
 
-    window.addEventListener(
-      'scroll',
-      () => {
-        if (!ticking) {
-          ticking = true;
-          requestAnimationFrame(sync);
-        }
-      },
-      { passive: true }
-    );
+  document.addEventListener('astro:page-load', () => {
+    header = document.getElementById('site-header');
+    scrolled = window.scrollY > ON;
     sync();
-  }
+  });
 </script>

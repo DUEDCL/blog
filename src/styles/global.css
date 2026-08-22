@@ -508,21 +508,22 @@ hr {
 
 /* ==========================================================================
    跨页过渡（View Transitions）
-   走原生 CSS 跨文档过渡，不用 Astro 的 <ClientRouter />：后者要客户端 JS 并把站变成
-   SPA，顶栏消抖、主题切换、归档搜索三段脚本都得重接生命周期 —— 顶栏抖动是刚修好的，
-   不值得为动效再赌一次。原生方案不给页面加任何 JS，也不改现有脚本的执行时机。
-   支持度：Chrome/Edge 126+、Safari 18.2+（含 iOS），全球约 86%；Firefox 默认关闭，
-   那里就是普通跳转、没有动画，不会坏。
+   R14 阶段⑤ 起改由 Astro 的 <ClientRouter /> 驱动 —— 它不是为了动效换的，而是
+   「全站不间断播放」只有这一条路：SPA 导航才能让 `transition:persist` 把那棵带
+   `<audio>` 的子树原样搬进新文档，音频一帧不断（换页存进度再续播会有可听见的裂口）。
+   代价是七处「顶层 querySelector 再绑事件」的脚本都要重接生命周期，已逐个改完。
+
+   这一段的 CSS 一个字都不用为它改写：ClientRouter 内部调的就是
+   `document.startViewTransition`，`view-transition-name`、
+   `::view-transition-old/new(root)`、`html:active-view-transition` 这些
+   在它下面全部照旧有效。只删掉了原来那条 `@view-transition { navigation: auto }`——
+   原生跨文档过渡与 ClientRouter 不能并存（后者自己接管了过渡的发起）。
    ========================================================================== */
 
 /* 包在 no-preference 里是必需的兜底，不是保险起见 —— 上面那条 reduced-motion 规则用的
    `*, *::before, *::after` 匹配不到 ::view-transition-* 伪元素（它们在独立的伪元素树里），
    够不着这里。减少动态偏好下直接不开过渡，比事后压时长干净。 */
 @media (prefers-reduced-motion: no-preference) {
-  @view-transition {
-    navigation: auto;
-  }
-
   /* 顶栏与页脚在任意两页之间几乎相同。给各自独立的名字，把它们从 root 快照里分离出来、
      全程保持静止；否则整页交叉淡化会连它们一起淡，表现为顶栏无意义地闪一下。
      滚动态切页这一路实测过：旧页顶栏带 .is-scrolled（.bar 上移 8px、玻璃变实），新页
@@ -542,7 +543,7 @@ hr {
   /* 当前栏目那枚玻璃药丸：两页各有一个同名元素，浏览器自动在两处位置与尺寸之间插值 ——
      点「作品」时药丸从「随笔」那里滑过去，底下的朱红小横线跟着走。不需要写 keyframes。
      每页只有一个 .is-current，名字天然唯一（重名会让**整个**过渡被跳过，不是局部失效）。
-     首页不在顶栏渲染（NAV 过滤掉 '/'），从首页出发时旧页没有这个名字，于是降级为单侧
+     首页不在顶栏渲染（NAV 过滤掉 '/home'），从首页出发时旧页没有这个名字，于是降级为单侧
      淡入 —— 这是规范行为，不是坏掉。 */
   .nav__link.is-current {
     view-transition-name: nav-pill;

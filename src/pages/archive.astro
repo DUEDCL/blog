@@ -66,11 +66,16 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
 
 <script>
   /* 标题搜索：大小写无关的子串匹配，隐藏不匹配的 li；某一年全空了就连年份一起隐藏。
-     条目数在几十到几百这个量级，每次输入全量遍历完全够快，不做防抖也不做索引。 */
-  const input = document.getElementById('find') as HTMLInputElement | null;
-  const count = document.getElementById('find-count');
+     条目数在几十到几百这个量级，每次输入全量遍历完全够快，不做防抖也不做索引。
 
-  if (input && count) {
+     整段挂在 `astro:page-load` 上：这是 bundled module，模块体一辈子只执行一次，
+     而 SPA 导航每次都换来一套新的 DOM —— 顶层绑一次的话，离开归档再回来搜索框就死了。
+     每次重新收集 years 也是必须的：上一份引用指着已经被丢弃的节点。 */
+  document.addEventListener('astro:page-load', () => {
+    const input = document.getElementById('find') as HTMLInputElement | null;
+    const count = document.getElementById('find-count');
+    if (!input || !count) return;
+
     const years = [...document.querySelectorAll<HTMLElement>('.year')].map((year) => ({
       el: year,
       items: [...year.querySelectorAll<HTMLElement>('.item')].map((item) => ({
@@ -105,7 +110,7 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     input.addEventListener('input', apply);
     /* 浏览器可能恢复上次的输入值（后退、刷新），先按当前值对齐一次 */
     apply();
-  }
+  });
 </script>
 
 <style>

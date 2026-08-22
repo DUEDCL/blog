@@ -741,6 +741,189 @@
   text-overflow: ellipsis;
 }
 
+/* --- 悬浮窗 ------------------------------------------------------------ */
+
+/* 全站那条实时状态栏。`position: fixed` 且**不占布局流** —— 页面里没有一个元素
+   因为它而挪位置。根节点用 hidden 控制存在感（见 MiniPlayer.astro 的注释：
+   persist 要求节点始终在，而 hidden = display:none 不会让 <audio> 停下来）。 */
+.jk-mini {
+  position: fixed;
+  right: var(--sp-6);
+  bottom: var(--sp-6);
+  z-index: 60;
+  width: min(20rem, calc(100vw - var(--sp-8)));
+}
+
+.jk-mini[hidden] {
+  display: none;
+}
+
+/* 「不占布局流」有一个代价：滚到页面最底时它正好压在页脚那一行链接上
+   （375×812 实测五个链接全被盖住）。所以补一段等高的**滚动余量** ——
+   加在 body 的 padding-bottom 上，不挪任何元素的位置，只把可滚区域往下拉长一截，
+   滚到底时页脚就从它下面出来了。
+   高度不写死：`--jk-room` 由 MiniPlayer 的 room() 现量现写（展开还是收起、
+   窄屏折行都算在内），藏起来时连 `data-jk` 一起撤掉，余量随之消失，
+   所以页面高度只在「开始/停止显示状态栏」这一刻变，不会来回跳。 */
+[data-jk] body {
+  padding-bottom: calc(var(--jk-room, 0px) + var(--sp-6) * 2);
+}
+
+.jk-mini__card {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-radius: var(--r-lg);
+  background: var(--glass-bg-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 44px -14px rgba(0, 0, 0, 0.66);
+}
+
+.jk-mini__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.jk-mini__fold {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+/* 小转盘。沟槽那套渐变与唱盘台同源，只是尺寸小一号；转的动画直接复用 jk-spin */
+.jk-mini__disc {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-image: repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(251, 251, 251, 0.06) 0 1px,
+      rgba(0, 0, 0, 0) 1px 3px
+    ),
+    radial-gradient(circle at 50% 50%, var(--seal) 0 26%, #0a0a08 27% 100%);
+  box-shadow: inset 0 0 0 1px rgba(251, 251, 251, 0.12);
+  animation: jk-spin 4s linear infinite;
+  animation-play-state: paused;
+}
+
+.jk-mini.is-playing .jk-mini__disc {
+  animation-play-state: running;
+}
+
+.jk-mini__now {
+  display: grid;
+  margin: 0;
+  min-width: 0;
+}
+
+.jk-mini__t,
+.jk-mini__s {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jk-mini__t {
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.jk-mini__s {
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+/* 小一号的圆键。.jk-key 那套配色、悬停、图标切换全部继承，只改尺寸 */
+.jk-key--sm {
+  width: 2rem;
+  height: 2rem;
+}
+
+.jk-key--sm svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.jk-key--sm.jk-key--play {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.jk-key--sm.jk-key--play svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* 单行歌词。继承 .jk-line 是为了共用逐字渐变，这里把它那身「可点的一行」摘掉：
+   悬浮窗里点它不跳播（跳播要有整份词表当参照，那是舞台的事）。
+   min-height 撑住一行的高度 —— 前奏、间奏、没歌词时这里是空的，
+   不撑住的话卡片会一高一低地跳。 */
+.jk-mini__line {
+  margin: 0;
+  padding: 0;
+  min-height: 1.5em;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  cursor: default;
+  /* 折行会让卡片变高，进而把整个悬浮窗顶起来。截断成一行 */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jk-mini__seek {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.jk-mini__time {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.jk-mini__keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+}
+
+/* 收起态：一枚小药丸，只剩转盘、曲名与播放键。
+   「一直展示正在播放的歌曲」是这条状态栏的本分，所以曲名在收起态也留着 */
+.jk-mini.is-fold .jk-mini__s,
+.jk-mini.is-fold .jk-mini__line,
+.jk-mini.is-fold .jk-mini__seek,
+.jk-mini.is-fold .jk-mini__keys .jk-key:not(.jk-key--play) {
+  display: none;
+}
+
+.jk-mini.is-fold .jk-mini__card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-radius: var(--r-full);
+  padding: var(--sp-2) var(--sp-3);
+  gap: var(--sp-2);
+}
+
+.jk-mini.is-fold .jk-mini__head {
+  grid-column: 1;
+}
+
+.jk-mini.is-fold .jk-mini__keys {
+  grid-column: 2;
+  grid-row: 1;
+}
+
 /* --- 窄屏 ------------------------------------------------------------- */
 @media (max-width: 52rem) {
   .jk-cols {
@@ -782,6 +965,17 @@
     align-items: center;
     text-align: center;
   }
+
+  /* 悬浮窗贴底通栏。`safe-area-inset-bottom` 是给刘海机的home 指示条留位 ——
+     不留的话在 iPhone 上播放键会正好压在那道横条底下点不着。
+     仍然不占布局流：页脚链接会被它盖住一小截，但页面可以继续往下滚，
+     滚到底时收起成药丸就能露出来（判据 30 要看的就是这个） */
+  .jk-mini {
+    right: var(--sp-4);
+    left: var(--sp-4);
+    bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+    width: auto;
+  }
 }
 
 /* 320px 那一档（iPhone SE 一代那种）：四个圆键加三个 sp-4 间隙差十几个像素装不下。
@@ -800,7 +994,9 @@
 /* 转盘与唱臂是装饰性动画，减少动态偏好下一律停掉 */
 @media (prefers-reduced-motion: reduce) {
   .jk-vinyl__disc,
-  .jk-deck.is-playing .jk-vinyl__disc {
+  .jk-deck.is-playing .jk-vinyl__disc,
+  .jk-mini__disc,
+  .jk-mini.is-playing .jk-mini__disc {
     animation: none;
   }
 

@@ -128,21 +128,29 @@ const cards = [
 
 {/* 复制号码。navigator.clipboard 在非 HTTPS 下不可用，失败就把号码选中让用户自己复制 */}
 <script>
-  document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const value = btn.dataset.copy ?? '';
-      const done = (text: string) => {
-        const original = btn.textContent;
-        btn.textContent = text;
-        setTimeout(() => (btn.textContent = original), 1600);
-      };
+  /* 绑事件要挂在 `astro:page-load` 上：这段是 bundled module，
+     **同一个 URL 的模块体一辈子只执行一次** —— 离开 /about 再回来，
+     新文档里的按钮就没人绑了。而这个事件每次导航都触发（首屏那次也触发，
+     所以不必额外自调一遍，自调就是绑两遍）。
 
-      try {
-        await navigator.clipboard.writeText(value);
-        done('已复制');
-      } catch {
-        done(value);
-      }
+     只往按钮上绑，不往 window/document 上绑，所以每导航一次不会累积。 */
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const value = btn.dataset.copy ?? '';
+        const done = (text: string) => {
+          const original = btn.textContent;
+          btn.textContent = text;
+          setTimeout(() => (btn.textContent = original), 1600);
+        };
+
+        try {
+          await navigator.clipboard.writeText(value);
+          done('已复制');
+        } catch {
+          done(value);
+        }
+      });
     });
   });
 </script>

@@ -40,6 +40,23 @@
  * global.css 会给 body 铺光晕底、设中文字体栈、注入顶栏页脚，本页需要的是纯黑舞台。
  * 所以本页自成一份完整文档，样式全部走 `is:global`（本页专属 CSS 产物，不外溢）。
  *
+ * 但「不走 BaseLayout」也意味着 BaseLayout 里三件全站设施得在这儿手工补上，
+ * R14 阶段⑥ 补的就是这三件（每一件都不是可选的）：
+ *   1. `<ClientRouter />` —— **它是按页注入的**。少了它，从这道门点进正站是整页硬导航，
+ *      正在放的音乐会被浏览器直接掐断（「全站不间断播放」整套机制的入口就在这儿）。
+ *      有了它，下面 enter() 才能用 `navigate()` 走 SPA 那条路。
+ *   2. `<MiniPlayer />` —— 那条状态栏，同时也是被 `transition:persist="jk"` 保住的节点。
+ *      persist 靠**两边都有同名节点**才配对（`swap-functions.js` 里找不到就 `continue`，
+ *      老节点连着旧 body 一起丢），所以这一页哪怕不显示它也必须渲染它 ——
+ *      少了它，站内 → 门 那一步会把状态栏连事件一起丢掉，再回站内就只剩一个死壳。
+ *      它在这一页上是藏着的：`.stage` 带 `data-no-chrome`，MiniPlayer 的 show() 认这个标志。
+ *      理由是 R17 定下的「这一页不出现任何别的词」—— 曲名、歌词、时间都是词。
+ *      音乐照放不误（那个 `<audio>` 早被挪到 `<html>` 底下了，跟状态栏露不露脸无关）。
+ *   3. `<ThemeBoot />` —— data-theme / data-js 两个属性。换页时 Astro 用新文档的
+ *      `<html>` 属性覆盖当前的，这两个运行期属性每次 swap 都会丢；由它的
+ *      `astro:after-swap` 补回。这一页现在是最常见的首屏，所以这一份不能省。
+ *      属性本身不影响这道门的观感（本页 CSS 里没有任何 [data-theme] 规则）。
+ *
  * 单位系统是规格的核心，改任何数值前先读懂它：
  *   参考画布 1487 × 1058。--u = 视口高 / 1058，即「1 设计像素锁定在高度上」，
  *   所以竖向节奏永远刚好铺满一屏、不出现滚动。
@@ -61,6 +78,9 @@
  * 色阶的出处仍记在 global.css，不会因为这一页变空而失传。
  */
 import { Image } from 'astro:assets';
+import { ClientRouter } from 'astro:transitions';
+import MiniPlayer from '../components/MiniPlayer.astro';
+import ThemeBoot from '../components/ThemeBoot.astro';
 import avatar from '../assets/avatar.jpg';
 import { SITE_TITLE } from '../consts';
 
@@ -95,11 +115,18 @@ const ENTER = '/home';
     {/* 这一页不走 BaseHead，canonical 只能自己写死。阶段⑥ 之后是根路径，
         不再是 /start（那个地址现在是一张跳到这儿的 meta-refresh 页）。 */}
     <link rel="canonical" href="https://duchenlin.top/" />
+
+    {/* 全站 SPA 导航。按页注入 —— 这一页没有它，点进正站就是整页刷新，音乐会断 */}
+    <ClientRouter />
+    {/* data-theme / data-js。与 BaseHead 用的是同一个组件，脚本逐字相同，全站只跑一次 */}
+    <ThemeBoot />
   </head>
 
   <body>
-    {/* 舞台：整页唯一的定位参照系，同时是那块「点哪儿都能进」的热区 */}
-    <div class="stage" id="stage" data-enter={ENTER}>
+    {/* 舞台：整页唯一的定位参照系，同时是那块「点哪儿都能进」的热区。
+        data-no-chrome 是给状态栏看的一面旗：这一页不露任何站内构件（见顶部注释第 2 条）。
+        用 DOM 标志而不是 pathname —— swap 一落地就能判出来，不必操心 trailingSlash */}
+    <div class="stage" id="stage" data-enter={ENTER} data-no-chrome>
       {/* ① 背景层：视频 + 两道渐变遮罩（遮罩在 .plate::after 上，见样式） */}
       <div class="plate">
         <video
@@ -168,6 +195,10 @@ const ENTER = '/home';
       </div>
     </div>
 
+    {/* 全站那条状态栏。这一页把它藏起来（`.stage` 上的 `data-no-chrome` 就是那面旗），
+        但**必须渲染** —— persist 靠两边同名配对，见顶部注释第 2 条。 */}
+    <MiniPlayer />
+
     <script>
       /**
        * 整页唯一的脚本：点一下或滑一下就进站。视频靠 autoplay 属性自己播，不需要脚本。
@@ -175,38 +206,74 @@ const ENTER = '/home';
        * 走一段过场再导航（`.is-leaving`：镜头往门里推、白光从门口漫上来），不是原地跳走 ——
        * 这一页的隐喻就是「走进门」，那段动画是这句话的动作部分。
        * 减少动态偏好下直接跳，不让人干等那 620ms。
+       *
+       * R14 阶段⑥ 之后它要在 SPA 里活下来，两处因此与从前不同：
+       *
+       * ① 进站走 `navigate()`，不再是 `location.href` —— 后者是硬导航，整个文档重建，
+       *    被 persist 保住的状态栏和那个正在响的 `<audio>` 一起没了，音乐断在门口。
+       *
+       * ② 它是 bundled module，**全站只执行一次**：离开门再回来时 `#stage` 已经是新节点，
+       *    顶层那句 `getElementById` 抓到的引用早就作废了。所以引用改成可重接（`wire()`），
+       *    而 window 上那几个手势监听仍只在顶层绑一次 —— 放进 `astro:page-load` 会每导航
+       *    累积一层。它们靠 `stage` 是不是 null 自锁：**这道守卫不能省**，否则离开门之后
+       *    在正站随便滚一下滚轮，就会被送去 /home。
        */
-      const stage = document.getElementById('stage')!;
-      // 兜底跟着 ENTER 走。阶段⑥ 之后不能再写 '/' —— 那就是这一页自己，
-      // 属性万一丢了，点一下会变成「原地刷新」，看起来像门坏了
-      const to = stage.dataset.enter || '/home';
+      import { navigate } from 'astro:transitions/client';
+
+      /** 当前页的舞台。不在门上时是 null，下面那几个手势监听随之空转 */
+      let stage: HTMLElement | null = null;
+      /** 已经绑过 click 的那个节点，防止同一个 stage 被绑第二次 */
+      let bound: HTMLElement | null = null;
+      /* 兜底跟着 ENTER 走。阶段⑥ 之后不能再写 '/' —— 那就是这一页自己，
+         属性万一丢了，点一下会变成「原地刷新」，看起来像门坏了 */
+      let to = '/home';
 
       let leaving = false;
+      let wheeled = 0;
+      let y0: number | null = null;
 
       function enter() {
-        if (leaving) return;
+        if (!stage || leaving) return;
         leaving = true;
 
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          location.href = to;
+          navigate(to);
           return;
         }
 
         stage.classList.add('is-leaving');
         // 620ms 与样式里 .is-leaving 那组 transition 同长，改一个要改另一个
-        setTimeout(() => (location.href = to), 620);
+        setTimeout(() => navigate(to), 620);
       }
 
-      // 整页热区。<button> 的点击也冒泡到这里，不必单独绑
-      stage.addEventListener('click', enter);
+      /** 把引用接到当前这一页的舞台上。门不在也要跑 —— 那一次负责把 stage 清成 null */
+      function wire() {
+        const el = document.getElementById('stage');
+        stage = el;
+        if (!el || bound === el) return;
+        bound = el;
+        to = el.dataset.enter || '/home';
+        // 新一份门是干净的：过场没走过、手势也没攒过
+        leaving = false;
+        wheeled = 0;
+        y0 = null;
+        // 整页热区。<button> 的点击也冒泡到这里，不必单独绑
+        el.addEventListener('click', enter);
+      }
+
+      /* 顶层先接一次，不等 `astro:page-load` —— 首屏那一次它派发在 window 'load' 之后，
+         而这一页压着一段视频，load 会被推到视频可播之后；等它才绑会漏掉早到的那一下点击。
+         导航过来的那些次则由下面这个监听负责（脚本本身只跑一次）。 */
+      wire();
+      document.addEventListener('astro:page-load', wire);
 
       /* 滚轮当「滑动」：这一页没有可滚的内容，滑的意思只能是「走」，所以不看方向。
          攒到 60 才触发 —— 鼠标一格滚轮就有 100，一次就走；触控板的轻微擦碰
          只有个位数，得连着好几下才算，免得手放上去就被送走 */
-      let wheeled = 0;
       window.addEventListener(
         'wheel',
         (e) => {
+          if (!stage) return;
           wheeled += Math.abs(e.deltaY) + Math.abs(e.deltaX);
           if (wheeled > 60) enter();
         },
@@ -214,10 +281,10 @@ const ENTER = '/home';
       );
 
       // 触摸：记起点，移动超过 24px 才算滑，免得把点击时手指的轻微位移当成滑
-      let y0: number | null = null;
       window.addEventListener(
         'touchstart',
         (e) => {
+          if (!stage) return;
           y0 = e.touches[0].clientY;
         },
         { passive: true }
@@ -225,6 +292,7 @@ const ENTER = '/home';
       window.addEventListener(
         'touchmove',
         (e) => {
+          if (!stage) return;
           if (y0 !== null && Math.abs(e.touches[0].clientY - y0) > 24) enter();
         },
         { passive: true }
@@ -232,9 +300,10 @@ const ENTER = '/home';
 
       /* 从站内按「返回」回来时，页面可能是从 bfcache 里原样恢复的 ——
          那会连 .is-leaving 一起恢复：白光糊满、pointer-events 关掉，看起来就是死页。
-         恢复时把状态清干净 */
+         恢复时把状态清干净。SPA 导航不会走到这儿（那条路由由 wire() 兜），
+         留着是为了硬导航离开门之后再退回来的那一种 */
       window.addEventListener('pageshow', (e) => {
-        if (!e.persisted) return;
+        if (!e.persisted || !stage) return;
         leaving = false;
         wheeled = 0;
         stage.classList.remove('is-leaving');

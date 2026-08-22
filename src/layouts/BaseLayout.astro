@@ -9,9 +9,11 @@ import '../styles/global.css';
    见 player.css 顶部注释。 */
 import '../styles/player.css';
 
+import { ClientRouter } from 'astro:transitions';
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import MiniPlayer from '../components/MiniPlayer.astro';
 
 interface Props {
   title?: string;
@@ -38,6 +40,10 @@ const wrapClass =
 <html lang="zh-CN">
   <head>
     <BaseHead {...head} />
+    {/* 全站 SPA 导航。它在这里的唯一理由是让音乐跨页面不断 ——
+        ClientRouter **是按页注入的**，哪一页没有它，从那一页点出去就是整页刷新，
+        音频跟着被杀掉。起始页不走这个布局，所以它自己那份 head 里也手工加了一个。 */}
+    <ClientRouter />
   </head>
   <body>
     <a href="#main" class="skip-link">跳到主内容</a>
@@ -46,6 +52,9 @@ const wrapClass =
       <slot />
     </main>
     <Footer note={footerNote} />
+    {/* 悬浮窗 + 全站唯一那个 <audio>。persist 的名字写在组件自己的根节点上
+        （`transition:persist="jk"`）—— 同名才配对，跨不同布局也能接上 */}
+    <MiniPlayer />
   </body>
 </html>
 

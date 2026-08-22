@@ -160,21 +160,30 @@ const lbJson = JSON.stringify(
     caption: string;
   }
 
-  const dlg = document.querySelector<HTMLDialogElement>('[data-lb]');
-  const raw = document.querySelector('[data-lb-data]')?.textContent;
-  const links = [...document.querySelectorAll<HTMLAnchorElement>('[data-shot]')];
+  /* 整段挂在 `astro:page-load` 上：这是 bundled module，模块体一辈子只执行一次，
+     而 SPA 导航每次都换来新的 <dialog> 与新的一批 <a> —— 顶层绑一次的话，
+     从第二个相册起点图就不再放大了。事件只往页面自己的节点上绑，
+     不往 window/document 上绑，所以每导航一次不会累积。 */
+  document.addEventListener('astro:page-load', () => {
+    const dlg = document.querySelector<HTMLDialogElement>('[data-lb]');
+    const raw = document.querySelector('[data-lb-data]')?.textContent;
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('[data-shot]')];
 
-  // showModal 不在就什么都不接：点图变成正常跳转到原图，仍然可用
-  if (dlg && raw && links.length && typeof dlg.showModal === 'function') {
+    // showModal 不在就什么都不接：点图变成正常跳转到原图，仍然可用
+    if (!dlg || !raw || !links.length || typeof dlg.showModal !== 'function') return;
+
     const shots: Shot[] = JSON.parse(raw);
     const img = dlg.querySelector<HTMLImageElement>('[data-lb-img]')!;
     const cap = dlg.querySelector<HTMLElement>('[data-lb-cap]')!;
     const num = dlg.querySelector<HTMLElement>('[data-lb-n]')!;
     let i = 0;
 
-    // 给 :root 打标志，让「放大」角标露出来。名字不能也叫 data-lb ——
-    // 那样 querySelector('[data-lb]') 会先撞上 <html>（文档序在前），
-    // 后面任何一处再按这个选择器取灯箱都会静默拿错元素
+    /* 给 :root 打标志，让「放大」角标露出来。名字不能也叫 data-lb ——
+       那样 querySelector('[data-lb]') 会先撞上 <html>（文档序在前），
+       后面任何一处再按这个选择器取灯箱都会静默拿错元素。
+
+       每次导航都要重打：swap 用新文档的 <html> 属性覆盖当前的，这个标志会被抹掉。
+       抹掉正合意 —— 换到非图库页面时角标不该留着。 */
     document.documentElement.dataset.lbOn = '1';
 
     function show(n: number) {
@@ -225,7 +234,7 @@ const lbJson = JSON.stringify(
 
     // 关闭后把焦点还给刚才那张图，键盘用户不会被丢到页首
     dlg.addEventListener('close', () => links[i]?.focus());
-  }
+  });
 </script>
 
 <style>
