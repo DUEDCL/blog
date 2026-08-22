@@ -11,11 +11,13 @@ const albums = await getPublished('photos');
 <BaseLayout
   title={SECTIONS.photos.title}
   description={SECTIONS.photos.description}
+  footerNote={SECTIONS.photos.note}
   width="wide"
 >
+  {/* R19 起页头卡只剩标题与计数，那段大字介绍搬去了页脚（见 consts.ts 的 SECTIONS 注释）。
+      description 留在上面那行，那是 <meta>，不显示在页面上。 */}
   <header class="head glass rise rise-1">
     <h1 class="head__title">{SECTIONS.photos.title}</h1>
-    <p class="head__desc">{SECTIONS.photos.description}</p>
     <p class="head__count meta">
       共 {albums.length} 组
     </p>
@@ -53,8 +55,9 @@ const albums = await getPublished('photos');
 </BaseLayout>
 
 <style>
+  /* 只剩标题与计数两行了，竖向 padding 收一档（同 ListLayout） */
   .head {
-    padding: var(--sp-12);
+    padding: var(--sp-8) var(--sp-12);
     border-radius: var(--r-xl);
   }
 
@@ -64,14 +67,8 @@ const albums = await getPublished('photos');
     letter-spacing: -0.02em;
   }
 
-  .head__desc {
-    margin-top: var(--sp-4);
-    color: var(--ink-soft);
-    font-size: var(--text-lg);
-  }
-
   .head__count {
-    margin-top: var(--sp-6);
+    margin-top: var(--sp-3);
   }
 
   /* 密排网格：每第 5 张跨两行，打破整齐的方格感。
@@ -130,12 +127,12 @@ const albums = await getPublished('photos');
     flex-direction: column;
     gap: var(--sp-1);
     padding: var(--sp-6) var(--sp-4) var(--sp-4);
-    background: linear-gradient(to top, rgba(6, 6, 10, 0.72), transparent);
+    background: linear-gradient(to top, rgba(5, 4, 3, 0.74), transparent);
     -webkit-backdrop-filter: blur(6px);
     backdrop-filter: blur(6px);
     -webkit-mask-image: linear-gradient(to top, #000 55%, transparent);
     mask-image: linear-gradient(to top, #000 55%, transparent);
-    color: #f2f4f8;
+    color: var(--sand-50);
     transform: translateY(0.5rem);
     opacity: 0.85;
     transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.3s ease;
@@ -158,7 +155,7 @@ const albums = await getPublished('photos');
     flex-wrap: wrap;
     gap: var(--sp-3);
     /* 覆盖 .meta 的颜色：图片上必须用亮色 */
-    color: rgba(242, 244, 248, 0.78);
+    color: rgba(215, 214, 213, 0.78);
   }
 
   .empty {

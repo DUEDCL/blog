@@ -59,8 +59,8 @@ const ogImage = image ? new URL(image, SITE_URL) : undefined;
 {ogImage && <meta name="twitter:image" content={ogImage} />}
 
 {/* 移动端浏览器地址栏跟随主题，深色下不会露出一条白边 */}
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0c" />
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef0f5" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#050505" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eae9e7" />
 
 {/* 主题在样式加载前同步确定，避免切换时的闪烁。本站以深色为默认 */}
 <script is:inline>

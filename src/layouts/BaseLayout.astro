@@ -4,6 +4,10 @@ import '@fontsource-variable/fraunces/standard.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import '../styles/global.css';
+/* 播放器样式必须是全局的：它有大半 DOM 是脚本造的，吃不到 scoped 的
+   `data-astro-cid-*`；跨页面不间断播放又要求它在任何页面都长一样。
+   见 player.css 顶部注释。 */
+import '../styles/player.css';
 
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
@@ -17,9 +21,14 @@ interface Props {
   publishedAt?: Date;
   /** 版心宽度：常规 / 文章窄栏 / 摄影宽幅 */
   width?: 'page' | 'prose' | 'wide';
+  /**
+   * 透传给页脚版权行右边那句话。R19 起五个页面都传：/music 与四个栏目页
+   * （栏目页那句原来是页头卡里的大字介绍，按需求搬到了这儿 —— 见 consts.ts 的 SECTIONS 注释）。
+   */
+  footerNote?: string;
 }
 
-const { width = 'page', ...head } = Astro.props;
+const { width = 'page', footerNote, ...head } = Astro.props;
 
 const wrapClass =
   width === 'prose' ? 'wrap wrap--prose' : width === 'wide' ? 'wrap wrap--wide' : 'wrap';
@@ -36,7 +45,7 @@ const wrapClass =
     <main id="main" class={wrapClass}>
       <slot />
     </main>
-    <Footer />
+    <Footer note={footerNote} />
   </body>
 </html>
 

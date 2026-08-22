@@ -7,19 +7,23 @@ import type { CollectionEntry } from 'astro:content';
 interface Props {
   title: string;
   description: string;
+  /** 页脚版权行右边那句小字（见 consts.ts 的 SECTIONS 注释） */
+  note: string;
   empty: string;
   /** 路由前缀，如 /posts */
   base: string;
   items: CollectionEntry<'posts' | 'notes'>[];
 }
 
-const { title, description, empty, base, items } = Astro.props;
+const { title, description, note, empty, base, items } = Astro.props;
 ---
 
-<BaseLayout title={title} description={description}>
+<BaseLayout title={title} description={description} footerNote={note}>
+  {/* R19 起页头卡只剩标题与计数：那段大字介绍（`.head__desc`）按需求整块删了，
+      同一句话的位置移到页脚 —— 栏目页一进来先看到条目，不再先读一段自我说明。
+      description 仍在 <BaseLayout> 上，那是 <meta>，不显示在页面上。 */}
   <header class="head glass rise rise-1">
     <h1 class="head__title">{title}</h1>
-    <p class="head__desc">{description}</p>
     <p class="head__count meta">共 {items.length} 篇</p>
   </header>
 
@@ -39,8 +43,10 @@ const { title, description, empty, base, items } = Astro.props;
 </BaseLayout>
 
 <style>
+  /* 只剩标题与计数两行了，竖向 padding 收一档 —— sp-12 是给三行内容留的高度，
+     内容少了不收就是一张空荡荡的大卡片 */
   .head {
-    padding: var(--sp-12);
+    padding: var(--sp-8) var(--sp-12);
     border-radius: var(--r-xl);
   }
 
@@ -50,15 +56,9 @@ const { title, description, empty, base, items } = Astro.props;
     letter-spacing: -0.02em;
   }
 
-  .head__desc {
-    margin-top: var(--sp-4);
-    max-width: 34rem;
-    color: var(--ink-soft);
-    font-size: var(--text-lg);
-  }
-
+  /* 原来隔着一段介绍，所以是 sp-6；现在紧跟标题，那么大的空隙会像漏了东西 */
   .head__count {
-    margin-top: var(--sp-6);
+    margin-top: var(--sp-3);
   }
 
   .entries {
