@@ -23,8 +23,12 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-# 本地预览配置（Claude Code 用，与仓库无关）
-.claude/
+# Claude Code 的本地配置（预览端口、本机权限），与仓库无关
+# 写成 `.claude/*` 而不是 `.claude/` —— 目录整个被排除时，里面的 `!` 反选是无效的
+.claude/*
+# 技能要进仓库：它记的是本项目的固定流程（上线的顺序、判据、坑），
+# 换台机器、换个会话都得照着走，留在本地等于丢了
+!.claude/skills/
 
 # wrangler 本地状态
 .wrangler/
