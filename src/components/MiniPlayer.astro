@@ -55,9 +55,11 @@ import '../styles/player.css';
         </span>
       </button>
 
-      {/* 曲名与「歌手 · 专辑」。收起态只留曲名 —— 状态栏的本分是「一直告诉你在放什么」 */}
+      {/* 曲名与「歌手 · 专辑」。收起态只留曲名 —— 状态栏的本分是「一直告诉你在放什么」。
+          曲名套了两层：外层是固定宽的窗口，内层承载文字 —— 长歌名装不下时由脚本量出溢出量
+          写进 `--jk-over`，内层就地做跑马灯（R27：不许它把上一首/下一首两个键挤掉） */}
       <p class="jk-mini__now">
-        <span class="jk-mini__t" data-title></span>
+        <span class="jk-mini__t"><span class="jk-mini__t-i" data-title></span></span>
         <span class="jk-mini__s" data-sub></span>
       </p>
 
@@ -67,6 +69,18 @@ import '../styles/player.css';
             d="M13 4h7v7h-2V7.41l-7.3 7.3-1.41-1.41L18.59 6H13z"></path></svg
         >
       </a>
+
+      {/* 全展开 ↔ 药丸的切换键（R28 加的：站主要「前两种状态添加一个按钮实现切换」）。
+          两个箭头叠在一个键里，露哪个由 `.is-fold` 决定 —— 与播放/暂停那对图标同一套做法。
+          封面点一下也切（那是 R25 就有的入口），这里只是把它变成一个看得见的按钮 */}
+      <button class="jk-key jk-key--sm jk-key--size" type="button" data-toggle>
+        <svg class="jk-key__i jk-key__i--up" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M12 8.6l6 6-1.4 1.4L12 11.4l-4.6 4.6L6 14.6z"></path></svg
+        >
+        <svg class="jk-key__i jk-key__i--down" viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M12 15.4l-6-6L7.4 8l4.6 4.6L16.6 8 18 9.4z"></path></svg
+        >
+      </button>
     </div>
     {/* 正在唱的那一行。刻意带上 `jk-line` —— player.css 里 `.jk-line.is-on .jk-w`
         那套逐字渐变、还有减少动态偏好下的退化规则，舞台与这里就此共用一份，
@@ -138,6 +152,23 @@ import '../styles/player.css';
         >
       </button>
     </div>
+
+    {/* 音量（R28 加的：站主要「全展开模式，包含歌词、歌名、音量控制、上下首播放」）。
+        与 /music 唱盘台是同一个 `data-vol` 契约、同一个 setVol —— 两处调的是同一份状态，
+        所以在哪儿调都立刻互相看得见。只在全展开态出现，药丸与吸附态都藏掉 */}
+    <div class="jk-mini__vol">
+      <span class="jk-mini__time">音量</span>
+      <input
+        class="jk-rng jk-rng--mini"
+        type="range"
+        data-vol
+        min="0"
+        max="1"
+        step="0.01"
+        value="0.8"
+        aria-label="音量"
+      />
+    </div>
   </div>
 </div>
 
@@ -152,6 +183,7 @@ import '../styles/player.css';
     dur,
     everPlayed,
     getMode,
+    getVol,
     init,
     lineAt,
     next,
@@ -159,6 +191,7 @@ import '../styles/player.css';
     playing,
     prev,
     seekTo,
+    setVol,
     time,
     toggle,
     type View,
@@ -172,15 +205,19 @@ import '../styles/player.css';
        而模板与这段脚本同属一个组件，不存在「页面没放它们」的情形 */
     const pick = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
     const title = pick('[data-title]');
+    const titleBox = pick('.jk-mini__t');
     const sub = pick('[data-sub]');
     const line = pick('[data-line]');
     const cur = pick('[data-cur]');
     const durEl = pick('[data-dur]');
     const seek = pick<HTMLInputElement>('[data-seek]');
+    const vol = pick<HTMLInputElement>('[data-vol]');
     const play = pick('[data-play]');
     const modeKey = pick('[data-mode]');
     const fold = pick('[data-fold]');
+    const sizeKey = pick('[data-toggle]');
     const cover = pick<HTMLImageElement>('[data-cover]');
+    const card = pick('.jk-mini__card');
 
     /* ⚠ 把 `<audio>` 搬出 `<body>`，挂到 `<html>` 上直接当子节点。
        这不是洁癖，是绕开 Astro 自己的一个 bug —— 少了这一行，「跨页不间断播放」
@@ -230,26 +267,78 @@ import '../styles/player.css';
      * 补法不是把它塞回布局流，而是量出它实际占多高（展开还是收起、窄屏折行都算在内），
      * 写成 `<html>` 上的 `--jk-room`，由 player.css 补给 `body` 的 padding-bottom：
      * 不挪任何元素的位置，只把可滚区域往下拉长一截，滚到底时页脚就从它下面出来了。
-     * 藏起来的时候连标志一起撤掉，不留下一段莫名的空白。
+     *
+     * **R25 起判据从「显不显示」改成「是不是真的压着底部」** —— 药丸现在能被长按拖到
+     * 任何一条边，拖到顶上之后再给页脚让位就是白留一段空白。同一条判据顺带管住了门：
+     * 门上药丸默认在顶部，于是 `--jk-room` 不写，player.css 里那条把进站键抬起来的
+     * `margin-bottom` 自动退回 0（那条 CSS 一个字都不用改）。
      *
      * 标志与变量都落在 `<html>` 上，而 swap 会把根上的属性清光（`swapRootAttributes`）——
-     * 不要紧：show() 每次 `astro:after-swap` 都跑，会重新写上。
-     *
-     * 门（起始页）是个例外：那儿 `html, body` 都是 `overflow: hidden`，没有可滚的内容
-     * 也没有页脚，`data-jk` 带来的那段 padding-bottom 毫无意义 —— 所以旗不写。
-     * 但 `--jk-room` 照写：窄屏下 player.css 靠它把进站键抬到状态栏上方（不然正好被压住）。
+     * 不要紧：reflow() 每次 `astro:after-swap` 都跑，会重新写上。
      */
     const room = () => {
       const he = document.documentElement;
-      if (root.hidden) {
+      const r = root.getBoundingClientRect();
+      // 藏起来时 rect 全是 0，bottom 不可能大于 innerHeight - 24，所以这一支同时管住了 hidden
+      const atBottom = !root.hidden && r.bottom > innerHeight - 24;
+      if (!atBottom) {
         delete he.dataset.jk;
         he.style.removeProperty('--jk-room');
         return;
       }
+      // 门那页 `html, body` 都是 overflow: hidden，没有可滚的内容也没有页脚，
+      // 那段 padding-bottom 毫无意义 —— 所以旗不写，但 --jk-room 照写（进站键要靠它让位）
       if (document.querySelector('[data-portal]')) delete he.dataset.jk;
       else he.dataset.jk = '1';
-      he.style.setProperty('--jk-room', root.getBoundingClientRect().height + 'px');
+      he.style.setProperty('--jk-room', r.height + 'px');
     };
+
+    /* ---------- 补起播（R25） --------------------------------------------- */
+
+    /**
+     * 「在有些浏览器打开不会及时播放默认歌曲」这句报上来的其实是两层原因：
+     *
+     * ① 有的浏览器（iOS Safari 一类）只承认 `click`/`touchend` 为有效手势，
+     *    而门上原先只在 `pointerdown` 里试 —— 门那边已经补上另两个（见 index.astro）。
+     * ② 门上那次 `play()` 被拒之后人已经进站，而门的 `kick()` 有 `stage` 守卫、
+     *    正站永不再试；状态栏又因为 `everPlayed()` 仍是 false 而藏着 ——
+     *    于是这一趟访问再也没有音乐，连手动点播放的入口都没有。**第二层是真正的洞。**
+     *
+     * 补法：门上尝试起播时写下 `sessionStorage['music:want']`（「这一趟是想听音乐的」），
+     * 这里认那面旗 —— 还没播成之前，落在状态栏与唱盘台之外的任何一次手势都补试一次。
+     * 播成了就清旗、摘监听。没有旗（比如直接打开某篇文章）就一次都不试，
+     * 「没听过歌的人不该被塞一个播放器」那条规矩对他们照旧成立。
+     *
+     * 监听是无条件挂的（不是 `if (wants())` 才挂）：这段脚本在门之前就跑完了，
+     * 而那面旗要等门上第一个手势才写下 —— 当时判一次的话永远判到 false。
+     */
+    const WANT = 'music:want';
+    const wants = () => {
+      try {
+        return sessionStorage.getItem(WANT) === '1';
+      } catch {
+        return false;
+      }
+    };
+    const GESTURES = ['pointerdown', 'click', 'touchend', 'keydown'] as const;
+    const retry = (e: Event) => {
+      // playing() 那道守卫不能省：唱盘台的播放键自己会 toggle，而 `play` 事件要等下一个
+      // 任务才派发，只看 everPlayed() 的话这里会把刚起播的歌又按停
+      if (!wants() || everPlayed() || playing()) return;
+      // 门上让位给门自己的 kick（那边每个手势都试），不然同一下手势会试两次
+      if (document.querySelector('[data-portal]')) return;
+      if (e.target instanceof Element && e.target.closest('[data-mini], [data-deck]')) return;
+      toggle();
+    };
+    GESTURES.forEach((n) => addEventListener(n, retry, { passive: true }));
+    au.addEventListener('play', () => {
+      try {
+        sessionStorage.removeItem(WANT);
+      } catch {
+        /* 隐私模式下不可写：下一次手势会再判一次 wants()，也只是白跑一次 */
+      }
+      GESTURES.forEach((n) => removeEventListener(n, retry));
+    });
 
     /**
      * 露不露脸。三种页面各不相同：
@@ -258,16 +347,26 @@ import '../styles/player.css';
      *     所以门上**不设「播过一次」的门槛**，一进来就露脸，第一眼是暂停态的《特别的人》。
      *     （这一条与 R17「那一页不出现任何别的词」相抵，是本轮站主的决定。门不引
      *     global.css，token 由 player.css 末尾那个 `[data-portal]` 块就地补上。）
-     *   - 其余页面 —— 照旧「播过一次才出现」：没听过歌的人不该被塞一个空播放器。
+     *   - 其余页面 —— 照旧「播过一次才出现」，**但 R25 多了一个口子**：从门进来过、
+     *     浏览器却一直拒着（`music:want` 还在）时也露脸，好让人自己点那个播放键。
      *
      * 判据用 DOM 里有没有这两面旗，不用 pathname：既不必操心 trailingSlash，
      * 又能在 swap 一落地时就判出来 —— 若改成等舞台挂上来再让位，
      * 导航到 /music 的头一两帧里悬浮窗会闪一下。
      */
+    let wasHidden = true;
     const show = () => {
       const portal = !!document.querySelector('[data-portal]');
       root.hidden =
-        !!document.querySelector('[data-deck]') || (!portal && !everPlayed());
+        !!document.querySelector('[data-deck]') ||
+        (!portal && !everPlayed() && !wants());
+      /* 藏着时量不出尺寸，位置与跑马灯都算不准 —— 所以在「藏↔露」翻转的那一刻补算一次。
+         只在翻转时做：show() 由 sync 频繁调用，每次都重算是白费。 */
+      if (wasHidden !== root.hidden) {
+        wasHidden = root.hidden;
+        applyPos();
+        marquee();
+      }
       room();
     };
     /**
@@ -293,6 +392,19 @@ import '../styles/player.css';
       paintCover();
     });
 
+    /**
+     * 长歌名在固定框里跑马灯（R27）。只有真的装不下才滚 —— 短歌名一动不动，
+     * 不然状态栏会永远在晃。溢出量写进 `--jk-over` 交给 CSS 那条 keyframes；
+     * 量的是内层那个 inline-block 的实际宽度，它不受外层 `overflow: hidden` 截断。
+     *
+     * 三种时候要重量：换曲（sync）、折叠态变化（药丸与展开态框宽不同）、改窗口大小。
+     */
+    const marquee = () => {
+      const over = Math.round(title.getBoundingClientRect().width - titleBox.clientWidth);
+      titleBox.classList.toggle('is-marquee', over > 2);
+      titleBox.style.setProperty('--jk-over', Math.max(0, over) + 'px');
+    };
+
     const view: View = {
       sync() {
         const t = now();
@@ -300,6 +412,7 @@ import '../styles/player.css';
         title.textContent = t.title;
         sub.textContent = t.subtitle;
         paintCover();
+        marquee();
         // is-playing 挂在根上，player.css 里 `.is-playing .jk-key__i--pause` 那对
         // 图标规则与转盘的 animation-play-state 就都吃到了
         root.classList.toggle('is-playing', on);
@@ -308,6 +421,10 @@ import '../styles/player.css';
         const d = dur();
         seek.max = String(d || 0);
         durEl.textContent = formatTime(d);
+        /* 音量条：值与填充比例都从单例读（R28）。/music 那边调音量也会广播 sync，
+           所以两处的滑块永远是同一个位置 */
+        vol.value = String(getVol());
+        vol.style.setProperty('--p', String(getVol()));
         modeKey.dataset.m = String(getMode());
         modeKey.setAttribute('aria-label', '播放方式：' + MODES[getMode()]);
         show();
@@ -348,36 +465,358 @@ import '../styles/player.css';
       drag = false;
       seekTo(Number(seek.value));
     });
+    // 音量条不用自己回填：setVol 会广播一次 sync，value 与填充比例都在那儿写
+    vol.addEventListener('input', () => setVol(Number(vol.value)));
 
-    /** 收起／展开。收起后只剩转盘、曲名与播放键 —— 状态栏仍在说「正在放什么」 */
+    /* ---------- 折叠态与位置：门与正站各记一份（R25） ---------------------- */
+
+    /** 门是满屏画面，合适的位置与正站本来就不同，所以两把键分开存 */
+    const isPortal = () => !!document.querySelector('[data-portal]');
+    const foldKey = () => (isPortal() ? 'music:mini:portal' : 'music:mini');
+    const posKey = () => (isPortal() ? 'music:pos:portal' : 'music:pos');
+
+    const read = (k: string) => {
+      try {
+        return localStorage.getItem(k);
+      } catch {
+        return null;
+      }
+    };
+    const write = (k: string, v: string) => {
+      try {
+        localStorage.setItem(k, v);
+      } catch {
+        /* 隐私模式下不可写：记不住位置与折叠态而已，功能不受影响 */
+      }
+    };
+
+    /** 贴边的边距，与 player.css 里默认位置用的 `--sp-4` 是同一个 16px。
+        吸附态例外，它要**贴死**屏幕边缘（R29：站主说「竖边吸附确实没有很贴」） */
+    const GAP = 16;
+    const dockNow = () => root.classList.contains('is-dock');
+    const gapNow = () => (dockNow() ? 0 : GAP);
+    type Edge = 'top' | 'right' | 'bottom' | 'left';
+    const EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
+
+    /**
+     * 存下来的位置是「贴哪条边 + 沿那条边的比例」，**不是绝对像素** ——
+     * 转屏、改窗口大小、地址栏收起都不会把它甩到屏幕外面去。
+     */
+    const readPos = () => {
+      const raw = read(posKey());
+      if (!raw) return null;
+      try {
+        const p = JSON.parse(raw) as { edge?: unknown; t?: unknown };
+        if (!EDGES.includes(p.edge as Edge) || !Number.isFinite(Number(p.t))) return null;
+        return { edge: p.edge as Edge, t: Math.min(1, Math.max(0, Number(p.t))) };
+      } catch {
+        return null;
+      }
+    };
+
+    /** 把存下来的那对值还原成左上角坐标写进 `--jk-x/--jk-y`；没存过就交还给 CSS 的默认位置 */
+    const applyPos = () => {
+      const p = readPos();
+      if (!p) {
+        root.classList.remove('is-placed');
+        root.style.removeProperty('--jk-x');
+        root.style.removeProperty('--jk-y');
+        return;
+      }
+      /* 藏着的时候量不出尺寸（`offsetWidth` 是 0），照那个值算出来的坐标会把它顶到屏幕外面去
+         （实测：首屏 hidden 时按右边算，left 会得到 359 而不是 39）。show() 在它显形那一刻
+         会再调一次，所以这里先按兵不动。 */
+      if (root.hidden) return;
+      /* **先挂 `is-placed` 再量**：那条规则自己带宽度（窄屏通栏 343 → 20rem 档 320），
+         量早了就会拿旧宽度算 maxX，右边那一档会算到左边去（实测 left 16 而不是 39）。
+         挂类与写变量在同一个任务里完成，中间不会 paint，所以看不出跳动。 */
+      root.classList.add('is-placed');
+      const w = root.offsetWidth;
+      if (!w) return;
+      const maxX = Math.max(0, innerWidth - w);
+      const maxY = Math.max(0, innerHeight - root.offsetHeight);
+      const clamp = (v: number, hi: number) => Math.min(hi, Math.max(0, v));
+      const gap = gapNow();
+      /* 沿边那个方向也留出 gap：不留的话 t=1 会把它顶到屏幕最边上、贴死没有余白。
+         吸附态 gap 是 0 —— 那个形态就是要贴死 */
+      const along = (max: number) => clamp(gap + p.t * Math.max(0, max - gap * 2), max);
+      const side = p.edge === 'left' || p.edge === 'right';
+      const x = side ? (p.edge === 'left' ? gap : maxX - gap) : along(maxX);
+      const y = side ? along(maxY) : p.edge === 'top' ? gap : maxY - gap;
+      root.style.setProperty('--jk-x', clamp(x, maxX) + 'px');
+      root.style.setProperty('--jk-y', clamp(y, maxY) + 'px');
+      root.classList.add('is-placed');
+    };
+
+    /** 松手：吸到最近的一条边，把「边 + 比例」记下来 */
+    const snap = () => {
+      const r = root.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = { top: cy, right: innerWidth - cx, bottom: innerHeight - cy, left: cx };
+      const edge = EDGES.reduce((a, b) => (d[b] < d[a] ? b : a));
+      const side = edge === 'left' || edge === 'right';
+
+      /* 竖边就是吸附态（R28）。**先挂 is-dock 再算比例**，两个理由：
+         ① 吸附态贴边距离是 0 而不是 16px，gapNow() 要能读到那个类；
+         ② 药丸 81.5px 收成 50px 的圆，沿边方向的可移动范围跟着变 —— 拿收之前的高度算，
+            还原出来会偏上／偏下三十来像素。所以下面一律用**松手时的中心** cx/cy
+            配**收完之后**的尺寸来反推比例，圆心就停在手指松开的地方。 */
+      setDock(side);
+      const gap = gapNow();
+      const w2 = root.offsetWidth;
+      const h2 = root.offsetHeight;
+      const span = side ? innerHeight - h2 - gap * 2 : innerWidth - w2 - gap * 2;
+      /* 沿边方向的落点：
+         - 吸附态用**最后那个指针位置**当圆心 —— 卡片从 208px 收成 50px 的圆，拿卡片中心
+           当锚点会让圆停在离手指几十像素的地方（实测偏 63px）；用手指才跟手。
+         - 其余形态尺寸不变，保持它拖动结束时的位置，只往最近那条边贴过去。 */
+      const head = dockNow()
+        ? (side ? ly - h2 / 2 : lx - w2 / 2) - gap
+        : (side ? r.top : r.left) - gap;
+      const t = head / Math.max(1, span);
+      write(posKey(), JSON.stringify({ edge, t: Math.min(1, Math.max(0, t)) }));
+      applyPos();
+    };
+
+    /**
+     * 折叠态的默认值。用户自己点过就以他的为准（存在 localStorage 里）；没点过：     *   - 门上默认收叠 —— 站主原话「在启动页默认为收叠药丸状态」；
+     *   - 窄屏正站也默认收叠 —— 展开态在 375 屏上占 22%，「占屏比太高」说的就是它；
+     *   - 宽屏正站照旧展开（那儿右下角这块地本来就是空的）。
+     */
+    const prefFold = () => {
+      const saved = read(foldKey());
+      if (saved !== null) return saved === '1';
+      return isPortal() || matchMedia('(max-width: 40rem)').matches;
+    };
+
+    /* ---------- 三个形态：全展开 / 药丸 / 吸附（R28） ----------------------
+       无类 = 全展开（歌词·歌名·音量·上下首都在）；`is-fold` = 药丸（默认）；
+       `is-dock` = 吸附成一枚封面圆。前两态由那枚 ⌃/⌄ 键与封面互切并记进 localStorage，
+       第三态只能由「拖到左右竖边」进入，且**不记住**（reflow 每次落地都撤掉它）。 */
+
+    /**
+     * 两个键的无障碍标签跟着三态走（R28）。吸附态下封面是整枚圆里唯一能点的东西，
+     * 它的意思只能是「展开」；展开态下它与那枚 ⌃ 一样是「收起」。
+     */
+    const paintLabels = () => {
+      const pill = root.classList.contains('is-fold');
+      const dock = root.classList.contains('is-dock');
+      sizeKey.setAttribute('aria-expanded', String(!pill));
+      sizeKey.setAttribute('aria-label', pill ? '展开播放器' : '收起播放器');
+      fold.setAttribute('aria-expanded', String(!pill && !dock));
+      fold.setAttribute('aria-label', pill || dock ? '展开播放器' : '收起播放器');
+    };
+
+    /** 前两态：全展开（歌词/歌名/音量/上下首）↔ 药丸（歌词/歌名/上下首/播放） */
     const setFold = (on: boolean) => {
       root.classList.toggle('is-fold', on);
-      fold.setAttribute('aria-expanded', String(!on));
-      fold.setAttribute('aria-label', on ? '展开播放器' : '收起播放器');
-      // 收起/展开会改高度，页脚那段余量得跟着重量一次
+      paintLabels();
+      // 尺寸变了：贴边的位置要跟着重算，曲名框宽变了要重判跑马灯，页脚那段余量也要重量
+      applyPos();
+      marquee();
       room();
     };
 
-    fold.addEventListener('click', () => {
+    /**
+     * 第三态：吸附成一枚封面圆（R28）。只由「长按拖到左右竖边松手」进入 ——
+     * **不落盘**，刷新或换页时 reflow() 会撤掉它，回到药丸（站主定的「不记住」）。
+     */
+    const setDock = (on: boolean) => {
+      root.classList.toggle('is-dock', on);
+      paintLabels();
+      applyPos();
+      room();
+    };
+
+    /** 那枚切换键与封面共用的动作：吸附态先退出吸附，其余情况在前两态之间翻 */
+    const flip = () => {
+      if (root.classList.contains('is-dock')) {
+        setDock(false);
+        return;
+      }
       const on = !root.classList.contains('is-fold');
       setFold(on);
+      write(foldKey(), on ? '1' : '0');
+    };
+
+    fold.addEventListener('click', flip);
+    sizeKey.addEventListener('click', flip);
+
+    /* ---------- 长按拖动（R25，时长在 R29 调过） --------------------------- */
+
+    /**
+     * 站主原话先是「将其做成可长按随意拖动」，后来又说「把长按拖拽的时间限制改得再短一点，
+     * 现在的不是很跟手」—— 所以门限从 450ms 降到 **200ms**：比一次普通点击（多在 80–150ms）
+     * 长，又短到手指刚停住就能开始拖。期间指针移动超过 8px 就取消计时 ——
+     * 那是滑动或滚动，不是长按。
+     *
+     * 门限降下来之后必须配一条**原地松手视为点击**（见 endDrag 里的 MOVED）：200ms 很容易被
+     * 一次「按得稍久的点击」跨过，那一下要是也算拖动，点封面就再也切不了形态了。
+     *
+     * 进度条排除在外：它自己有一套 pointerdown 拖动逻辑，两套会打架。
+     * 其余位置（含封面与三个键）都能拖，「随意」就是这个意思 —— 真拖过的那一下 click
+     * 会被下面那个捕获阶段的监听吞掉，所以拖完不会顺带切形态或按下播放。
+     *
+     * `setPointerCapture` 刻意等到长按成立才调：一上来就捕获会把随后的 click 重定向到
+     * 卡片上，那些按钮就点不动了。
+     */
+    const HOLD = 200;
+    /** 位移不到这个数就算「原地」—— 手指按着不动也会有一两像素的抖 */
+    const MOVED = 6;
+    let hold: number | undefined;
+    let dragging = false;
+    let dragged = false;
+    let wasPlaced = false;
+    let pid = -1;
+    let sx = 0;
+    let sy = 0;
+    let lx = 0;
+    let ly = 0;
+    let ox = 0;
+    let oy = 0;
+
+    const stopHold = () => {
+      if (hold !== undefined) clearTimeout(hold);
+      hold = undefined;
+    };
+
+    const moveTo = (px: number, py: number) => {
+      const x = Math.min(Math.max(0, px - ox), Math.max(0, innerWidth - root.offsetWidth));
+      const y = Math.min(Math.max(0, py - oy), Math.max(0, innerHeight - root.offsetHeight));
+      root.style.setProperty('--jk-x', x + 'px');
+      root.style.setProperty('--jk-y', y + 'px');
+    };
+
+    const beginDrag = () => {
+      hold = undefined;
+      dragging = true;
+      dragged = true;
+      const r = root.getBoundingClientRect();
+      ox = sx - r.left;
+      oy = sy - r.top;
+      // 记一下拖之前是不是已经被摆过：原地松手要能原样退回去（见 endDrag）
+      wasPlaced = root.classList.contains('is-placed');
+      root.classList.add('is-placed', 'is-drag');
       try {
-        localStorage.setItem('music:mini', on ? '1' : '0');
+        card.setPointerCapture(pid);
       } catch {
-        /* 隐私模式下不可写：记不住折叠状态而已 */
+        /* 指针已经抬起：那就退化成「没拖动过」，下面的 pointerup 会收尾 */
       }
+      moveTo(sx, sy);
+    };
+
+    const endDrag = () => {
+      stopHold();
+      if (!dragging) return;
+      dragging = false;
+      root.classList.remove('is-drag');
+
+      /* **原地松手当点击**（R29）。门限降到 200ms 之后，「按得稍久的一次点击」很容易
+         跨过它 —— 那一下要是也算拖动，就会顺手吸边、还把 click 吞掉，点封面再也切不了形态。
+         所以位移不到 MOVED 就整件事作废：位置退回拖之前（这次是第一次被摆的话连
+         `is-placed` 一起撤掉，好让它继续跟着 CSS 的默认位置走），`dragged` 不举旗，
+         那一下 click 照常派给按钮。 */
+      if (Math.hypot(lx - sx, ly - sy) < MOVED) {
+        dragged = false;
+        if (!wasPlaced) {
+          root.classList.remove('is-placed');
+          root.style.removeProperty('--jk-x');
+          root.style.removeProperty('--jk-y');
+        } else {
+          applyPos();
+        }
+        room();
+        return;
+      }
+
+      snap();
+      room();
+      /* `dragged` 只为吞掉紧跟着这次拖动的那一下 click。浏览器**不一定**会派那一下
+         （pointercancel 收尾、在屏幕外松手都不会），所以给它一个自动复位 ——
+         不然那面旗会一直举着，把用户下一次真正的点击也吞掉。400ms 远大于
+         pointerup → click 的实际间隔（通常 < 50ms），又不至于误伤下一次点击。 */
+      setTimeout(() => {
+        dragged = false;
+      }, 400);
+    };
+
+    card.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.target instanceof Element && e.target.closest('[data-seek]')) return;
+      pid = e.pointerId;
+      sx = e.clientX;
+      sy = e.clientY;
+      lx = sx;
+      ly = sy;
+      dragged = false;
+      stopHold();
+      hold = window.setTimeout(beginDrag, HOLD);
     });
 
-    try {
-      setFold(localStorage.getItem('music:mini') === '1');
-    } catch {
-      /* 同上 */
-    }
+    card.addEventListener(
+      'pointermove',
+      (e) => {
+        lx = e.clientX;
+        ly = e.clientY;
+        if (dragging) {
+          e.preventDefault();
+          moveTo(e.clientX, e.clientY);
+          return;
+        }
+        if (hold !== undefined && Math.hypot(e.clientX - sx, e.clientY - sy) > 8) stopHold();
+      },
+      { passive: false }
+    );
+
+    card.addEventListener('pointerup', endDrag);
+    card.addEventListener('pointercancel', endDrag);
+    card.addEventListener('lostpointercapture', endDrag);
+    /* 兜底：`pointerup` 不一定来（切标签、系统手势插进来、指针捕获被静默收走都会漏）。
+       漏了的话 `is-drag` 会一直挂着 —— 卡片放大着、`touch-action` 锁着，看起来就是卡死。
+       这两条把它收干净，代价为零（没在拖时 endDrag 直接返回）。 */
+    addEventListener('blur', endDrag);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) endDrag();
+    });
+    // 长按拖完那一下浏览器还会派一个 click，吞掉它
+    card.addEventListener(
+      'click',
+      (e) => {
+        if (!dragged) return;
+        dragged = false;
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      true
+    );
+    // 桌面端鼠标长按封面会触发原生的图片拖拽，那不是我们要的拖
+    card.addEventListener('dragstart', (e) => e.preventDefault());
+    // 移动端长按默认要弹上下文菜单／选中文字，拖动期间一律拦掉
+    card.addEventListener('contextmenu', (e) => {
+      if (dragging) e.preventDefault();
+    });
 
     attach(view);
 
-    /* swap 之后「这一页有没有唱盘台」可能变了，要在 paint 之前重判一次。
-       这个监听留在模块顶层，全站只加一次（放进 astro:page-load 会每导航累积一层） */
-    document.addEventListener('astro:after-swap', show);
+    /**
+     * 这一页是门还是正站、有没有唱盘台，swap 之后都可能变了 —— 折叠默认值、位置、
+     * 让位余量三样都要按新页面重判，且要在 paint 之前。
+     * 监听留在模块顶层，全站只加一次（放进 astro:page-load 会每导航累积一层）。
+     */
+    const reflow = () => {
+      show();
+      // 吸附态不跨页也不跨刷新（R28 站主定的「不记住」）
+      setDock(false);
+      setFold(prefFold());
+    };
+    reflow();
+    document.addEventListener('astro:after-swap', reflow);
+    // 转屏／改窗口大小：贴边的位置按存下来的比例重算，跑马灯与余量也重判一次
+    addEventListener('resize', () => {
+      applyPos();
+      marquee();
+      room();
+    });
   }
 </script>

@@ -268,7 +268,16 @@ const ENTER = '/home';
        * 被拒时 `everPlayed()` 仍是 false，下一个手势自动重试，不需要额外的状态位。
        */
       const kick = () => {
-        if (stage && !everPlayed() && !playing()) toggle();
+        if (!stage || everPlayed() || playing()) return;
+        /* 记一面旗：「这一趟访问是想听音乐的」。被浏览器拒了也留着 —— 进站之后
+           MiniPlayer 那边认它继续补试（R25：有些浏览器只承认 click/touchend，
+           而门上试不成之后，正站因为 stage 已经是 null 就再也不会试了） */
+        try {
+          sessionStorage.setItem('music:want', '1');
+        } catch {
+          /* 隐私模式下不可写：那就只剩门上这几次机会 */
+        }
+        toggle();
       };
 
       /**
@@ -370,6 +379,22 @@ const ENTER = '/home';
         if (onMini(e)) return;
         kick();
       });
+
+      /* 同一下点击在 click 与 touchend 上再各试一次（R25）。不是冗余：
+         iOS Safari 一类只承认 click/touchend 为有效的用户手势，pointerdown 在那儿
+         起不了播 —— 而 kick 自己有守卫，已经在放了就是空操作 */
+      window.addEventListener('click', (e) => {
+        if (onMini(e)) return;
+        kick();
+      });
+      window.addEventListener(
+        'touchend',
+        (e) => {
+          if (onMini(e)) return;
+          kick();
+        },
+        { passive: true }
+      );
 
       /* 滚轮当「滑动」：这一页没有可滚的内容，滑的意思只能是「走」，所以不看方向。
          攒到 60 才触发 —— 鼠标一格滚轮就有 100，一次就走；触控板的轻微擦碰

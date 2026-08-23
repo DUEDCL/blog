@@ -2,57 +2,99 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE_TITLE, SOCIAL, CONTACT } from '../consts';
 
+/* 邮箱在名片里已经有一张卡（可点可复制），这里滤掉，同一页不出现两次。
+   页脚与首页那排小链接不受影响 —— 那两处没有名片。 */
 const links = [
   { label: 'GitHub', href: SOCIAL.github },
-  { label: '邮箱', href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
   { label: 'X', href: SOCIAL.x },
   { label: '微博', href: SOCIAL.weibo },
   { label: '知乎', href: SOCIAL.zhihu },
   { label: 'RSS', href: SOCIAL.rss },
 ].filter((l) => l.href);
 
+type Card = {
+  key: string;
+  label: string;
+  /** 真能点的链接。只有 QQ、Telegram、邮箱有；微信、抖音、Discord 技术上没有 */
+  action?: { href: string; text: string };
+  /** 二维码图。有图就可点开放大（R26），灯箱里带一键复制 */
+  qr?: string;
+  /**
+   * 这张码要不要纸底。**抖音那张要，而且是唯一一张** —— 沉麟真机实测：微信与 Telegram 的
+   * 反相码（亮模块压暗玻璃）扫得出，抖音那张**必须加白底才扫得出**。它不是 QR 而是抖音
+   * 自家的圆形码，解码器是私有的，没有 QR 那套「读不出就试一次反转」的惯例。
+   * 所以这一项是**定死的**，不是可切换的默认值 —— 缩略图与放大后都加底，
+   * 免得点开前后长得不一样。
+   */
+  paper?: boolean;
+  /** 一键复制的值 + 按钮文案。按钮文案各卡不同：号码/用户名/抖音号不是一回事 */
+  copy?: { value: string; text: string };
+  note: string;
+};
+
 /**
- * 名片。三个平台能做到的事差得很远，所以每张卡的按钮不一样：
- * 只有 QQ 有真正的「一键加好友」链接，微信只能出示二维码，抖音只能打开主页。
- * 填了才出现 —— CONTACT 全空时整节替换成一句实话。
+ * 名片。每个平台能做到的事差得很远，所以每张卡的按钮都不一样 ——
+ * 详见 consts.ts 里 CONTACT 的注释（六条能力核实结论都写在那儿）。
+ * 填了才出现：CONTACT 全空时整节替换成一句实话。
+ *
+ * 排序按「访客最可能用哪个」：微信、QQ 在前（国内），Telegram、Discord 在后（境外），
+ * 邮箱压轴 —— 它最慢，但不依赖任何 APP，是永远兜底的那条。
  */
 const cards = [
+  CONTACT.wechatQr && {
+    key: 'wechat',
+    label: '微信',
+    qr: CONTACT.wechatQr,
+    /* 给的是昵称不是微信号，所以按钮写「复制昵称」，文案里也说清搜昵称不一定搜得到 */
+    copy: CONTACT.wechat ? { value: CONTACT.wechat, text: '复制昵称' } : undefined,
+    note: '微信没有加好友链接，扫码是唯一稳的办法。点二维码放大，手机扫屏幕上这张就行。',
+  },
   CONTACT.qq && {
     key: 'qq',
     label: 'QQ',
-    /* 唯一真能一键弹出加好友页的平台。链接格式来自多个社区来源且互相一致，
-       非腾讯官方文档，所以三条腿都给：链接失效还有二维码，二维码不方便还能复制号码 */
     action: {
       href: `http://wpa.qq.com/msgrd?v=3&uin=${CONTACT.qq}&site=qq&menu=yes`,
       text: '加好友',
     },
     qr: CONTACT.qqQr || undefined,
-    copy: CONTACT.qq,
-    note: '点开直接弹出加好友页；没反应就扫码或复制号码手动搜。',
+    copy: { value: CONTACT.qq, text: '复制号码' },
+    note: '点开直接弹出加好友页；没反应就复制号码手动搜。',
   },
-  CONTACT.wechatQr && {
-    key: 'wechat',
-    label: '微信',
-    /* 微信没有可用的加好友链接：官方 URL Scheme 文档只覆盖小程序，
-       网上流传的个人加好友链接未能核实。只能出示二维码 */
-    qr: CONTACT.wechatQr,
-    note: '微信没有加好友链接，扫码是唯一的办法。',
-  },
-  CONTACT.douyin && {
+  CONTACT.douyinQr && {
     key: 'douyin',
     label: '抖音',
-    /* 抖音同样没有加好友链接，只有个人主页地址 */
-    action: { href: CONTACT.douyin, text: '打开主页' },
-    note: '抖音只能跳到主页，关注要你自己点一下。',
+    /* 主页链接他没给，所以不出「打开主页」按钮 —— 只有码和抖音号 */
+    action: CONTACT.douyin ? { href: CONTACT.douyin, text: '打开主页' } : undefined,
+    qr: CONTACT.douyinQr,
+    paper: true, // 实测必须加白底才扫得出，圆形码不吃反相（见 Card.paper）
+    copy: CONTACT.douyinId
+      ? { value: CONTACT.douyinId, text: '复制抖音号' }
+      : undefined,
+    note: '抖音没有加好友链接：点开二维码用 APP 扫，或复制抖音号去搜。',
   },
-].filter(Boolean) as {
-  key: string;
-  label: string;
-  action?: { href: string; text: string };
-  qr?: string;
-  copy?: string;
-  note: string;
-}[];
+  CONTACT.telegram && {
+    key: 'telegram',
+    label: 'Telegram',
+    action: { href: `https://t.me/${CONTACT.telegram}`, text: '打开对话' },
+    qr: CONTACT.telegramQr || undefined,
+    copy: { value: `@${CONTACT.telegram}`, text: '复制用户名' },
+    note: '点开就是对话框，不用先加好友。也可以扫码或复制用户名去搜。',
+  },
+  CONTACT.discord && {
+    key: 'discord',
+    label: 'Discord',
+    /* discord.com/users/<id> 要纯数字 ID，用户名拼不出链接，所以这张卡只能复制 */
+    copy: { value: CONTACT.discord, text: '复制用户名' },
+    note: '只能在客户端里搜用户名添加，没有可点的链接。',
+  },
+  CONTACT.email && {
+    key: 'email',
+    label: '邮箱',
+    action: { href: `mailto:${CONTACT.email}`, text: '写邮件' },
+    copy: { value: CONTACT.email, text: '复制地址' },
+    note: '最慢也最稳的一条，不依赖任何 APP，我都会看。',
+  },
+].filter(Boolean) as Card[];
 ---
 
 <BaseLayout title="关于" description={`关于 ${SITE_TITLE}`} width="prose">
@@ -77,7 +119,30 @@ const cards = [
           <li class="card">
             <span class="card__label">{c.label}</span>
 
-            {c.qr && <img class="card__qr" src={c.qr} alt={`${c.label}二维码`} width="140" height="140" loading="lazy" />}
+            {c.qr && (
+              /* 缩略图是按钮不是图：点开才是原图（键盘也能进，Enter/Space 都算点击）。
+                 灯箱要的四样东西全挂在 data-* 上，脚本不必知道有哪些平台 */
+              <button
+                class="card__qrbtn"
+                type="button"
+                data-lb-src={c.qr}
+                data-lb-label={c.label}
+                data-lb-copy={c.copy?.value ?? ''}
+                data-lb-copy-text={c.copy?.text ?? ''}
+                data-lb-paper={c.paper ? '1' : ''}
+                aria-label={`放大${c.label}二维码`}
+              >
+                <span class={c.paper ? 'card__qrbox card__qrbox--paper' : 'card__qrbox'}>
+                  <span
+                    class="card__qr"
+                    role="img"
+                    aria-label={`${c.label}二维码`}
+                    style={`--qr: url('${c.qr}')`}
+                  />
+                </span>
+                <span class="card__zoom" aria-hidden="true">点开放大</span>
+              </button>
+            )}
 
             <span class="card__acts">
               {c.action && (
@@ -91,8 +156,8 @@ const cards = [
                 </a>
               )}
               {c.copy && (
-                <button class="card__btn" type="button" data-copy={c.copy}>
-                  复制号码
+                <button class="card__btn" type="button" data-copy={c.copy.value}>
+                  {c.copy.text}
                 </button>
               )}
             </span>
@@ -124,9 +189,29 @@ const cards = [
       </>
     )}
   </div>
+
+  {/* 灯箱。一张卡一个弹层太浪费，全页共用这一个，内容点击时现填。
+      用原生 <dialog>：Esc 关闭、焦点圈住、置顶层（top layer）三件事浏览器自己做，
+      不必跟 Header(z-index 50)、播放器(60)、BaseLayout(100) 抢层级。 */}
+  {cards.some((c) => c.qr) && (
+    <dialog class="lb" id="qr-lightbox" aria-labelledby="qr-lightbox-label">
+      <figure class="lb__figure">
+        <span class="lb__stage"><span class="lb__code" role="img" aria-label=""></span></span>
+        <figcaption class="lb__cap">
+          <span class="lb__label" id="qr-lightbox-label"></span>
+          <span class="lb__acts">
+            {/* data-copy 空着也要留住这个属性：复制那段脚本按 [data-copy] 选元素，
+                值是点击时才读的，灯箱打开时现填 */}
+            <button class="card__btn lb__copy" type="button" data-copy=""></button>
+            <button class="card__btn" type="button" data-lb-close>关闭</button>
+          </span>
+        </figcaption>
+      </figure>
+    </dialog>
+  )}
 </BaseLayout>
 
-{/* 复制号码。navigator.clipboard 在非 HTTPS 下不可用，失败就把号码选中让用户自己复制 */}
+{/* 复制值 + 二维码灯箱。navigator.clipboard 在非 HTTPS 下不可用，失败就把值显示出来让用户自己选 */}
 <script>
   /* 绑事件要挂在 `astro:page-load` 上：这段是 bundled module，
      **同一个 URL 的模块体一辈子只执行一次** —— 离开 /about 再回来，
@@ -135,22 +220,82 @@ const cards = [
 
      只往按钮上绑，不往 window/document 上绑，所以每导航一次不会累积。 */
   document.addEventListener('astro:page-load', () => {
+    /* 「已复制」的回退计时器。按元素存，连点两次不会把「已复制」当原文案存回去 */
+    const timers = new WeakMap<HTMLElement, number>();
+
     document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
+      /* 各卡按钮文案不同（复制号码／用户名／抖音号／昵称／地址），恢复时不能写死一个词，
+         所以把原文案存进 data-label；灯箱那颗是动态填的，填的时候会一起更新这个值 */
+      if (!btn.dataset.label) btn.dataset.label = btn.textContent?.trim() ?? '';
+
       btn.addEventListener('click', async () => {
         const value = btn.dataset.copy ?? '';
-        const done = (text: string) => {
-          const original = btn.textContent;
+        if (!value) return;
+
+        const show = (text: string) => {
+          const pending = timers.get(btn);
+          if (pending) clearTimeout(pending);
           btn.textContent = text;
-          setTimeout(() => (btn.textContent = original), 1600);
+          timers.set(
+            btn,
+            window.setTimeout(() => {
+              btn.textContent = btn.dataset.label ?? '';
+            }, 1600),
+          );
         };
 
         try {
           await navigator.clipboard.writeText(value);
-          done('已复制');
+          show('已复制');
         } catch {
-          done(value);
+          show(value);
         }
       });
+    });
+
+    /* --- 灯箱：缩略图点开看原图，顺手把用户名一键复制掉 ------------------- */
+    const lb = document.querySelector<HTMLDialogElement>('#qr-lightbox');
+    const lbCode = lb?.querySelector<HTMLElement>('.lb__code');
+    const lbStage = lb?.querySelector<HTMLElement>('.lb__stage');
+    const lbLabel = lb?.querySelector<HTMLElement>('.lb__label');
+    const lbCopy = lb?.querySelector<HTMLButtonElement>('.lb__copy');
+    if (!lb || !lbCode || !lbStage || !lbLabel || !lbCopy) return;
+
+    document.querySelectorAll<HTMLButtonElement>('[data-lb-src]').forEach((thumb) => {
+      thumb.addEventListener('click', () => {
+        const d = thumb.dataset;
+        /* 码是遮罩不是图：颜色由 CSS 的 --ink 给，这里只换遮罩路径。
+           与缩略图同一个文件，已在缓存里，不会再下一次 */
+        lbCode.style.setProperty('--qr', `url('${d.lbSrc ?? ''}')`);
+        lbCode.setAttribute('aria-label', `${d.lbLabel ?? ''}二维码`);
+        lbLabel.textContent = d.lbLabel ?? '';
+
+        /* 纸底跟着卡走，不给切换：抖音那张 data-lb-paper=1（实测非白底扫不出），
+           其余的透明底扫得出。缩略图那边已经是同一副样子，点开前后不变脸 */
+        lbStage.classList.toggle('lb__stage--paper', d.lbPaper === '1');
+
+        /* 这个平台没给可复制的用户名就把按钮藏掉，不留一颗按了没反应的键 */
+        const value = d.lbCopy ?? '';
+        lbCopy.hidden = !value;
+        lbCopy.dataset.copy = value;
+        lbCopy.dataset.label = d.lbCopyText || '复制';
+
+        /* 上一张卡的「已复制」不能在这张卡上继续倒计时 */
+        const pending = timers.get(lbCopy);
+        if (pending) clearTimeout(pending);
+        lbCopy.textContent = lbCopy.dataset.label;
+
+        lb.showModal();
+      });
+    });
+
+    lb.querySelectorAll<HTMLButtonElement>('[data-lb-close]').forEach((btn) => {
+      btn.addEventListener('click', () => lb.close());
+    });
+
+    /* 点图外的空白处关闭。::backdrop 不是子元素，点它命中的 target 就是 dialog 自己 */
+    lb.addEventListener('click', (e) => {
+      if (e.target === lb) lb.close();
     });
   });
 </script>
@@ -206,13 +351,132 @@ const cards = [
     color: var(--ink);
   }
 
-  /* 二维码底色恒为白 —— 深色主题下若透出深底，多数扫码器识别不了 */
-  .card__qr {
+  /* 二维码缩略图是一颗按钮：点开才是原图。
+     R26 第四版：**真透明底**。需求原话「并没有改成透明打底的二维码，依旧是白色打底，
+     我想要的是透明打底的二维码，且不影响扫描」—— 第三版那块香槟玻璃仍然是「一块亮面」，
+     不是他要的东西。
+
+     现在码不再是一张图，而是一块**遮罩**：webp 的 alpha 通道当 mask，颜色由
+     `background-color: var(--ink)` 给。于是模块之间是真透明（卡片玻璃与背后的光晕
+     直接透出来），码的颜色跟着主题走，深色主题下是亮模块、浅色主题下是墨模块。
+
+     代价必须写清楚：深色主题下这是**反相码**（亮模块／暗底），解码器要自己试一次反转。
+     实测（jsQR，把遮罩涂成 --ink 再合成到卡片玻璃的实测底色上，四个尺寸）：
+
+       浅色·正相                  1024 ✓  288 ✓  254 ✓  200 ✓
+       深色·反相                  1024 ✓  288 ✓  254 ✓  200 ✓
+       深色·反相（禁止试反转）      1024 ✗  288 ✗  254 ✗  200 ✗
+
+     最后一行就是风险本身：不试反转的扫码器一个尺寸都读不出。jsQR 默认试
+     （`inversionAttempts: 'attemptBoth'`），iOS 相机与 Google Lens 实践中也读得出，
+     **微信自家扫码器能不能试，本机核实不了**（社区来源互相矛盾：2015 年说不行、
+     2020 年说行，都不是官方文档）。所以灯箱里留了「加白底」一颗键当退路。
+
+     亮度反差不是问题：深色 --ink(#d7d6d5) 压卡片玻璃(≈#121212) 13:1，
+     浅色 #131110 压 ≈#f0eeec 17:1，两头都远超扫码需要的量。 */
+  .card__qrbtn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
     width: 8.75rem;
-    height: 8.75rem;
-    border-radius: var(--r-sm);
-    background: #fff;
+    padding: 0;
+    background: none;
+    border: 0;
+    cursor: zoom-in;
+  }
+
+  /* 码 = 遮罩 + 一个颜色。缩略图与灯箱共用这一份。
+     颜色走 --qr-color 而不是直接 var(--ink)：加纸底的那张要从父层把码翻成墨色，
+     自定义属性能继承，background-color 不能。默认值挂在祖先（.cards / .lb__figure）上
+     而不是元素自己身上 —— 挂在元素上，父层 --paper 那份就被自己的声明盖掉了。 */
+  .cards,
+  .lb__figure {
+    --qr-color: var(--ink);
+  }
+
+  /* 纸底：只有抖音那张有（实测非白底扫不出，见 Card.paper）。
+     一处配方管两处，缩略图与放大后只差内衬和圆角。 */
+  .card__qrbox {
+    display: block;
+    width: 100%;
+  }
+
+  .card__qrbox--paper,
+  .lb__stage--paper {
+    background-color: var(--sand-0);
+    --qr-color: var(--sand-900);
+  }
+
+  .card__qrbox--paper {
     padding: var(--sp-2);
+    border-radius: var(--r-sm);
+  }
+
+  .card__qr,
+  .lb__code {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    background-color: var(--qr-color);
+    -webkit-mask: var(--qr) center / contain no-repeat;
+    mask: var(--qr) center / contain no-repeat;
+  }
+
+  .card__qr {
+    transition: transform 0.24s ease, background-color 0.18s ease;
+  }
+
+  /* 悬停时码本身泛铜色，替代原来那块板的抬升反馈。
+     纸底那张要走深铜 —— 浅色的 --seal 压在白纸上几乎看不见。
+     两条都写在码元素自己身上：--qr-color 挂在祖先会被元素自身的声明盖掉，反过来不行。 */
+  .card__qrbtn:hover .card__qr,
+  .card__qrbtn:focus-visible .card__qr {
+    transform: translateY(-1px);
+  }
+
+  .card__qrbtn:hover .card__qrbox:not(.card__qrbox--paper) .card__qr,
+  .card__qrbtn:focus-visible .card__qrbox:not(.card__qrbox--paper) .card__qr {
+    --qr-color: var(--seal);
+  }
+
+  .card__qrbtn:hover .card__qrbox--paper .card__qr,
+  .card__qrbtn:focus-visible .card__qrbox--paper .card__qr {
+    --qr-color: var(--brass-deep);
+  }
+
+  /* mask 不支持时退回「图 + 纸底」的经典画法：宁可丑，也不能出现一个扫不出的码。
+     图本身就是墨色模块 + 透明底，衬到 --sand-0 上正好是暗模块／亮底。
+     这里在元素自己身上写 --qr-color，所以纸底那张从父层继承来的那份不会生效。 */
+  @supports not ((mask-image: url('/favicon.svg')) or (-webkit-mask-image: url('/favicon.svg'))) {
+    .card__qr,
+    .lb__code {
+      --qr-color: var(--sand-0);
+      background-image: var(--qr);
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      border-radius: var(--r-sm);
+    }
+
+    .card__qrbtn:hover .card__qrbox .card__qr,
+    .card__qrbtn:focus-visible .card__qrbox .card__qr {
+      --qr-color: var(--sand-0);
+    }
+  }
+
+  /* 提示文字常显不隐 —— 触屏没有 hover，藏起来等于没有 */
+  .card__zoom {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.2;
+    color: var(--ink-faint);
+    transition: color 0.18s ease;
+  }
+
+  .card__qrbtn:hover .card__zoom,
+  .card__qrbtn:focus-visible .card__zoom {
+    color: var(--ink-soft);
   }
 
   .card__acts {
@@ -242,10 +506,81 @@ const cards = [
     border-color: var(--glass-border-lit);
   }
 
+  /* `display: inline-block` 会盖掉 UA 的 [hidden]{display:none}（类选择器权重更高），
+     灯箱里那颗「复制」按钮靠 hidden 收起，所以必须显式写回来 */
+  .card__btn[hidden] {
+    display: none;
+  }
+
   .card__note {
     font-size: var(--text-sm);
     line-height: var(--leading-normal);
     color: var(--ink-faint);
+  }
+
+  /* --- 二维码灯箱 ---------------------------------------------------------- */
+  /* 原生 <dialog>：置顶层由浏览器管，不必跟顶栏(50)、播放器(60)抢 z-index。
+     dialog 默认 margin:auto + 居中，只需要把默认边框底色去掉换成玻璃面板。
+
+     宽度必须写死。dialog 默认 fit-content，于是宽度由**最宽的那行文字**决定 ——
+     实测「复制昵称 / 关闭」比「复制用户名 / 关闭」窄，同一个灯箱在微信卡上只有 211px、
+     在 Telegram 卡上 275px，码跟着一起缩水。码是要被另一台手机扫的，尺寸不能由按钮文案决定。 */
+  .lb {
+    width: min(92vw, 30rem);
+    max-height: 92dvh;
+    padding: var(--sp-5);
+    color: var(--ink);
+    background: var(--glass-fallback);
+    border: 1px solid var(--glass-border-lit);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lift);
+  }
+
+  .lb::backdrop {
+    background: rgba(5, 5, 5, 0.72);
+    backdrop-filter: blur(6px);
+  }
+
+  .lb__figure {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    margin: 0;
+  }
+
+  /* 放大后的码要能被另一台手机扫走，所以给到 74dvh。
+     微信与 Telegram 什么底都不加 —— 码就浮在灯箱的暗玻璃上（透明底的意义就在这儿），
+     实测手机扫得出。抖音那张挂 --paper（纸底 + 内衬 + 码翻墨色），因为它非白底扫不出。 */
+  .lb__stage {
+    display: block;
+    width: 100%;
+    max-width: min(74dvh, 100%);
+    margin: 0 auto;
+    border-radius: var(--r-lg);
+  }
+
+  .lb__stage--paper {
+    padding: var(--sp-4);
+  }
+
+  .lb__cap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+
+  .lb__label {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+  }
+
+  .lb__acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
   }
 
   @media (max-width: 40rem) {

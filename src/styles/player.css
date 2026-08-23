@@ -297,13 +297,23 @@
   display: block;
 }
 
+/* 全展开 ↔ 药丸那枚切换键（R28）：展开态露 ⌃（意思是「收起」），药丸态露 ⌄（「展开」）。
+   与播放/暂停那对图标同一套做法，不新引入机制 */
+.jk-key__i--down,
+.is-fold .jk-key__i--up {
+  display: none;
+}
+
+.is-fold .jk-key__i--down {
+  display: block;
+}
+
 /* 播放方式键：四个图标叠在同一个按钮里，露哪个由脚本写的 data-m 决定 ——
    和播放/暂停那对是同一套做法，不新引入机制。
    没有 data-m 时（脚本还没跑到 paintMode）四个都藏着，键是空的但不会四个一起冒出来 */
 .jk-key--mode .jk-key__i {
   display: none;
 }
-
 .jk-key--mode[data-m='0'] .jk-key__i--m0,
 .jk-key--mode[data-m='1'] .jk-key__i--m1,
 .jk-key--mode[data-m='2'] .jk-key__i--m2,
@@ -813,7 +823,13 @@
 
 /* 全站那条实时状态栏。`position: fixed` 且**不占布局流** —— 页面里没有一个元素
    因为它而挪位置。根节点用 hidden 控制存在感（见 MiniPlayer.astro 的注释：
-   persist 要求节点始终在，而 hidden = display:none 不会让 <audio> 停下来）。 */
+   persist 要求节点始终在，而 hidden = display:none 不会让 <audio> 停下来）。
+
+   R28 起它有**三个形态**，全靠根节点上的两个类区分：
+     无类       全展开 —— 封面/曲名/歌手·专辑/歌词/进度条/四个键/音量
+     .is-fold   药丸   —— 封面/曲名/歌词/上一首·播放·下一首（默认就是这个）
+     .is-dock   吸附   —— 只有一枚 48px 的封面圆（拖到左右竖边自动进入，不记住）
+   `.is-dock` 的规则排在 `.is-fold` 之后，两者特异度相同、靠源码顺序取胜。 */
 .jk-mini {
   position: fixed;
   right: var(--sp-6);
@@ -855,6 +871,23 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   background: var(--glass-bg-strong);
+  /* 长按要拖动它（R25），所以不许长按选中文字、也不许 iOS 弹那个「拷贝/查询」气泡 */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /**
+   * ⚠ `touch-action: none` 必须**常设**，不能只在 `.is-drag` 时加（R27 的 bug 就是这么来的：
+   * 「药丸无法自由的上下移动，只能进行短行程的左右移动」）。
+   *
+   * 因果：`touch-action` 是在**手指落下那一刻**求值的，之后再改对这一次触摸无效。
+   * 默认值 `auto` 意味着浏览器有权把这次触摸判成「滚页面」——手指一往上下动它就接管，
+   * 把 pointermove 换成 pointercancel，拖动当场断掉；而横向没有可滚的东西，
+   * 于是只剩「短行程的左右移动」，与报上来的现象逐字对得上。
+   *
+   * 代价：手指落在这张卡上时不能滚页面。对一个自己有手势的浮动控件来说这是应有的取舍
+   * （进度条也需要它 —— 不然拖进度会被滚动抢走）。
+   */
+  touch-action: none;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
     brightness(var(--glass-brightness));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
@@ -894,9 +927,18 @@
 
 .jk-mini__head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* 封面 / 曲名 / ⤢ / 展开收起键（R28 起是四列） */
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--sp-3);
+}
+
+/* 音量行（R28）。标签用 .jk-mini__time 那套等宽小字，与两个时间格是一路货色 */
+.jk-mini__vol {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
 }
 
 .jk-mini__fold {
@@ -971,6 +1013,37 @@
   color: var(--ink);
 }
 
+/**
+ * 长歌名在固定框里滚动展示（R27。站主原话：「如果出现了长歌名，有覆盖的形象，
+ * 那就是把长歌名放在固定框内滚动展示」）。
+ *
+ * 溢出量由脚本量出来写进 `--jk-over`，只有真的装不下时才挂 `is-marquee` ——
+ * 短歌名一动不动，不然状态栏会永远在晃。往复（alternate）而不是循环：
+ * 循环要把文本复制一份才不留空档，往复只要一条 keyframes。
+ */
+.jk-mini__t-i {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.jk-mini__t.is-marquee {
+  /* 滚起来就不需要省略号了 —— 留着会在右边缘一直闪一个「…」 */
+  text-overflow: clip;
+}
+
+.jk-mini__t.is-marquee .jk-mini__t-i {
+  animation: jk-marquee 9s ease-in-out 1.2s infinite alternate;
+}
+
+@keyframes jk-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--jk-over, 0px)));
+  }
+}
+
 .jk-mini__s {
   font-size: var(--text-xs);
   color: var(--ink-faint);
@@ -1038,12 +1111,19 @@
   gap: var(--sp-3);
 }
 
-/* 收起态：一枚小药丸，只剩转盘、曲名与播放键。
-   「一直展示正在播放的歌曲」是这条状态栏的本分，所以曲名在收起态也留着 */
+/**
+ * 收起态：一枚药丸。R25 起里面留的是曲名 + 当前歌词 + 播放键，R27 又把**上一首与下一首
+ * 挪到了曲名旁边**（站主原话「把切换上首和下一首的按钮做在歌名旁边……将这三个按钮并排放在
+ * 歌名的旁边歌词上面」）—— 于是第一行是 封面 / 曲名 / 三个键，第二行整行留给歌词。
+ *
+ * 藏掉的只剩：歌手·专辑、时间与进度条、播放方式键、⤢「打开唱片机」。
+ * 曲名装不下时不许挤这三个键，改成在固定框里跑马灯（见 .jk-mini__t.is-marquee）。
+ */
 .jk-mini.is-fold .jk-mini__s,
-.jk-mini.is-fold .jk-mini__line,
 .jk-mini.is-fold .jk-mini__seek,
-.jk-mini.is-fold .jk-mini__keys .jk-key:not(.jk-key--play) {
+.jk-mini.is-fold .jk-mini__vol,
+.jk-mini.is-fold [data-open],
+.jk-mini.is-fold [data-mode] {
   display: none;
 }
 
@@ -1052,16 +1132,73 @@
   align-items: center;
   border-radius: var(--r-full);
   padding: var(--sp-2) var(--sp-3);
-  gap: var(--sp-2);
+  /* 曲名与歌词是一组，行距比 --sp-2 再紧一档（药丸因此从 81.5px 降到 ~77px，
+     刚好压住「≤80px / ≤10% 占屏」那条判据）。没有更小的间距 token，就地写字面量 */
+  gap: 0.25rem;
 }
 
 .jk-mini.is-fold .jk-mini__head {
   grid-column: 1;
 }
 
+/* 三个键并排在曲名右边、歌词上面。间距收一档：三个键 104px 已经占掉三分之一的宽 */
 .jk-mini.is-fold .jk-mini__keys {
   grid-column: 2;
   grid-row: 1;
+  gap: var(--sp-2);
+}
+
+/* 歌词横跨两列 —— 键上去第一行之后，第二行整行都是它的，能多露五六个字 */
+.jk-mini.is-fold .jk-mini__line {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+  padding-left: calc(2.25rem + var(--sp-3));
+}
+
+/* 药丸按内容宽，不再通栏 —— 通栏的东西拖起来没有意义，也不像药丸。
+   上限 20rem：歌词再长也不许把它抻成一条横幅（超出部分由 __line 自己截断） */
+.jk-mini.is-fold {
+  width: min(20rem, calc(100vw - var(--sp-4) * 2));
+}
+
+/**
+ * 第三态：吸附（R28。站主原话「当用户拖至屏幕竖向边缘时，自动吸附成只保留专辑照片的一个
+ * 小吸附状态」）。只有**左右两条竖边**会触发 —— 拖到上／下边仍是药丸，只是贴边。
+ *
+ * **不进 localStorage**：刷新或换页回到药丸（站主定的「不记住」），所以这一段只有样式、
+ * 没有存储；reflow() 每次落地都会把它撤掉。
+ *
+ * 这一段必须排在 `.is-fold` 之后：两者特异度相同（都是 0,2,0），靠源码顺序取胜。
+ */
+.jk-mini.is-dock {
+  width: max-content;
+}
+.jk-mini.is-dock .jk-mini__now,
+.jk-mini.is-dock .jk-mini__line,
+.jk-mini.is-dock .jk-mini__seek,
+.jk-mini.is-dock .jk-mini__vol,
+.jk-mini.is-dock .jk-mini__keys,
+.jk-mini.is-dock [data-open],
+.jk-mini.is-dock [data-toggle] {
+  display: none;
+}
+
+/* 一枚 48px 的封面圆：4px 的玻璃边 + 40px 的转盘。点它回药丸（脚本里接的） */
+.jk-mini.is-dock .jk-mini__card {
+  grid-template-columns: auto;
+  gap: 0;
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.jk-mini.is-dock .jk-mini__head {
+  grid-template-columns: auto;
+  gap: 0;
+}
+
+.jk-mini.is-dock .jk-mini__fold {
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 /* --- 窄屏 ------------------------------------------------------------- */
@@ -1115,6 +1252,14 @@
     left: var(--sp-4);
     bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
     width: auto;
+  }
+
+  /* R25：手机端展开态占屏 24.4% 太高（375×812 实测 197.9px）。行的构成一条不砍，
+     只压间距 —— padding 16→12、行距 12→8，省下 20px 到 ~178px。
+     真正把占屏压下去的是「窄屏默认收叠成药丸」（≈72px，9%），见 MiniPlayer 的 prefFold() */
+  .jk-mini__card {
+    padding: var(--sp-3);
+    gap: var(--sp-2);
   }
 }
 
@@ -1214,17 +1359,82 @@
 }
 
 /**
- * 窄屏上状态栏是贴底通栏的，而门那枚进站键在 `bottom: calc(84 * var(--u))`
- * （812 高的屏上离底 64px）—— 正好被压住。
+ * 门上那枚进站键与状态栏抢地方：窄屏时状态栏原先贴底通栏，而进站键在
+ * `bottom: calc(84 * var(--u))`（812 高的屏上离底 64px）—— 正好被压住。
  *
  * 抬法是加 `margin-bottom` 而**不是重写 `bottom`**：门自己那个 bottom 有两档
  * （横屏 84u、竖屏 `env(safe-area-inset-bottom) + 54m`），重写就得把两档都抄一遍，
  * 抄漏一档键就会掉到刘海机的手势条底下。margin 只是在原位之上再加一截 ——
- * 加的正是 `--jk-room`（room() 现量现写的状态栏实高，展开/收起/折行都算在内）。
- * 状态栏藏起来时那个变量连同标志一起撤掉，`var(--jk-room, 0px)` 退回 0，键回原位。
+ * 加的正是 `--jk-room`（room() 现量现写的状态栏实高）。
+ *
+ * **R25 起不再限窄屏**：药丸能被长按拖到任意一条边，宽屏也可能被拖到底部压住这枚键。
+ * 而 `--jk-room` 现在只在状态栏**真的贴着底部**时才写（见 MiniPlayer 的 room()），
+ * 所以默认情形（门上药丸在顶部）这条声明算出来就是 0，与从前逐像素一致。
  */
-@media (max-width: 40rem) {
-  [data-portal] .go {
-    margin-bottom: var(--jk-room, 0px);
+[data-portal] .go {
+  margin-bottom: var(--jk-room, 0px);
+}
+
+/**
+ * 门上状态栏的默认位置。R25 定在左上角／竖屏上端中部，**R27 站主改成「中间下部」**
+ * （原话「把启动页的药丸放在中间下部」）—— 横竖屏统一：水平居中、贴底。
+ *
+ * 默认位置用 CSS 而不是脚本：首帧就在位，不会先在别处闪一下再跳过来。
+ * 脚本只在**用户长按拖过之后**用 `.is-placed` 覆盖它（见文件末尾）。
+ *
+ * 居中用 `left/right: 0 + margin-inline: auto` 而不是 `translateX(-50%)`：
+ * transform 要留给拖动与将来的动效，占了它处处都得叠加。
+ * 贴底那一档带上 `env(safe-area-inset-bottom)`，刘海机上不会压在手势条底下；
+ * 而药丸贴底会让 room() 写出 `--jk-room`，于是进站键自动抬到它上面（实测过）。
+ */
+[data-portal] .jk-mini {
+  top: auto;
+  bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+}
+
+/**
+ * 拖过之后的位置（R25）。`--jk-x/--jk-y` 由 MiniPlayer 的 place() 现算现写，
+ * 存的却是「贴哪条边 + 沿边的比例」—— 所以转屏、改窗口大小、地址栏收起都不会把它甩到屏外。
+ *
+ * **这一段必须留在文件最后**：它与上面 `[data-portal] .jk-mini` 特异度相同（都是 0,2,0），
+ * 靠源码顺序取胜。挪到前面去，门上就再也拖不动了。
+ */
+.jk-mini.is-placed {
+  top: var(--jk-y);
+  left: var(--jk-x);
+  right: auto;
+  bottom: auto;
+  margin-inline: 0;
+  /* 宽度得显式给回来：`right: auto` 之后窄屏那条 `width: auto` 会让展开态缩成内容宽
+     （实测 375 屏上 343 → 258，进度条与歌词跟着一起变窄）。20rem 这一档与药丸、
+     与宽屏默认值都是同一个数，所以拖过之后不会看出宽度变过。 */
+  width: min(20rem, calc(100vw - var(--sp-4) * 2));
+}
+
+/* 吸附态是个例外：它就该是内容宽的一枚圆。这条必须排在 `.is-placed` 之后 ——
+   两者特异度相同（0,2,0），靠源码顺序压过上面那句 width。 */
+.jk-mini.is-dock {
+  width: max-content;
+}
+
+/* 正在拖：托起来一点。`touch-action` 不在这儿 —— 它必须在手指落下前就是 none，
+   写在这里等于没写（见 .jk-mini__card 那段注释） */
+.jk-mini.is-drag {
+  cursor: grabbing;
+}
+
+.jk-mini.is-drag .jk-mini__card {
+  transform: scale(1.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 26px 60px -16px rgba(0, 0, 0, 0.78);
+}
+
+/* 拖动是指针能力，动效可有可无 —— 减少动态偏好下把那一下放大也去掉 */
+@media (prefers-reduced-motion: reduce) {
+  .jk-mini.is-drag .jk-mini__card {
+    transform: none;
   }
 }
