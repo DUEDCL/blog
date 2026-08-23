@@ -41,14 +41,11 @@ export default defineConfig({
       rehypePlugins: [rehypeKatex],
     }),
     shikiConfig: {
-      // 双主题：随深浅色切换，无需运行时 JS 重新高亮
-      themes: {
-        light: 'github-light',
-        dark: 'github-dark',
-      },
-      // 关键：false 时两套颜色都以 CSS 变量输出（--shiki-light / --shiki-dark），
-      // 不写死行内色。默认值 'light' 会把浅色写进 style，深色优先的站点会错。
-      defaultColor: false,
+      /* 单主题（R31 砍掉浅色之后）：从前是双主题 + `defaultColor: false`，两套颜色都以
+         CSS 变量输出、再由 global.css 里两条 `!important` 规则按 `[data-theme]` 切。
+         浅色档没了，那两条规则也删了 —— 双主题只会让每个 code 块多带一份用不上的
+         `--shiki-light-*`。改成单主题后 Shiki 直接写行内色，产物更小。 */
+      theme: 'github-dark',
       wrap: true,
     },
   },

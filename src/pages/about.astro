@@ -97,22 +97,13 @@ const cards = [
 ].filter(Boolean) as Card[];
 ---
 
-<BaseLayout title="关于" description={`关于 ${SITE_TITLE}`} width="prose">
-  <header class="head glass rise rise-1">
-    <h1 class="title">关于</h1>
-  </header>
-
-  <div class="prose glass rise rise-2">
-    <p>还没想好怎么介绍自己。想好了会写在这里。</p>
-
-    <h2>这个站怎么搭的</h2>
-    <p>
-      静态站，用 <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> 生成，
-      托管在 Cloudflare Workers 的静态资源模式上，改完内容在本地跑一条命令部署。
-      文章就是仓库里的 Markdown 文件。全站不引用境外 CDN 资源，字体随构建产物一起分发。
-    </p>
-
-    <h2>名片</h2>
+<BaseLayout title="名片" description={`联系 ${SITE_TITLE}`} width="prose">
+  {/* R29：这一页原先是「关于」—— 一张页头卡 + 一句「还没想好怎么介绍自己」+ 一段
+      「这个站怎么搭的」。站主圈掉了那三样（原话「将图示圈起来的地方全部删掉，添加『名片』栏」），
+      于是这一页只剩名片与「别处」，页面本身就是名片：名片那一节因此从 h2 升成 h1
+      （一页只能有一个 h1，而页头卡已经没了），顶栏也多了一项「名片」指到这儿。 */}
+  <div class="prose glass rise rise-1">
+    <h1 class="title">名片</h1>
     {cards.length > 0 ? (
       <ul class="cards">
         {cards.map((c) => (
@@ -301,21 +292,18 @@ const cards = [
 </script>
 
 <style>
-  .head {
+  .prose {
     padding: var(--sp-8);
     border-radius: var(--r-xl);
   }
 
+  /* 页头卡删掉之后，这一页的标题就是名片那一行（h1）。字号仍按页头那一档给 ——
+     它现在是整页唯一的标题，压成 h2 的大小会显得这一页没有头 */
   .title {
+    margin-top: 0;
     font-size: var(--text-3xl);
     font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.02em;
-  }
-
-  .prose {
-    margin-top: var(--sp-6);
-    padding: var(--sp-8);
-    border-radius: var(--r-xl);
   }
 
   /* 玻璃面板里首个标题不需要额外顶部间距 */
@@ -359,6 +347,9 @@ const cards = [
      现在码不再是一张图，而是一块**遮罩**：webp 的 alpha 通道当 mask，颜色由
      `background-color: var(--ink)` 给。于是模块之间是真透明（卡片玻璃与背后的光晕
      直接透出来），码的颜色跟着主题走，深色主题下是亮模块、浅色主题下是墨模块。
+     **R31 之后浅色主题没了，所以这里恒定是「亮模块 / 暗底」的反相码** —— 下面那张实测表的
+     浅色两行从此只是历史记录，真正生效的是「深色·反相」那两行，而「不试反转的扫码器
+     一个尺寸都读不出」这条风险因此变成常态，灯箱里那颗「加白底」的退路更要留着。
 
      代价必须写清楚：深色主题下这是**反相码**（亮模块／暗底），解码器要自己试一次反转。
      实测（jsQR，把遮罩涂成 --ink 再合成到卡片玻璃的实测底色上，四个尺寸）：
@@ -584,7 +575,6 @@ const cards = [
   }
 
   @media (max-width: 40rem) {
-    .head,
     .prose {
       padding: var(--sp-6);
     }

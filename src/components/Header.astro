@@ -1,7 +1,6 @@
 ---
 import { Image } from 'astro:assets';
 import { SITE_TITLE, NAV } from '../consts';
-import ThemeToggle from './ThemeToggle.astro';
 import avatar from '../assets/avatar.jpg';
 
 const path = Astro.url.pathname;
@@ -15,12 +14,13 @@ function isCurrent(href: string) {
 <header class="site-header" id="site-header">
   <div class="wrap">
     <div class="bar glass">
-      {/* 品牌位是两个独立链接，不是一个：头像 → 关于，站名 → 首页（R12）。
-          「关于」从 NAV 摘掉后，头像是它唯一的入口；而下面那段 nav 又把首页那项滤掉了，
-          所以站名必须自己承担回首页 —— 合成一个 <a> 就等于顶栏没有回首页的入口。
+      {/* 品牌位是两个独立链接，不是一个：头像 → 名片页，站名 → 首页（R12）。
+          R29 起「名片」在 NAV 里也有一项，所以头像不再是那一页唯一的入口；
+          但站名必须自己承担回首页 —— 合成一个 <a> 就等于顶栏没有回首页的入口
+          （下面那段 nav 把首页那项滤掉了）。
           R14 阶段⑥ 起首页是 /home（根路径让给了起始页），这里跟着改。 */}
       <div class="brand">
-        <a class="brand__face" href="/about" aria-label={`关于 ${SITE_TITLE}`}>
+        <a class="brand__face" href="/about" aria-label={`${SITE_TITLE} 的名片`}>
           <Image
             src={avatar}
             alt=""
@@ -48,8 +48,8 @@ function isCurrent(href: string) {
           ))
         }
       </nav>
-
-      <ThemeToggle />
+      {/* R31 之前这儿还有一枚深浅色切换键。浅色主题整个砍掉了，键也跟着删 ——
+          `.brand` 的 `margin-right: auto` 仍然把导航推到右侧，少一项不用改布局。 */}
     </div>
   </div>
 </header>

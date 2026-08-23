@@ -3,6 +3,11 @@
    方向：深色为基底，视口底层铺固定的彩色光晕，内容浮在其上的玻璃面板里。
    关键前提：backdrop-filter 在纯色背景上完全看不出效果，必须有可折射的底层。
    中文走系统字体栈（零加载成本），西文与数字用自托管 Fraunces / IBM Plex Mono。
+
+   **R31 起本站只有深色**（站主原话「彻底砍掉浅色状态，只保留目前的黑色状态」）。
+   于是这里没有第二套色板、没有 `[data-theme]` 选择器、没有主题切换键，也不看
+   `prefers-color-scheme` —— `color-scheme: dark` 一处定妆，表单控件与滚动条跟着走。
+   起始页（门）本来就只有深色，两边从此是同一个方向。
    ========================================================================== */
 
 :root {
@@ -103,7 +108,7 @@
      压在 --sand-970 上对比度 9.4:1。 */
   --brass: #c4ad97;
   --brass-lit: #dcc9b4;
-  --brass-deep: #6b573f; /* 同色相的深档，浅色主题用 */
+  --brass-deep: #6b573f; /* 同色相的深档。R31 砍掉浅色主题后只剩一个用户：纸底二维码上的悬停色 */
 
   /* --- 颜色：深色（默认） -----------------------------------------------
      底色取 --sand-970 而不是 --sand-990：屏幕上占 72% 面积的是 #080807，
@@ -133,8 +138,8 @@
   --glass-border-lit: rgba(251, 251, 251, 0.28);
   --glass-blur: 20px;
   --glass-saturate: 180%;
-  /* 玻璃后方的提亮量。深色下不需要（半透明本身就在提亮），
-     浅色下是让玻璃从浅底里「浮」出来的关键手段之一 */
+  /* 玻璃后方的提亮量。深色下不需要 —— 半透明本身就在提亮。
+     留着这个变量是因为 player.css 的门上那份 token 也钉了它，两处要对齐 */
   --glass-brightness: 100%;
   --glass-fallback: #14130f; /* 不支持 backdrop-filter 时的不透明底 */
 
@@ -157,61 +162,6 @@
   color-scheme: dark;
 }
 
-/* --- 颜色：浅色 --------------------------------------------------------- */
-/* 起始页只有深色，所以浅色没有可直接对照的实测值。做法是把同一条阶梯反过来
-   用：底色取亮端、文字取暗端 —— 浅色不是另一套配色，而是同一套的另一头。
-   关键约束同样是「饱和度压低」：实测亮端（门洞光核 #d7d6d5）饱和度只有 2.6%，
-   所以浅色底也必须接近中性。上一版做成暖米白（S=11%）就偏黄了。 */
-:root[data-theme='light'] {
-  /* 不用纯白：光晕需要可见空间，纯白会把它整个吃掉。r−b 只留 3 —— 一点点暖，
-     不到能被认出「米色」的程度 */
-  --paper: #eae9e7;
-  --paper-raised: #f6f5f4;
-  --paper-sunken: var(--sand-50); /* 实测门洞光核，正好是浅色的最暗底 */
-  --ink: var(--sand-900);
-  --ink-soft: var(--sand-700);
-  --ink-faint: var(--sand-500); /* 9.1:1，浅底上比深底更容易做够对比 */
-  /* 描边用暖黑而不是冷蓝黑 */
-  --rule: rgba(19, 17, 16, 0.13);
-  --rule-strong: rgba(19, 17, 16, 0.28);
-
-  /* 同一个色相（H≈30°）压到深档，在 --paper 上 5.7:1 */
-  --seal: var(--brass-deep);
-  --seal-hover: #4f3f2c;
-  --seal-wash: rgba(107, 87, 63, 0.1);
-
-  /* 浅色玻璃的构造与深色相反 —— 这是之前「白色主题下看不出玻璃」的根因：
-     深色靠半透明「提亮」，亮描边压在深底上自然可见；
-     浅色下亮描边压在浅底上等于没有描边，必须改成
-     「深色外描边 + 白色内高光 + 背后提亮」才有厚度感。 */
-  --glass-bg: rgba(255, 255, 254, 0.44);
-  --glass-bg-strong: rgba(255, 255, 254, 0.64);
-  --glass-border: rgba(34, 31, 27, 0.15); /* 暖深细描边，勾出玻璃边界 */
-  --glass-border-lit: rgba(255, 255, 255, 0.95); /* 左上受光高光边 */
-  --glass-blur: 26px;
-  --glass-saturate: 200%;
-  --glass-brightness: 110%;
-  --glass-fallback: #f6f5f4;
-
-  /* 光晕要比深色下更强：玻璃折射的是光晕，而浅底会把它冲淡。
-     色相与深色一致（中性白光源 + 低饱和暖褐雾／地面），只是加不透明度 */
-  --glow-1: rgba(255, 252, 246, 0.62); /* 中性偏暖的白光源 */
-  --glow-2: rgba(163, 138, 111, 0.26); /* 雾 */
-  --glow-3: rgba(110, 94, 79, 0.22); /* 地面 */
-  --noise-opacity: 0.035;
-
-  --shadow-lift: 0 1px 2px rgba(28, 24, 20, 0.07),
-    0 12px 32px -14px rgba(28, 24, 20, 0.22);
-  /* 内高光白线是浅色玻璃立体感的主要来源，要比深色下更强；
-     第二条 inset 沿整圈补一层薄白，模拟玻璃侧壁 */
-  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    0 2px 6px -1px rgba(28, 24, 20, 0.09),
-    0 18px 44px -16px rgba(28, 24, 20, 0.28);
-
-  color-scheme: light;
-}
-
 /* ==========================================================================
    基础重置
    ========================================================================== */
@@ -224,6 +174,9 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* 无前缀那条也要写（R30）：部分国产内核只认标准属性，认不出前缀版就会按
+     `auto` 把 APP 里设的字体大小应用到页面，rem 基准一变，玻璃卡与状态栏一起走形 */
+  text-size-adjust: 100%;
   scroll-behavior: smooth;
   /* 全站锚点跳转统一让出顶栏高度。放在 html 上一次管住所有页面，
      比每个页面自己写 scroll-margin-top 可靠 */
@@ -724,25 +677,6 @@ hr {
   text-transform: uppercase;
   color: var(--ink-faint);
   font-weight: 400;
-}
-
-/* Shiki 双主题：深色是默认主题，浅色模式下切回 light 变量，无需运行时重高亮 */
-.astro-code,
-.astro-code span {
-  color: var(--shiki-dark) !important;
-  background-color: var(--shiki-dark-bg) !important;
-  font-style: var(--shiki-dark-font-style) !important;
-  font-weight: var(--shiki-dark-font-weight) !important;
-  text-decoration: var(--shiki-dark-text-decoration) !important;
-}
-
-:root[data-theme='light'] .astro-code,
-:root[data-theme='light'] .astro-code span {
-  color: var(--shiki-light) !important;
-  background-color: var(--shiki-light-bg) !important;
-  font-style: var(--shiki-light-font-style) !important;
-  font-weight: var(--shiki-light-font-weight) !important;
-  text-decoration: var(--shiki-light-text-decoration) !important;
 }
 
 /* 数学公式：长公式允许横向滚动，不撑破版心 */

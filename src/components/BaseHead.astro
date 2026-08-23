@@ -28,6 +28,11 @@ const ogImage = image ? new URL(image, SITE_URL) : undefined;
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="generator" content={Astro.generator} />
+{/* 免转码标记（R30）。国内几个 App 内置浏览器会把页面送去「转码/省流」再返回，
+    排版会被彻底重排 —— 站主真机实测百度 App 里顶栏与正文叠在一起、正文变成一列一字。
+    挡不挡得住不由站点说话，但不写一定被转。门那页不走 BaseHead，同一对自己写了一份。 */}
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta name="applicable-device" content="pc,mobile" />
 
 <title>{fullTitle}</title>
 <meta name="description" content={description} />
@@ -59,11 +64,12 @@ const ogImage = image ? new URL(image, SITE_URL) : undefined;
 <meta name="twitter:description" content={description} />
 {ogImage && <meta name="twitter:image" content={ogImage} />}
 
-{/* 移动端浏览器地址栏跟随主题，深色下不会露出一条白边 */}
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#050505" />
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eae9e7" />
+{/* 移动端浏览器地址栏跟随页面底色，不会露出一条白边。
+    R31 起只有一条：浅色主题砍掉了，没有第二档要跟。 */}
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#050505" />
 
-{/* 两个 <html> 属性（data-theme / data-js）在样式加载前同步确定，避免闪烁。
+{/* `<html data-js>` 在样式加载前同步确定，避免闪烁（R31 之前这里还有 data-theme）。
     脚本本体在 ThemeBoot.astro —— 起始页不走 BaseLayout，得自己引同一个组件，
     而 SPA 导航按脚本 textContent 逐字去重，两处必须一模一样才只跑一次。 */}
 <ThemeBoot />

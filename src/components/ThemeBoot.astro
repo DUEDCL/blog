@@ -1,8 +1,11 @@
 ---
 /**
- * 首屏定妆：在样式生效之前把 `<html>` 的两个属性定下来，避免闪烁。
- *   - data-theme：用户选的深浅色（本站默认深色）
+ * 首屏定妆：在样式生效之前把 `<html>` 上那个属性定下来。
  *   - data-js：有 JS 就打开渐进增强的那一半（/music 靠它决定露唱片机还是原生 <audio>）
+ *
+ * **R31 之前这里还管 data-theme**（读 localStorage、退回 `prefers-color-scheme`）。
+ * 站主那一轮把浅色主题整个砍掉了，全站只剩深色，于是主题那一半连同切换键一起删了 ——
+ * 深色现在由 global.css 的 `color-scheme: dark` 一处定妆，不需要运行期插手。
  *
  * 单独抽成组件、而不是在两个地方各写一份，是因为 Astro 的 SPA 导航按
  * **脚本 textContent 逐字去重**（`deselectScripts` → `detectScriptExecuted`）：
@@ -16,7 +19,7 @@
  *     也就是**最常见的首屏**；少了这一份，从门里进正站时属性要等新页脚本跑起来才补上。
  *
  * 为什么还要 `astro:after-swap` 那一半：换页时 Astro 用**新文档的 `<html>` 属性**
- * 覆盖当前的（`swapRootAttributes` 先把现有属性全删再套新的），而这两个属性是运行期
+ * 覆盖当前的（`swapRootAttributes` 先把现有属性全删再套新的），而这个属性是运行期
  * 写上去的、静态产物里没有，所以每次 swap 都会丢。after-swap 在换页后、paint 之前触发，
  * 在那儿重设不会闪。
  */
@@ -25,18 +28,7 @@
 <script is:inline>
   (function () {
     function paint() {
-      var root = document.documentElement;
-      try {
-        var stored = localStorage.getItem('theme');
-        root.dataset.theme =
-          stored ||
-          (window.matchMedia('(prefers-color-scheme: light)').matches
-            ? 'light'
-            : 'dark');
-      } catch (e) {
-        root.dataset.theme = 'dark';
-      }
-      root.dataset.js = '1';
+      document.documentElement.dataset.js = '1';
     }
     paint();
     document.addEventListener('astro:after-swap', paint);

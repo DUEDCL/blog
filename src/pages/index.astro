@@ -54,10 +54,10 @@
  *      （这条改掉了 R17「这一页不出现任何别的词」—— 曲名、歌词、时间都是词，是站主本轮的决定。）
  *      门不引 global.css，状态栏要的那批 token 由 player.css 末尾的 `[data-portal] .jk-mini`
  *      就地补上；音乐本身跟它露不露脸无关（那个 `<audio>` 早被挪到 `<html>` 底下了）。
- *   3. `<ThemeBoot />` —— data-theme / data-js 两个属性。换页时 Astro 用新文档的
- *      `<html>` 属性覆盖当前的，这两个运行期属性每次 swap 都会丢；由它的
+ *   3. `<ThemeBoot />` —— 现在只管一个 `data-js` 属性（R31 砍掉浅色主题之后，
+ *      它原来管的 `data-theme` 连同切换键一起删了）。换页时 Astro 用新文档的
+ *      `<html>` 属性覆盖当前的，这个运行期属性每次 swap 都会丢；由它的
  *      `astro:after-swap` 补回。这一页现在是最常见的首屏，所以这一份不能省。
- *      属性本身不影响这道门的观感（本页 CSS 里没有任何 [data-theme] 规则）。
  *
  * 单位系统是规格的核心，改任何数值前先读懂它：
  *   参考画布 1487 × 1058。--u = 视口高 / 1058，即「1 设计像素锁定在高度上」，
@@ -113,6 +113,12 @@ const ENTER = '/home';
     />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#050505" />
+    {/* 国内几个 App 内置浏览器会把页面送去「转码/省流」再返回，排版会被彻底重排
+        （站主真机实测：百度 App 里顶栏与正文叠在一起、正文变成一列一字）。
+        这两条是那类代理约定的免转码标记 —— 挡不挡得住不由站点说话，但不写一定被转。
+        R30 加。同一对也写进了 BaseHead（正站那些页）。 */}
+    <meta http-equiv="Cache-Control" content="no-transform" />
+    <meta name="applicable-device" content="pc,mobile" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     {/* 这一页不走 BaseHead，canonical 只能自己写死。阶段⑥ 之后是根路径，
         不再是 /start（那个地址现在是一张跳到这儿的 meta-refresh 页）。 */}
@@ -120,7 +126,7 @@ const ENTER = '/home';
 
     {/* 全站 SPA 导航。按页注入 —— 这一页没有它，点进正站就是整页刷新，音乐会断 */}
     <ClientRouter />
-    {/* data-theme / data-js。与 BaseHead 用的是同一个组件，脚本逐字相同，全站只跑一次 */}
+    {/* data-js。与 BaseHead 用的是同一个组件，脚本逐字相同，全站只跑一次 */}
     <ThemeBoot />
   </head>
 
@@ -135,20 +141,30 @@ const ENTER = '/home';
     <div class="stage" id="stage" data-enter={ENTER}>
       {/* ① 背景层：视频 + 两道渐变遮罩（遮罩在 .plate::after 上，见样式） */}
       <div class="plate">
+        {/* 视频源**运行期才挂**（R30）。DOM 里不留 `<source>`，是为了国内那几个内核：
+            百度 App 会把页面里的媒体标签嗅探成「检测到 3 个资源／点击存网盘」，QQ/微信的 X5
+            则可能把 `<video>` 当页面主视频接管、强制全屏播放 —— 站主真机上两样都遇到了。
+            少了静态 src，这类嗅探就少了抓手；`x5-*` 那几个属性是 X5 的同层播放开关，
+            明确告诉它「这是个内嵌装饰视频，别接管」。
+            代价：没有 JS 时门上只剩 poster 那张静图 —— 视频是装饰，静图也说得通。 */}
         <video
           class="plate-video"
           autoplay
           muted
           loop
           playsinline
+          webkit-playsinline
+          x5-playsinline
+          x5-video-player-type="h5"
+          x5-video-player-fullscreen="false"
+          disablepictureinpicture
+          controlslist="nodownload noplaybackrate noremoteplayback"
           preload="auto"
           poster="/video/portal-poster.webp"
           aria-hidden="true"
           tabindex="-1"
-        >
-          <source src="/video/portal.webm" type="video/webm" />
-          <source src="/video/portal.mp4" type="video/mp4" />
-        </video>
+          data-webm="/video/portal.webm"
+          data-mp4="/video/portal.mp4"></video>
       </div>
 
       {/* 前景层：标识、题词与提示装在一个不占事件的壳里。
@@ -313,9 +329,29 @@ const ENTER = '/home';
         const dw = iw * s;
         const dh = ih * s;
         // 这两条规则里 object-position 只写百分比与 center，计算值必然是两个百分数
-        const [px, py] = getComputedStyle(v).objectPosition.split(' ').map(parseFloat);
-        const ox = box.left + (box.width - dw) * ((px || 0) / 100);
-        const oy = box.top + (box.height - dh) * ((py || 0) / 100);
+        /* object-position 的计算值在各家内核里不一定是百分数：Chrome 给「43% 50%」，
+           而有的国产内核原样回「43% center」甚至关键字。parseFloat 碰上关键字得 NaN，
+           落到 `|| 0` 就把画面按左上角算，门框光整块跑偏（R30 的报修「跳转后无亮光特效」
+           里有这一层）。所以关键字自己翻一遍，缺项按 50% 补。 */
+        const KEY: Record<string, number> = { left: 0, top: 0, center: 50, right: 100, bottom: 100 };
+        const pos = getComputedStyle(v).objectPosition.trim().split(/\s+/);
+        const at = (i: number, d: number) => {
+          const raw = pos[i] ?? '';
+          const n = raw in KEY ? KEY[raw] : parseFloat(raw);
+          return Number.isFinite(n) ? n : d;
+        };
+        const ox = box.left + (box.width - dw) * (at(0, 50) / 100);
+        const oy = box.top + (box.height - dh) * (at(1, 50) / 100);
+
+        /* 量崩了（取景框还没布局、或者上面那套换算被某个内核算成 0）就退回画面中央那一块 ——
+           宁可光的位置差一点，也不要「一点光都没有」 */
+        if (!(dw > 0 && dh > 0)) {
+          stage.style.setProperty('--door-l', '35vw');
+          stage.style.setProperty('--door-t', '30vh');
+          stage.style.setProperty('--door-w', '30vw');
+          stage.style.setProperty('--door-h', '40vh');
+          return;
+        }
 
         stage.style.setProperty('--door-l', `${ox + DOOR.x0 * dw}px`);
         stage.style.setProperty('--door-t', `${oy + DOOR.y0 * dh}px`);
@@ -339,6 +375,24 @@ const ENTER = '/home';
         setTimeout(() => navigate(to), 620);
       }
 
+      /**
+       * 给背景视频挂 src（R30）。模板里刻意不写 `<source>`（见那段注释），所以每次落地
+       * 都要现挂一次 —— SPA 回到门时 `.plate-video` 是个新节点。
+       * `canPlayType` 选源：webm 更小，放不了就退 mp4。挂完手动 `play()`：
+       * `autoplay` 属性只在有 src 时才生效，晚挂的 src 要自己踢一脚（muted 的视频不会被拒）。
+       */
+      function vid() {
+        const v = document.querySelector<HTMLVideoElement>('.plate-video');
+        if (!v || v.currentSrc || v.src) return;
+        const webm = v.dataset.webm || '';
+        const mp4 = v.dataset.mp4 || '';
+        const src = webm && v.canPlayType('video/webm') ? webm : mp4;
+        if (!src) return;
+        v.src = src;
+        v.load();
+        void v.play().catch(() => {});
+      }
+
       /** 把引用接到当前这一页的舞台上。门不在也要跑 —— 那一次负责把 stage 清成 null */
       function wire() {
         const el = document.getElementById('stage');
@@ -358,8 +412,11 @@ const ENTER = '/home';
          而这一页压着一段视频，load 会被推到视频可播之后；等它才绑会漏掉早到的那一下点击。
          导航过来的那些次则由下面这个监听负责（脚本本身只跑一次）。 */
       wire();
+      vid();
       document.addEventListener('astro:page-load', () => {
         wire();
+        // 背景视频的 src 是运行期挂的，每次落地都要现挂（新节点上没有）
+        vid();
         // 落地就试一次自动播。攒够 MEI 的浏览器会真的响；被拒就安静地停在暂停态，
         // 状态栏照旧显示这一首，等第一个手势
         kick();
@@ -511,6 +568,15 @@ const ENTER = '/home';
     /* 这一页是「幕」，不是文档：任何方向都不给滚动 */
     overflow: hidden;
     background: var(--stage);
+    /**
+     * 不许 WebView 自作主张放大字号（R30）。微信／QQ 的 X5 与部分国产内核会把用户在
+     * APP 里设的「字体大小」按 `text-size-adjust: auto` 应用到页面上 —— 那会把
+     * rem 基准整体撑大，这一页所有 `calc(N * var(--u))` 的排版与药丸的宽高一起走形
+     * （站主真机在 QQ 里遇到的畸形播放栏就是这个形状）。
+     * global.css 里有同一条，但门不引它，所以这里必须自己写一份。
+     */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {

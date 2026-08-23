@@ -82,10 +82,11 @@ import '../styles/player.css';
         >
       </button>
     </div>
-    {/* 正在唱的那一行。刻意带上 `jk-line` —— player.css 里 `.jk-line.is-on .jk-w`
-        那套逐字渐变、还有减少动态偏好下的退化规则，舞台与这里就此共用一份，
-        不另写第二套（WordRun 往宿主上加的也正是 `is-on`） */}
-    <p class="jk-mini__line jk-line" data-line></p>
+    {/* 正在唱的那一行。套两层：外层是固定宽的窗口（截断／滚动都由它管），内层才是
+        WordRun 的宿主 —— `jk-line` 必须挂在**内层**，player.css 里那套逐字渐变的选择器
+        是 `.jk-line.is-on .jk-w`，而 WordRun 往宿主上加的正是 `is-on`。
+        长歌词装不下时由脚本量出溢出量，内层就地滚动（R29） */}
+    <p class="jk-mini__line"><span class="jk-mini__line-i jk-line" data-line></span></p>
 
     <div class="jk-mini__seek">
       <span class="jk-mini__time" data-cur>0:00</span>
@@ -208,6 +209,7 @@ import '../styles/player.css';
     const titleBox = pick('.jk-mini__t');
     const sub = pick('[data-sub]');
     const line = pick('[data-line]');
+    const lineBox = pick('.jk-mini__line');
     const cur = pick('[data-cur]');
     const durEl = pick('[data-dur]');
     const seek = pick<HTMLInputElement>('[data-seek]');
@@ -393,17 +395,43 @@ import '../styles/player.css';
     });
 
     /**
-     * 长歌名在固定框里跑马灯（R27）。只有真的装不下才滚 —— 短歌名一动不动，
-     * 不然状态栏会永远在晃。溢出量写进 `--jk-over` 交给 CSS 那条 keyframes；
-     * 量的是内层那个 inline-block 的实际宽度，它不受外层 `overflow: hidden` 截断。
+     * 跑马灯（R27 只管歌名，R29 加上歌词、并把速度改成恒定的）。只有真的装不下才滚 ——
+     * 短歌名一动不动，不然状态栏会永远在晃。
      *
-     * 三种时候要重量：换曲（sync）、折叠态变化（药丸与展开态框宽不同）、改窗口大小。
+     * **速度恒定是这一版的重点**：从前时长写死 9s，路程越长越慢，长歌名慢得像没动
+     * （站主的原话是「滚动太慢了」）。现在时长 = 路程 ÷ 48px/s，再除 0.8 是因为
+     * keyframes 两头各留了一成的停顿（见 player.css 的 jk-marquee）。下限 1.4s：
+     * 只溢出十几个像素时别抖一下就完事。
+     *
+     * 量的是内层那个 inline-block 的实际宽度（不受外层 `overflow: hidden` 截断），
+     * 减的是外层的**内容宽** —— `clientWidth` 含 padding，而药丸态的歌词框有一段
+     * 让开封面的 padding-left，不减掉就会少算 48px、该滚的不滚。
+     *
+     * 同一段文字重复调用不重挂类：那会让动画每次 sync 都从头开始，看着像卡住。
      */
-    const marquee = () => {
-      const over = Math.round(title.getBoundingClientRect().width - titleBox.clientWidth);
-      titleBox.classList.toggle('is-marquee', over > 2);
-      titleBox.style.setProperty('--jk-over', Math.max(0, over) + 'px');
+    const SPEED = 48;
+    const flow = (box: HTMLElement, inner: HTMLElement) => {
+      const cs = getComputedStyle(box);
+      const room =
+        box.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+      const over = Math.round(inner.getBoundingClientRect().width - room);
+      const next = Math.max(0, over) + 'px';
+      const same = box.style.getPropertyValue('--jk-over') === next;
+      if (over <= 2) {
+        box.classList.remove('is-marquee');
+        box.style.setProperty('--jk-over', '0px');
+        return;
+      }
+      if (same && box.classList.contains('is-marquee')) return;
+      box.style.setProperty('--jk-over', next);
+      box.style.setProperty('--jk-dur', Math.max(1.4, over / SPEED / 0.8).toFixed(2) + 's');
+      // 换了内容就从头滚：摘类、强制回流、再挂回去
+      box.classList.remove('is-marquee');
+      void box.offsetWidth;
+      box.classList.add('is-marquee');
     };
+    const marquee = () => flow(titleBox, title);
+    const marqueeLine = () => flow(lineBox, line);
 
     const view: View = {
       sync() {
@@ -446,6 +474,8 @@ import '../styles/player.css';
             // 前奏与间奏给个音符占位；这首压根没歌词就留空（高度由 CSS 撑住，不跳）
             line.textContent = now().lines.length ? '♪' : '';
           }
+          // 换了一行就重量一次：这一行装不下就从头滚（R29）
+          marqueeLine();
         }
         // 没挂在任何行上时 paint 是空操作，所以不必再判一次
         run.paint(p);
@@ -612,9 +642,10 @@ import '../styles/player.css';
     const setFold = (on: boolean) => {
       root.classList.toggle('is-fold', on);
       paintLabels();
-      // 尺寸变了：贴边的位置要跟着重算，曲名框宽变了要重判跑马灯，页脚那段余量也要重量
+      // 尺寸变了：贴边的位置要跟着重算，两个跑马灯的框宽都变了要重判，页脚那段余量也要重量
       applyPos();
       marquee();
+      marqueeLine();
       room();
     };
 
@@ -812,10 +843,11 @@ import '../styles/player.css';
     };
     reflow();
     document.addEventListener('astro:after-swap', reflow);
-    // 转屏／改窗口大小：贴边的位置按存下来的比例重算，跑马灯与余量也重判一次
+    // 转屏／改窗口大小：贴边的位置按存下来的比例重算，两个跑马灯与余量也重判一次
     addEventListener('resize', () => {
       applyPos();
       marquee();
+      marqueeLine();
       room();
     });
   }
