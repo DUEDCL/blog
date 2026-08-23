@@ -344,9 +344,9 @@ const cards = [
      我想要的是透明打底的二维码，且不影响扫描」—— 第三版那块香槟玻璃仍然是「一块亮面」，
      不是他要的东西。
 
-     现在码不再是一张图，而是一块**遮罩**：webp 的 alpha 通道当 mask，颜色由
-     `background-color: var(--ink)` 给。于是模块之间是真透明（卡片玻璃与背后的光晕
-     直接透出来），码的颜色跟着主题走，深色主题下是亮模块、浅色主题下是墨模块。
+     现在码是一张「墨模块 + 透明底」的 webp，靠 `filter: invert(1)` 翻成亮模块（R32 从
+     CSS mask 换成 filter，理由见下面那条规则）。于是模块之间是真透明（卡片玻璃与背后的
+     光晕直接透出来），模块本身是纯白。
      **R31 之后浅色主题没了，所以这里恒定是「亮模块 / 暗底」的反相码** —— 下面那张实测表的
      浅色两行从此只是历史记录，真正生效的是「深色·反相」那两行，而「不试反转的扫码器
      一个尺寸都读不出」这条风险因此变成常态，灯箱里那颗「加白底」的退路更要留着。
@@ -378,14 +378,7 @@ const cards = [
   }
 
   /* 码 = 遮罩 + 一个颜色。缩略图与灯箱共用这一份。
-     颜色走 --qr-color 而不是直接 var(--ink)：加纸底的那张要从父层把码翻成墨色，
-     自定义属性能继承，background-color 不能。默认值挂在祖先（.cards / .lb__figure）上
-     而不是元素自己身上 —— 挂在元素上，父层 --paper 那份就被自己的声明盖掉了。 */
-  .cards,
-  .lb__figure {
-    --qr-color: var(--ink);
-  }
-
+     纸底那张（抖音）不翻转，它要的就是「墨模块 + 白底」。 */
   /* 纸底：只有抖音那张有（实测非白底扫不出，见 Card.paper）。
      一处配方管两处，缩略图与放大后只差内衬和圆角。 */
   .card__qrbox {
@@ -396,7 +389,6 @@ const cards = [
   .card__qrbox--paper,
   .lb__stage--paper {
     background-color: var(--sand-0);
-    --qr-color: var(--sand-900);
   }
 
   .card__qrbox--paper {
@@ -404,14 +396,37 @@ const cards = [
     border-radius: var(--r-sm);
   }
 
+  /* 码 = 一张「墨模块 + 透明底」的 webp，非纸底那张用 `filter: invert(1)` 翻成亮模块。
+     R32 从 CSS mask 换成 filter：站主真机在 QQ 的 X5 内核里看到二维码是一块空方块 ——
+     那个内核不把 webp 当 mask 源渲染，而 `@supports not (mask-image: url())` 又通得过，
+     兜底压根不触发。`filter` 比 `mask` 老得多、也没有「声称支持却不画」的毛病。
+     invert 不动 alpha，所以透明底还是透明的（模块变纯白，对比反而更高、更好扫）。
+     纸底那张（抖音）不翻：它要的就是「墨模块 + 白底」。 */
+  /* 翻不翻转走一个自定义属性，**不直接写 `filter: invert(1)`**：构建期的 CSS 压缩器
+     会把它改写成 `filter: invert()`（省掉默认值 1）—— 规范上等价，但正是要照顾的那些
+     老内核未必认这种省略写法，认不出就整条丢掉，码又变成深底上的深色块。
+     自定义属性的值不会被压缩器动，顺带纸底那张只要在父层把它改成 none 就行（继承）。 */
+  .cards,
+  .lb__figure {
+    --qr-flip: invert(1);
+  }
+
+  .card__qrbox--paper,
+  .lb__stage--paper {
+    --qr-flip: none;
+  }
+
   .card__qr,
   .lb__code {
     display: block;
     width: 100%;
     aspect-ratio: 1;
-    background-color: var(--qr-color);
-    -webkit-mask: var(--qr) center / contain no-repeat;
-    mask: var(--qr) center / contain no-repeat;
+    background-image: var(--qr);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    -webkit-filter: var(--qr-flip);
+    filter: var(--qr-flip);
   }
 
   .card__qr {
@@ -420,40 +435,17 @@ const cards = [
 
   /* 悬停时码本身泛铜色，替代原来那块板的抬升反馈。
      纸底那张要走深铜 —— 浅色的 --seal 压在白纸上几乎看不见。
-     两条都写在码元素自己身上：--qr-color 挂在祖先会被元素自身的声明盖掉，反过来不行。 */
+     （R32 起统一成「轻微提亮」，见下面那条。） */
   .card__qrbtn:hover .card__qr,
   .card__qrbtn:focus-visible .card__qr {
     transform: translateY(-1px);
   }
 
-  .card__qrbtn:hover .card__qrbox:not(.card__qrbox--paper) .card__qr,
-  .card__qrbtn:focus-visible .card__qrbox:not(.card__qrbox--paper) .card__qr {
-    --qr-color: var(--seal);
-  }
-
-  .card__qrbtn:hover .card__qrbox--paper .card__qr,
-  .card__qrbtn:focus-visible .card__qrbox--paper .card__qr {
-    --qr-color: var(--brass-deep);
-  }
-
-  /* mask 不支持时退回「图 + 纸底」的经典画法：宁可丑，也不能出现一个扫不出的码。
-     图本身就是墨色模块 + 透明底，衬到 --sand-0 上正好是暗模块／亮底。
-     这里在元素自己身上写 --qr-color，所以纸底那张从父层继承来的那份不会生效。 */
-  @supports not ((mask-image: url('/favicon.svg')) or (-webkit-mask-image: url('/favicon.svg'))) {
-    .card__qr,
-    .lb__code {
-      --qr-color: var(--sand-0);
-      background-image: var(--qr);
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-      border-radius: var(--r-sm);
-    }
-
-    .card__qrbtn:hover .card__qrbox .card__qr,
-    .card__qrbtn:focus-visible .card__qrbox .card__qr {
-      --qr-color: var(--sand-0);
-    }
+  /* 悬停的反馈从「码变铜色」换成「轻微提亮」（R32）：颜色现在由 filter 决定，
+     --qr-color 那套已经没有了。纸底那张也吃这一条，两处一致。 */
+  .card__qrbtn:hover .card__qr,
+  .card__qrbtn:focus-visible .card__qr {
+    opacity: 0.82;
   }
 
   /* 提示文字常显不隐 —— 触屏没有 hover，藏起来等于没有 */

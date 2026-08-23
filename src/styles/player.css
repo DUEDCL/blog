@@ -870,7 +870,10 @@
   padding: var(--sp-4);
   border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
-  background: var(--glass-bg-strong);
+  /* 底色分两层，与 global.css 的 .glass 同一个理由（R32）：X5 一类内核声称支持
+     backdrop-filter 却不渲染，只有白膜的话这张卡在那些浏览器里就是透明的。 */
+  background-color: var(--glass-under, rgba(7, 7, 6, 0.55));
+  background-image: linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong));
   /* 长按要拖动它（R25），所以不许长按选中文字、也不许 iOS 弹那个「拷贝/查询」气泡 */
   user-select: none;
   -webkit-user-select: none;
@@ -1091,6 +1094,10 @@
   min-height: 1.5em;
   font-size: var(--text-sm);
   line-height: 1.5;
+  /* 字体栈写全（R32）：真机上曾看到「个」被渲染成一个上箭头、行首还多出一个圆点，
+     那是字体回退挑到了图标字体。歌词是逐字 span，任何一个字回退错都很显眼。 */
+  font-family: var(--font-body);
+  list-style: none;
   cursor: default;
   /* 折行会让卡片变高，进而把整个悬浮窗顶起来。截断成一行 */
   overflow: hidden;
@@ -1378,6 +1385,13 @@
 
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, 'PingFang SC',
     monospace;
+  /* 门不引 global.css，这两个也得钉（R32）：
+     - `--glass-under` 是玻璃底下那层深底，少了它门上的药丸在 X5 上会是透明的；
+     - `--font-body` 钉死中文字体栈 —— 真机上曾看到药丸的歌词里「个」被渲染成一个箭头，
+       那是字体回退挑到了图标字体，把栈写全就没有回退的余地。 */
+  --glass-under: rgba(7, 7, 6, 0.55);
+  --font-body: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Source Han Sans SC', 'Noto Sans CJK SC', 'Heiti SC', sans-serif;
 }
 
 /**

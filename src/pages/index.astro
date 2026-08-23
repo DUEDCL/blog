@@ -376,21 +376,33 @@ const ENTER = '/home';
       }
 
       /**
-       * 给背景视频挂 src（R30）。模板里刻意不写 `<source>`（见那段注释），所以每次落地
-       * 都要现挂一次 —— SPA 回到门时 `.plate-video` 是个新节点。
-       * `canPlayType` 选源：webm 更小，放不了就退 mp4。挂完手动 `play()`：
-       * `autoplay` 属性只在有 src 时才生效，晚挂的 src 要自己踢一脚（muted 的视频不会被拒）。
+       * 给背景视频挂 src（R30 起是运行期挂，**R32 改成挂 blob**）。
+       *
+       * 为什么非得走 blob：站主真机反馈「百度依旧将首页识别为视频并播放」。上一轮把
+       * `<source>` 从 DOM 里删掉只挡住了静态嗅探 —— 那类 App 是浏览器本身，src 一挂上
+       * 它照样看得见一个 `https://…/portal.webm`，于是继续弹「检测到资源／存网盘」。
+       * `blob:` 地址只在本页面的生命周期内有效、拿出去下载不了，嗅探器没有可提供的东西。
+       *
+       * 代价小到可以忽略：那段 webm 只有 1 MB，而且下载期间门上显示的是 poster
+       * （与视频首帧同一张图），拉完才开始动。fetch 失败（离线、被拦）就退回直接挂 URL ——
+       * 宁可被嗅探，也不能让门变成一张静图。
        */
       function vid() {
         const v = document.querySelector<HTMLVideoElement>('.plate-video');
         if (!v || v.currentSrc || v.src) return;
         const webm = v.dataset.webm || '';
         const mp4 = v.dataset.mp4 || '';
-        const src = webm && v.canPlayType('video/webm') ? webm : mp4;
-        if (!src) return;
-        v.src = src;
-        v.load();
-        void v.play().catch(() => {});
+        const url = webm && v.canPlayType('video/webm') ? webm : mp4;
+        if (!url) return;
+        const go = (src: string) => {
+          v.src = src;
+          v.load();
+          void v.play().catch(() => {});
+        };
+        fetch(url)
+          .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+          .then((b) => go(URL.createObjectURL(b)))
+          .catch(() => go(url));
       }
 
       /** 把引用接到当前这一页的舞台上。门不在也要跑 —— 那一次负责把 stage 清成 null */

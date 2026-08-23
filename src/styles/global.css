@@ -138,6 +138,9 @@
   --glass-border-lit: rgba(251, 251, 251, 0.28);
   --glass-blur: 20px;
   --glass-saturate: 180%;
+  /* 玻璃底下那层半不透明的深底（R32）。X5 一类内核声称支持 backdrop-filter 却不渲染，
+     只靠白膜的话面板就是透明的（真机上顶栏与正文叠成一团）。这一层保证哪儿都读得清。 */
+  --glass-under: rgba(7, 7, 6, 0.55);
   /* 玻璃后方的提亮量。深色下不需要 —— 半透明本身就在提亮。
      留着这个变量是因为 player.css 的门上那份 token 也钉了它，两处要对齐 */
   --glass-brightness: 100%;
@@ -381,9 +384,22 @@ hr {
 }
 
 /* --- 玻璃面板 ----------------------------------------------------------- */
+/**
+ * 玻璃面板。**底色分两层**（R32）：`background-color` 是一层半不透明的深底，
+ * `background-image` 才是那层白膜。
+ *
+ * 为什么不能只有白膜：站主真机在 QQ 的内置浏览器（X5）里遇到「顶栏透明、名片卡的字
+ * 从它下面透上来叠成一团」—— 那个内核**声称支持 backdrop-filter**（`@supports` 通得过）
+ * 却不真的渲染，于是玻璃只剩 4.5% 不透明度的白膜，等于透明。原来那条
+ * `@supports not (backdrop-filter)` 的兜底压根不会触发。
+ *
+ * 加了这层深底之后，任何内核上玻璃都读得清；backdrop-filter 正常工作的浏览器上它只是
+ * 让面板稍微实一点 —— 用 0.55 而不是更高，就是在「哪儿都能读」与「还看得出是玻璃」之间取的值。
+ */
 .glass {
   position: relative;
-  background: var(--glass-bg);
+  background-color: var(--glass-under);
+  background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
     brightness(var(--glass-brightness));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
