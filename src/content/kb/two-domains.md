@@ -1,12 +1,10 @@
 ---
-# Claude 起草，事实核对过，口吻待沉麟重写。改完把 draft 去掉。
 question: 为什么有两个域名？duchenlin.eu.cc 我打不开是怎么回事？
 aliases:
   - 你的网站地址是哪个
   - eu.cc 那个域名打不开
   - 为什么访问不了你的网站
 topic: 这个站
-draft: true
 ---
 
 主域是 `duchenlin.top`，`duchenlin.eu.cc` 是备用入口，两个都绑在同一个 Worker 上，

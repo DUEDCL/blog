@@ -1,13 +1,10 @@
 ---
-# 这条是 Claude 起的草，内容是从仓库里核对过的事实，但口吻不是你的。
-# 留着当格式样板，等你按自己说话的方式重写一遍。
 question: 这个站是用什么做的？
 aliases:
   - 你的博客用什么技术栈
   - 网站是自己写的吗
   - 这个网站部署在哪
 topic: 这个站
-draft: true
 ---
 
 Astro 静态生成，Markdown 写作，构建出来的纯静态产物部署在 Cloudflare Workers 的

@@ -1,12 +1,10 @@
 ---
-# Claude 起草，事实核对过，口吻待沉麟重写。改完把 draft 去掉。
 question: 为什么部署在 Cloudflare Workers 而不是 Pages？
 aliases:
   - 站托管在哪
   - Workers 和 Pages 有什么区别
   - 为什么不用 Vercel 或者 Netlify
 topic: 这个站
-draft: true
 ---
 
 用的是 Workers 的静态资源模式 —— `wrangler.toml` 里只有 `[assets]`，没有 `main`，所以

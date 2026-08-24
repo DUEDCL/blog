@@ -1,12 +1,10 @@
 ---
-# Claude 起草，事实核对过，口吻待沉麟重写。改完把 draft 去掉。
 question: 这个毛玻璃效果是怎么做的？
 aliases:
   - 网站的视觉风格怎么实现的
   - backdrop-filter 没效果怎么办
   - 液态玻璃效果怎么写
 topic: 这个站
-draft: true
 ---
 
 关键不在 `backdrop-filter` 这个属性本身，在它的三个物理前提。当初做不出效果，问题全在

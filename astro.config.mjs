@@ -25,7 +25,10 @@ export default defineConfig({
     // 不再排除 /start：那一页现在就是站点门面（根路径），本该进 sitemap。
     // 排除它的旧理由（「一张全英文的入口幕，标题与本站无关」）在 R17 之后也不成立了 ——
     // 页面上现在只有中文：站名、题词。
-    sitemap(),
+    //
+    // /admin 排除：那是后台（R35）。「藏起来」的一半是不进 sitemap、不进 llms.txt、
+    // `_headers` 里给它配 noindex；另一半是登录。地址难猜不算保护，所以地址就用 /admin。
+    sitemap({ filter: (page) => !page.includes('/admin') }),
   ],
 
   image: {

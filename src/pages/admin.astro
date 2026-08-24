@@ -1,0 +1,424 @@
+---
+/**
+ * 后台 —— R20② 那把锁 ＋ 模型配置台（他 2026-08-24 要的「藏起来的后台管理页面，
+ * 可以实时更改模型配置并进行最小文本测试」）。
+ *
+ * **「藏起来」是怎么做到的**：不在 `NAV`、不在 `PORTALS`、不在页脚、不在 `/llms.txt`；
+ * sitemap 里排除（`astro.config.mjs`）；`public/_headers` 给它配了
+ * `X-Robots-Tag: noindex, nofollow` 与 `Cache-Control: no-store`。
+ * 但真正把它关住的是登录 —— **地址难猜不是安全边界**，所以地址就用最直白的 `/admin`。
+ *
+ * **这一页是公开可取的静态 HTML**，里面一个字的敏感内容都没有：
+ * 三个视图（加载中／登录框／控制台）全在这儿，但控制台里的值全部由登录后的 fetch 填。
+ * 这条约束来自 R20 那张表 —— HTML 走边缘缓存，而边缘缓存是共享的。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+/* 生成口令哈希的命令。写在这儿是为了他能直接复制 —— 明文口令只出现在他自己的终端里，
+   不进这个文件、不进 secret、不进任何日志。迭代数与 worker.ts 的校验必须一致。 */
+const HASH_CMD =
+  `node -e "const c=require('crypto');const s=c.randomBytes(16);` +
+  `const h=c.pbkdf2Sync(process.argv[1],s,10000,32,'sha256');` +
+  `console.log('pbkdf2$10000$'+s.toString('base64')+'$'+h.toString('base64'))" 你的口令`;
+---
+
+<BaseLayout title="后台" description="站点后台" width="prose">
+  <div class="prose glass rise rise-1">
+    <h1 class="title">后台</h1>
+
+    <p class="dim" data-view="load">正在看你有没有登录…</p>
+
+    <form class="box" data-view="login" hidden>
+      <p class="dim">这一页只有沉麟能进。</p>
+      <div class="row">
+        <input
+          class="in"
+          type="password"
+          data-pass
+          autocomplete="current-password"
+          placeholder="口令"
+          aria-label="口令"
+        />
+        <button class="key" type="submit">进去</button>
+      </div>
+      <p class="bad" data-err hidden></p>
+
+      <div class="note" data-noset hidden>
+        <p>还没设口令。在项目目录里跑这三条，跑完刷新这一页：</p>
+        <pre><code>{HASH_CMD}</code></pre>
+        <pre><code>npx wrangler secret put ADMIN_HASH</code></pre>
+        <pre><code>npx wrangler secret put ADMIN_SECRET</code></pre>
+        <p class="dim">
+          第一条把哈希打印出来（口令本身不会离开你的终端），第二条粘贴那串哈希，
+          第三条随便粘一串足够长的随机字符当 cookie 签名密钥。
+        </p>
+      </div>
+    </form>
+
+    <div data-view="panel" hidden>
+      <h2 class="sub">分身的模型</h2>
+      <p class="dim">
+        改完点保存，**下一次对话立刻生效**，不用重新部署。留空的项回落到 secret 里的默认值。
+      </p>
+
+      <label class="field">
+        <span class="lab">端点</span>
+        <input class="in" data-base placeholder="https://…/v1" aria-label="端点" />
+      </label>
+
+      <label class="field">
+        <span class="lab">模型（逗号分隔多个，按顺序试，第一个挂了自动换下一个）</span>
+        <input class="in" data-model placeholder="model-a, model-b" aria-label="模型" />
+      </label>
+
+      <label class="field">
+        <span class="lab">密钥 <em class="dim" data-keystate></em></span>
+        <input
+          class="in"
+          type="password"
+          data-key
+          autocomplete="off"
+          placeholder="留空＝不改"
+          aria-label="密钥"
+        />
+      </label>
+
+      <label class="check">
+        <input type="checkbox" data-off />
+        <span>暂时关掉对话（访客点开会看到一句「今天先不聊了」）</span>
+      </label>
+
+      <div class="row">
+        <button class="key" type="button" data-save>保存</button>
+        <button class="key" type="button" data-test>测一下</button>
+        <button class="key key--quiet" type="button" data-logout>退出</button>
+      </div>
+
+      <p class="dim" data-msg hidden></p>
+      <div data-results></div>
+
+      <p class="dim foot">
+        兜底模型：<code data-fallback></code> —— 上面这些全失效时走它（Workers AI，零密钥）。
+      </p>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  const q = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
+
+  const views = {
+    load: q('[data-view="load"]'),
+    login: q<HTMLFormElement>('[data-view="login"]'),
+    panel: q('[data-view="panel"]'),
+  };
+
+  const err = q('[data-err]');
+  const noset = q('[data-noset]');
+  const pass = q<HTMLInputElement>('[data-pass]');
+  const base = q<HTMLInputElement>('[data-base]');
+  const model = q<HTMLInputElement>('[data-model]');
+  const key = q<HTMLInputElement>('[data-key]');
+  const off = q<HTMLInputElement>('[data-off]');
+  const keystate = q('[data-keystate]');
+  const msg = q('[data-msg]');
+  const results = q('[data-results]');
+  const fallback = q('[data-fallback]');
+
+  const show = (which: 'load' | 'login' | 'panel') => {
+    views.load.hidden = which !== 'load';
+    views.login.hidden = which !== 'login';
+    views.panel.hidden = which !== 'panel';
+  };
+
+  const say = (text: string) => {
+    msg.textContent = text;
+    msg.hidden = !text;
+  };
+
+  const api = async (path: string, body?: unknown) => {
+    const res = await fetch('/api/admin/' + path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: 'no-store',
+    });
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      /* 非 JSON 一律当失败 */
+    }
+    return { ok: res.ok, status: res.status, data };
+  };
+
+  /** 拉一次状态，决定显示登录框还是控制台 */
+  const refresh = async () => {
+    const { data } = await api('state');
+
+    if (!data.logged) {
+      show('login');
+      // 「口令还没设」不是登录失败，要明确告诉他该跑哪几条命令
+      noset.hidden = data.ready !== false;
+      pass.focus();
+      return;
+    }
+
+    const cfg = (data.cfg ?? {}) as {
+      base?: string;
+      model?: string;
+      hasKey?: boolean;
+      off?: boolean;
+    };
+    base.value = cfg.base ?? '';
+    model.value = cfg.model ?? '';
+    off.checked = !!cfg.off;
+    key.value = '';
+    keystate.textContent = cfg.hasKey ? '（已设置，留空＝不改）' : '（还没设）';
+    fallback.textContent = String(data.fallback ?? '');
+    show('panel');
+  };
+
+  views.login.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.hidden = true;
+    const { ok } = await api('login', { pass: pass.value });
+    pass.value = '';
+    if (!ok) {
+      err.textContent = '进不去';
+      err.hidden = false;
+      return;
+    }
+    show('load');
+    await refresh();
+  });
+
+  q('[data-logout]').addEventListener('click', async () => {
+    await api('logout', {});
+    location.reload();
+  });
+
+  q('[data-save]').addEventListener('click', async () => {
+    say('存…');
+    const patch: Record<string, unknown> = {
+      base: base.value.trim(),
+      model: model.value.trim(),
+      off: off.checked,
+    };
+    // 密钥留空＝不改（不传这个键）；要清掉就填一个空格
+    if (key.value) patch.key = key.value.trim();
+
+    const { ok, data } = await api('save', patch);
+    say(ok ? '存好了，下一次对话就用新的' : '没存上：' + String(data.error ?? ''));
+    if (ok) await refresh();
+  });
+
+  q('[data-test]').addEventListener('click', async () => {
+    say('挨个打一次…（每个最多等 30 秒）');
+    results.textContent = '';
+
+    const { ok, data } = await api('test', {
+      base: base.value.trim(),
+      model: model.value.trim(),
+      key: key.value || '',
+    });
+
+    if (!ok) {
+      say('测不了：' + String(data.error ?? ''));
+      return;
+    }
+    say('');
+
+    const rows = (data.results ?? []) as {
+      model: string;
+      ok: boolean;
+      ms: number;
+      status?: number;
+      text?: string;
+      think?: number;
+      error?: string;
+    }[];
+
+    for (const r of rows) {
+      const box = document.createElement('div');
+      box.className = 'res ' + (r.ok ? 'res--ok' : 'res--bad');
+
+      const head = document.createElement('p');
+      head.className = 'res__head';
+      head.textContent =
+        (r.ok ? '能用' : '不能用') +
+        ' · ' +
+        r.model +
+        ' · ' +
+        (r.ms / 1000).toFixed(1) +
+        's' +
+        (r.status ? ' · HTTP ' + r.status : '') +
+        (r.think ? ' · 思考 ' + r.think + ' 字' : '');
+      box.appendChild(head);
+
+      const body = document.createElement('p');
+      body.className = 'res__body';
+      /* 「HTTP 200 + 正文空 + 思考很多」是会思考的模型把 300 token 预算全花在思考上，
+         不是它坏了 —— 真实对话给 700。这句话是本机踩过一次误报之后加的。 */
+      body.textContent = r.ok
+        ? r.text || '（正文是空的）'
+        : r.error ||
+          (r.think
+            ? '思考占满了测试预算（300 token），正文没出来 —— 真实对话给 700，不一定不行'
+            : '（没有错误信息）');
+      box.appendChild(body);
+
+      results.appendChild(box);
+    }
+  });
+
+  refresh();
+</script>
+
+<style>
+  .sub {
+    margin: var(--sp-8) 0 var(--sp-2);
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    color: var(--ink);
+  }
+
+  .dim {
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+  }
+
+  .bad {
+    color: var(--seal);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  .box {
+    margin-top: var(--sp-4);
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    align-items: center;
+    margin-top: var(--sp-4);
+  }
+
+  .field {
+    display: block;
+    margin-top: var(--sp-5);
+  }
+
+  .lab {
+    display: block;
+    margin-bottom: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+
+  .in {
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: var(--glass-bg);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-sm);
+  }
+
+  .in:focus-visible {
+    outline: none;
+    border-color: var(--glass-border-lit);
+  }
+
+  .key {
+    padding: var(--sp-2) var(--sp-5);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background: var(--seal-wash);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--r-full);
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease;
+  }
+
+  .key:hover {
+    color: var(--seal);
+    border-color: var(--glass-border-lit);
+  }
+
+  .key--quiet {
+    background: none;
+    color: var(--ink-faint);
+    margin-left: auto;
+  }
+
+  .check {
+    display: flex;
+    gap: var(--sp-2);
+    align-items: flex-start;
+    margin-top: var(--sp-5);
+    font-size: var(--text-sm);
+    color: var(--ink-soft);
+    line-height: var(--leading-normal);
+  }
+
+  .note {
+    margin-top: var(--sp-6);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--rule);
+  }
+
+  .note pre {
+    overflow-x: auto;
+    padding: var(--sp-3);
+    background: var(--paper-sunken);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-sm);
+    font-size: var(--text-xs);
+  }
+
+  .foot {
+    margin-top: var(--sp-8);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--rule);
+  }
+
+  /* 测试结果是脚本造出来的，吃不到 scoped CSS —— 父选择器留着 scope，子用 :global()
+     （与 ChatDock 里那些气泡同一个坑，R14 记过） */
+  [data-results] :global(.res) {
+    margin-top: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--ink-faint);
+    border-radius: var(--r-sm);
+    background: var(--glass-bg);
+  }
+
+  [data-results] :global(.res--ok) {
+    border-left-color: var(--seal);
+  }
+
+  [data-results] :global(.res__head) {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.03em;
+    color: var(--ink);
+  }
+
+  [data-results] :global(.res__body) {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--ink-soft);
+    overflow-wrap: anywhere;
+  }
+</style>

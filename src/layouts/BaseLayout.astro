@@ -12,6 +12,7 @@ import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import MiniPlayer from '../components/MiniPlayer.astro';
+import ChatDock from '../components/ChatDock.astro';
 
 interface Props {
   title?: string;
@@ -53,6 +54,9 @@ const wrapClass =
     {/* 悬浮窗 + 全站唯一那个 <audio>。persist 的名字写在组件自己的根节点上
         （`transition:persist="jk"`）—— 同名才配对，跨不同布局也能接上 */}
     <MiniPlayer />
+    {/* 「AI 版沉麟」的浮动入口（R6 阶段②）。同样 persist，所以换页时对话不断。
+        起始页（门）不走这个布局，所以门上没有它 —— 那是刻意的，见组件顶部注释。 */}
+    <ChatDock />
   </body>
 </html>
 

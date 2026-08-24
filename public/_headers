@@ -64,10 +64,6 @@
 /photos/*
   Cache-Control: public, max-age=60, stale-while-revalidate=604800
 
-# 此刻页未上线（无任何链接指向），但文件在、URL 通，同上
-/now/*
-  Cache-Control: public, max-age=60, stale-while-revalidate=604800
-
 # /start 现在只剩一张 meta-refresh 跳转页（R14 阶段⑥ 起，起始页本体在 /）。
 # 也是 HTML，也该短鲜期 —— 而且它更该有 SWR：老链接的访客不必等回源就被送走
 /start/*
@@ -75,6 +71,29 @@
 
 /rss.xml
   Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+# 给别人的 AI 读的自述（R33）。和 rss.xml 同档：爬虫会反复来，60 秒鲜期 + 7 天 SWR
+# 让它们大多命中边缘，而知识库一改最长 60 秒就对外生效。
+#
+# **`/kb.json` 刻意不写规则** —— 那一份是 Worker 自己读的（`env.ASSETS.fetch`），
+# 吃 Workers 静态资源的默认头（`max-age=0, must-revalidate`）正好：知识库改了立刻生效。
+# Worker 侧已经在 isolate 里缓存 5 分钟，不需要再靠 HTTP 缓存省这一次读。
+/llms.txt
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+# --- 后台：不缓存、不进搜索 --------------------------------------------------
+# 这一页是**公开可取的空壳**（内容全靠登录后 fetch 填，见 admin.astro 顶部注释），
+# 但它照旧不该被缓存、更不该被收录：
+# - `no-store` 是为了将来万一有人往这页塞了带状态的东西，也不至于被共享边缘缓存发出去；
+# - `X-Robots-Tag` 是「藏起来」的一半（另一半是 astro.config.mjs 的 sitemap 排除）。
+#   真正把它关住的是登录，不是这两条。
+/admin
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+
+/admin/*
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
 
 # --- 构建产物：永久缓存 ------------------------------------------------------
 # Astro 把带内容哈希的产物全部输出到 /_astro/，文件名随内容变化，

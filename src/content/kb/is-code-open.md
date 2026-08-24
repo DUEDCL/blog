@@ -1,12 +1,10 @@
 ---
-# Claude 起草，事实核对过，口吻待沉麟重写。改完把 draft 去掉。
 question: 这个站的代码开源吗？
 aliases:
   - 能看到你网站的源码吗
   - 仓库地址是什么
   - 这个站的代码在哪
 topic: 这个站
-draft: true
 ---
 
 开源，仓库在 `github.com/DUEDCL/blog`。

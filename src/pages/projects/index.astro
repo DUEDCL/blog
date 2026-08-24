@@ -108,10 +108,14 @@ const STATUS_LABEL = {
 
   /* auto-fit + 固定上限，兼顾「只有一两个作品」和「以后堆到十几个」两种情况：
      auto-fit 折叠空轨道，卡片不会孤零零缩在左上角；34rem 的上限防止只剩一张时
-     被拉成横贯全屏的长条。justify-content: start 保持与全站一致的左对齐。 */
+     被拉成横贯全屏的长条。justify-content: start 保持与全站一致的左对齐。
+
+     下限写成 min(20rem, 100%) 而不是 20rem：轨道下限是硬的，视口窄于 20rem + 页面
+     左右 padding 时（320px 屏就是），轨道撑不下去只能横向溢出。加 min() 之后
+     窄屏让位给容器宽度，宽屏照旧按 20rem 起跳。 */
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20rem, 34rem));
+    grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 34rem));
     justify-content: start;
     gap: var(--sp-6);
     list-style: none;

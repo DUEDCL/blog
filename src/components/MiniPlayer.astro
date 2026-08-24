@@ -58,8 +58,18 @@ import '../styles/player.css';
       {/* 曲名与「歌手 · 专辑」。收起态只留曲名 —— 状态栏的本分是「一直告诉你在放什么」。
           曲名套了两层：外层是固定宽的窗口，内层承载文字 —— 长歌名装不下时由脚本量出溢出量
           写进 `--jk-over`，内层就地做跑马灯（R27：不许它把上一首/下一首两个键挤掉） */}
+      {/* 曲名。外层 `.jk-mini__t` 是固定宽的窗口，里面 `.jk-run` 装**两份**同样的文字
+          （R36 改成真跑马灯：滚过一份的宽度时第二份正好接上，首尾相连不留空档）。
+          第二份带 aria-hidden，读屏不念两遍。两份的文本都由脚本的 setTitle() 写。 */}
       <p class="jk-mini__now">
-        <span class="jk-mini__t"><span class="jk-mini__t-i" data-title></span></span>
+        <span class="jk-mini__t"
+          ><span class="jk-run"
+            ><span class="jk-seg" data-title></span><span
+              class="jk-seg"
+              data-title-twin
+              aria-hidden="true"></span></span
+          ></span
+        >
         <span class="jk-mini__s" data-sub></span>
       </p>
 
@@ -69,24 +79,13 @@ import '../styles/player.css';
             d="M13 4h7v7h-2V7.41l-7.3 7.3-1.41-1.41L18.59 6H13z"></path></svg
         >
       </a>
-
-      {/* 全展开 ↔ 药丸的切换键（R28 加的：站主要「前两种状态添加一个按钮实现切换」）。
-          两个箭头叠在一个键里，露哪个由 `.is-fold` 决定 —— 与播放/暂停那对图标同一套做法。
-          封面点一下也切（那是 R25 就有的入口），这里只是把它变成一个看得见的按钮 */}
-      <button class="jk-key jk-key--sm jk-key--size" type="button" data-toggle>
-        <svg class="jk-key__i jk-key__i--up" viewBox="0 0 24 24" aria-hidden="true"
-          ><path d="M12 8.6l6 6-1.4 1.4L12 11.4l-4.6 4.6L6 14.6z"></path></svg
-        >
-        <svg class="jk-key__i jk-key__i--down" viewBox="0 0 24 24" aria-hidden="true"
-          ><path d="M12 15.4l-6-6L7.4 8l4.6 4.6L16.6 8 18 9.4z"></path></svg
-        >
-      </button>
     </div>
     {/* 正在唱的那一行。套两层：外层是固定宽的窗口（截断／滚动都由它管），内层才是
         WordRun 的宿主 —— `jk-line` 必须挂在**内层**，player.css 里那套逐字渐变的选择器
         是 `.jk-line.is-on .jk-w`，而 WordRun 往宿主上加的正是 `is-on`。
-        长歌词装不下时由脚本量出溢出量，内层就地滚动（R29） */}
-    <p class="jk-mini__line"><span class="jk-mini__line-i jk-line" data-line></span></p>
+        内层同时是 `.jk-run`：R36 起 WordRun 在它里面塞**两份** `.jk-seg`，
+        长歌词就地做真跑马灯（两份的高亮由 WordRun.paint 一起刷）。 */}
+    <p class="jk-mini__line"><span class="jk-line jk-run" data-line></span></p>
 
     <div class="jk-mini__seek">
       <span class="jk-mini__time" data-cur>0:00</span>
@@ -101,6 +100,22 @@ import '../styles/player.css';
         aria-label="播放进度"
       />
       <span class="jk-mini__time" data-dur>0:00</span>
+    </div>
+
+    {/* 音量紧跟在进度条下面（R36 他要的顺序：进度 → 音量 → 那排键）。
+        原来它排在最后，两条同样长的滑轨被一排圆键隔开，看着像两个不相干的东西 */}
+    <div class="jk-mini__vol">
+      <span class="jk-mini__time">音量</span>
+      <input
+        class="jk-rng jk-rng--mini"
+        type="range"
+        data-vol
+        min="0"
+        max="1"
+        step="0.01"
+        value="0.8"
+        aria-label="音量"
+      />
     </div>
 
     <div class="jk-mini__keys">
@@ -153,23 +168,6 @@ import '../styles/player.css';
         >
       </button>
     </div>
-
-    {/* 音量（R28 加的：站主要「全展开模式，包含歌词、歌名、音量控制、上下首播放」）。
-        与 /music 唱盘台是同一个 `data-vol` 契约、同一个 setVol —— 两处调的是同一份状态，
-        所以在哪儿调都立刻互相看得见。只在全展开态出现，药丸与吸附态都藏掉 */}
-    <div class="jk-mini__vol">
-      <span class="jk-mini__time">音量</span>
-      <input
-        class="jk-rng jk-rng--mini"
-        type="range"
-        data-vol
-        min="0"
-        max="1"
-        step="0.01"
-        value="0.8"
-        aria-label="音量"
-      />
-    </div>
   </div>
 </div>
 
@@ -206,7 +204,16 @@ import '../styles/player.css';
        而模板与这段脚本同属一个组件，不存在「页面没放它们」的情形 */
     const pick = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
     const title = pick('[data-title]');
+    /** 曲名的第二份（跑马灯用）。两份的文本由 setTitle() 一起写 */
+    const titleTwin = pick('[data-title-twin]');
+    const titleRun = pick('.jk-mini__t .jk-run');
     const titleBox = pick('.jk-mini__t');
+
+    /** 写曲名。两份必须一模一样，否则跑马灯接缝处会看到两个不同的名字 */
+    const setTitle = (text: string) => {
+      title.textContent = text;
+      titleTwin.textContent = text;
+    };
     const sub = pick('[data-sub]');
     const line = pick('[data-line]');
     const lineBox = pick('.jk-mini__line');
@@ -217,7 +224,6 @@ import '../styles/player.css';
     const play = pick('[data-play]');
     const modeKey = pick('[data-mode]');
     const fold = pick('[data-fold]');
-    const sizeKey = pick('[data-toggle]');
     const cover = pick<HTMLImageElement>('[data-cover]');
     const card = pick('.jk-mini__card');
 
@@ -395,49 +401,71 @@ import '../styles/player.css';
     });
 
     /**
-     * 跑马灯（R27 只管歌名，R29 加上歌词、并把速度改成恒定的）。只有真的装不下才滚 ——
-     * 短歌名一动不动，不然状态栏会永远在晃。
+     * 跑马灯（R27 只管歌名，R29 加上歌词，**R36 改成真跑马灯**）。
+     * 只有真的装不下才滚 —— 短歌名一动不动，不然状态栏会永远在晃。
      *
-     * **速度恒定是这一版的重点**：从前时长写死 9s，路程越长越慢，长歌名慢得像没动
-     * （站主的原话是「滚动太慢了」）。现在时长 = 路程 ÷ 48px/s，再除 0.8 是因为
-     * keyframes 两头各留了一成的停顿（见 player.css 的 jk-marquee）。下限 1.4s：
-     * 只溢出十几个像素时别抖一下就完事。
+     * 量的是**第一份** `.jk-seg` 的宽度（不受外层 `overflow: hidden` 截断），
+     * 减的是外层的内容宽 —— `clientWidth` 含 padding，而药丸态的歌词框有一段让开封面的
+     * padding-left，不减掉就会少算 44px、该滚的不滚。
      *
-     * 量的是内层那个 inline-block 的实际宽度（不受外层 `overflow: hidden` 截断），
-     * 减的是外层的**内容宽** —— `clientWidth` 含 padding，而药丸态的歌词框有一段
-     * 让开封面的 padding-left，不减掉就会少算 48px、该滚的不滚。
+     * 一个循环走的距离是「一份 + 两份之间的 gap」，走完正好让第二份落到第一份原来的位置，
+     * 所以 `--jk-step` 是这个和，时长 = 它 ÷ 恒定速度（48px/s）。速度恒定是 R29 定的：
+     * 从前时长写死，路程越长滚得越慢，长歌名慢得像没动。
      *
      * 同一段文字重复调用不重挂类：那会让动画每次 sync 都从头开始，看着像卡住。
      */
     const SPEED = 48;
-    const flow = (box: HTMLElement, inner: HTMLElement) => {
+    const flow = (box: HTMLElement, run: HTMLElement) => {
+      const seg = run.firstElementChild as HTMLElement | null;
+      if (!seg) return;
+
       const cs = getComputedStyle(box);
+      /* 用 `getBoundingClientRect().width` 而不是 `clientWidth`：这两个框在药丸态是
+         grid item（被 blockify，clientWidth 有效），但换个布局它们随时可能是 inline，
+         而 **inline 元素的 clientWidth 恒为 0** —— 那会让「该不该滚」永远判成「该滚」，
+         短歌名也在那儿晃。rect 对两种都对，减掉 padding 才是内容宽。 */
       const room =
-        box.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-      const over = Math.round(inner.getBoundingClientRect().width - room);
-      const next = Math.max(0, over) + 'px';
-      const same = box.style.getPropertyValue('--jk-over') === next;
-      if (over <= 2) {
+        box.getBoundingClientRect().width -
+        (parseFloat(cs.paddingLeft) || 0) -
+        (parseFloat(cs.paddingRight) || 0);
+      const one = seg.getBoundingClientRect().width;
+
+      /* 这一刻量不出宽度（状态栏还藏着、或者页面在不可见的标签里）：什么都不做，
+         等下一次 sync 再量。**不能在这时候挂 is-marquee** —— 那会拿一个错的
+         `--jk-step` 滚起来，等页面回到前台时看着像抽风。 */
+      if (room <= 0 || one <= 0) return;
+
+      if (one - room <= 2) {
         box.classList.remove('is-marquee');
-        box.style.setProperty('--jk-over', '0px');
+        box.style.removeProperty('--jk-step');
         return;
       }
-      if (same && box.classList.contains('is-marquee')) return;
-      box.style.setProperty('--jk-over', next);
-      box.style.setProperty('--jk-dur', Math.max(1.4, over / SPEED / 0.8).toFixed(2) + 's');
+
+      // 两份之间的间隔现读：它写在第二份的 margin-left 上（**不是 flex 的 gap** ——
+      // gap 会把 .jk-line::before 那个圆点也隔开，见 player.css 那段注释），
+      // 而且用的是 rem，药丸态与全展开态的字号不同，值会跟着变
+      const twin = run.children[1] as HTMLElement | undefined;
+      const gap = twin ? parseFloat(getComputedStyle(twin).marginLeft) || 24 : 24;
+      const step = Math.round(one + gap);
+      const next = step + 'px';
+      if (box.style.getPropertyValue('--jk-step') === next && box.classList.contains('is-marquee'))
+        return;
+
+      box.style.setProperty('--jk-step', next);
+      box.style.setProperty('--jk-dur', Math.max(2, step / SPEED).toFixed(2) + 's');
       // 换了内容就从头滚：摘类、强制回流、再挂回去
       box.classList.remove('is-marquee');
       void box.offsetWidth;
       box.classList.add('is-marquee');
     };
-    const marquee = () => flow(titleBox, title);
+    const marquee = () => flow(titleBox, titleRun);
     const marqueeLine = () => flow(lineBox, line);
 
     const view: View = {
       sync() {
         const t = now();
         const on = playing();
-        title.textContent = t.title;
+        setTitle(t.title);
         sub.textContent = t.subtitle;
         paintCover();
         marquee();
@@ -468,7 +496,9 @@ import '../styles/player.css';
       lyric(k, p, changed) {
         if (changed) {
           const text = k >= 0 ? lineAt(k) : '';
-          if (text) run.mount(line, text);
+          // 第三个参数是 R36 加的：状态栏这份要两套 .jk-seg 才能做跑马灯。
+          // 舞台那份（music.astro）不传，行为一个字都没变
+          if (text) run.mount(line, text, true);
           else {
             run.unmount();
             // 前奏与间奏给个音符占位；这首压根没歌词就留空（高度由 CSS 撑住，不跳）
@@ -622,18 +652,20 @@ import '../styles/player.css';
 
     /* ---------- 三个形态：全展开 / 药丸 / 吸附（R28） ----------------------
        无类 = 全展开（歌词·歌名·音量·上下首都在）；`is-fold` = 药丸（默认）；
-       `is-dock` = 吸附成一枚封面圆。前两态由那枚 ⌃/⌄ 键与封面互切并记进 localStorage，
-       第三态只能由「拖到左右竖边」进入，且**不记住**（reflow 每次落地都撤掉它）。 */
+       `is-dock` = 吸附成一枚封面圆。
+
+       **R36 起前两态怎么切换变了**：那枚 ⌃/⌄ 小键删掉了（他的原话「将这个切换小按钮
+       删了，改为点击歌曲状态栏内非控制按钮的地方，就直接在药丸和全状态下切换」）。
+       现在的入口是「点卡片上任何不是控件的地方」，封面那个按钮照旧也切。
+       第三态仍然只能由「拖到左右竖边」进入，且**不记住**（reflow 每次落地都撤掉它）。 */
 
     /**
-     * 两个键的无障碍标签跟着三态走（R28）。吸附态下封面是整枚圆里唯一能点的东西，
-     * 它的意思只能是「展开」；展开态下它与那枚 ⌃ 一样是「收起」。
+     * 封面那个按钮的无障碍标签跟着三态走。吸附态下它是整枚圆里唯一能点的东西，
+     * 意思只能是「展开」；展开态下它的意思是「收起」。
      */
     const paintLabels = () => {
       const pill = root.classList.contains('is-fold');
       const dock = root.classList.contains('is-dock');
-      sizeKey.setAttribute('aria-expanded', String(!pill));
-      sizeKey.setAttribute('aria-label', pill ? '展开播放器' : '收起播放器');
       fold.setAttribute('aria-expanded', String(!pill && !dock));
       fold.setAttribute('aria-label', pill || dock ? '展开播放器' : '收起播放器');
     };
@@ -660,7 +692,7 @@ import '../styles/player.css';
       room();
     };
 
-    /** 那枚切换键与封面共用的动作：吸附态先退出吸附，其余情况在前两态之间翻 */
+    /** 封面与「卡片空白处」共用的动作：吸附态先退出吸附，其余情况在前两态之间翻 */
     const flip = () => {
       if (root.classList.contains('is-dock')) {
         setDock(false);
@@ -672,7 +704,43 @@ import '../styles/player.css';
     };
 
     fold.addEventListener('click', flip);
-    sizeKey.addEventListener('click', flip);
+
+    /**
+     * R36：点卡片上任何**不是控件**的地方就切换形态（他删掉了那枚 ⌃/⌄ 小键）。
+     *
+     * 「不是控件」用 `closest()` 判，而不是列一串 tagName —— 键上有 `<svg>`／`<path>`，
+     * 事件的 target 常常是那些子节点，光看 `e.target.tagName` 会漏判成空白处，
+     * 于是点一下播放键会**既播放又切换形态**。
+     *
+     * 拖动那一下不算：`endDrag` 里真拖过就会在捕获阶段把随后的 click 吞掉，
+     * 所以长按拖完松手不会顺带切形态（这条 R25 就立好了，这里免费继承）。
+     */
+    card.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || t.closest('button, a, input, label, [role="slider"]')) return;
+      flip();
+    });
+
+    /* ---------- 让位给对话框（R32） ----------------------------------------
+       他定的是「打开对话时药丸自动收成吸附态」。ChatDock 派事件，这里自己收 ——
+       让那个组件直接改类名是不行的：三态的落盘规则写在这个文件里
+       （吸附态刻意不记住，reflow 每次都撤掉它），从外面动类名会把规则绕过去。
+
+       `byChat` 记住这次吸附是谁要的：只撤自己收的那次。访客手动拖到竖边吸附的，
+       关掉对话框时不该被弹回去。 */
+    let byChat = false;
+
+    document.addEventListener('jk:dock', () => {
+      if (root.classList.contains('is-dock')) return;
+      byChat = true;
+      setDock(true);
+    });
+
+    document.addEventListener('jk:undock', () => {
+      if (!byChat) return;
+      byChat = false;
+      setDock(false);
+    });
 
     /* ---------- 长按拖动（R25，时长在 R29 调过） --------------------------- */
 

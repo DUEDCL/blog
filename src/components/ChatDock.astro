@@ -1,0 +1,493 @@
+---
+/**
+ * 「AI 版沉麟」的浮动入口 —— R6 阶段②。
+ *
+ * R32 的三条决议决定了它长这样：
+ * 1. **全站浮动对话按钮**（他在四个选项里选的），不是单独一页、不是接在名片页下面；
+ * 2. **打开对话时音乐药丸自动收成吸附态** —— 两个浮层不抢屏。靠派一个 `jk:dock`
+ *    事件给 MiniPlayer 做，不去碰它的内部状态；
+ * 3. **告知当成 AI 的开场白** —— 所以 `OPENING` 是日志里的第一条消息，
+ *    由前端直接渲染，不花 neurons，也不指望模型听话。
+ *
+ * 样式**刻意不挂 global.css 的 `.glass`**，玻璃那几行写在下面自己身上 ——
+ * 与 `player.css` 同一个理由：门（起始页）是全站唯一不引 global.css 的页面，
+ * 哪天要把这枚键也放到门上，样式不用再补一遍。**眼下只挂在 BaseLayout 上**，
+ * 门上没有它（门是进站前那道仪式，先不摆功能键）。
+ *
+ * 位置在左下角：药丸默认在右下（`player.css` 的 `.jk-mini`），分开放两角，
+ * 第一次打开时两者不会重叠。
+ */
+import { MSG_MAX, OPENING } from '../data/chat';
+---
+
+<div class="ai" data-ai transition:persist="ai">
+  <button
+    class="ai__key"
+    type="button"
+    data-ai-key
+    id="ai-key"
+    aria-expanded="false"
+    aria-controls="ai-panel"
+    aria-label="和沉麟的分身说话"
+  >
+    <svg class="ai__ico ai__ico--talk" viewBox="0 0 24 24" aria-hidden="true"
+      ><path
+        d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5h-2.5z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linejoin="round"
+      /><circle cx="9.5" cy="10.5" r="1" fill="currentColor" /><circle
+        cx="12"
+        cy="10.5"
+        r="1"
+        fill="currentColor"
+      /><circle cx="14.5" cy="10.5" r="1" fill="currentColor" /></svg
+    >
+    <svg class="ai__ico ai__ico--shut" viewBox="0 0 24 24" aria-hidden="true"
+      ><path
+        d="M7 7l10 10M17 7L7 17"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+      /></svg
+    >
+  </button>
+
+  <section class="ai__panel" id="ai-panel" data-ai-panel hidden aria-labelledby="ai-key">
+    <header class="ai__head">
+      <p class="ai__who">沉麟的分身</p>
+    </header>
+
+    <div class="ai__log" data-ai-log role="log" aria-live="polite">
+      <p class="ai__msg ai__msg--ai">{OPENING}</p>
+    </div>
+
+    <form class="ai__form" data-ai-form>
+      <input
+        class="ai__in"
+        data-ai-in
+        type="text"
+        autocomplete="off"
+        enterkeyhint="send"
+        maxlength={MSG_MAX}
+        placeholder="回车发送"
+        aria-label="想问什么"
+      />
+      {/* 他要的：这个键不再是「发送」，而是收起对话框（发送走回车 —— 单输入框的
+          form 会隐式提交，手机键盘上那颗键也是「发送」，`enterkeyhint` 已声明）。
+          交互语言与音乐药丸那枚 ⌃/⌄ 对齐：收起后由左下那枚浮动键再展开。 */}
+      <button class="ai__send" type="button" data-ai-fold aria-label="收起对话框">
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path
+            d="M6 10l6 6 6-6"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          /></svg
+        >
+      </button>
+    </form>
+  </section>
+</div>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-ai]');
+
+  /* persist 的节点在 SPA 换页时不重建，这段模块脚本本来也只执行一次。
+     这道守卫是兜「哪天 Astro 改了 module 去重策略」—— 重复绑定会让一次点击发两条
+     消息，而每条消息都花真钱（neurons）。 */
+  if (root && !root.dataset.wired) {
+    root.dataset.wired = '1';
+
+    const pick = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+    const key = pick('[data-ai-key]');
+    const panel = pick('[data-ai-panel]');
+    const log = pick('[data-ai-log]');
+    const form = pick<HTMLFormElement>('[data-ai-form]');
+    const input = pick<HTMLInputElement>('[data-ai-in]');
+    const send = pick<HTMLButtonElement>('[data-ai-fold]');
+
+    /* 面板里那枚键只做一件事：收起面板（他要的「改为缩小和展开对话框」）。
+       它不参与发送，所以发送期间**不禁用它** —— 等回答的时候照样收得起来，
+       流仍在后台跑完并落库。 */
+    send.addEventListener('click', () => setOpen(false));
+
+    /** 会话号：一个标签页一份，关掉标签就换新的。Durable Object 的实例名就是它 */
+    const session = (() => {
+      const KEY = 'ai:session';
+      try {
+        const had = sessionStorage.getItem(KEY);
+        if (had) return had;
+        const made = crypto.randomUUID();
+        sessionStorage.setItem(KEY, made);
+        return made;
+      } catch {
+        /* 隐私模式下 sessionStorage 会抛 —— 那就这一次算一轮，不影响能不能聊 */
+        return crypto.randomUUID();
+      }
+    })();
+
+    /** 正在等回答时不接第二条：既防手抖连发，也防有人拿回车刷额度 */
+    let busy = false;
+
+    const bubble = (who: 'me' | 'ai', text: string) => {
+      const p = document.createElement('p');
+      p.className = 'ai__msg ai__msg--' + who;
+      p.textContent = text;
+      log.appendChild(p);
+      log.scrollTop = log.scrollHeight;
+      return p;
+    };
+
+    /* ---------- 开关。开的时候把音乐药丸收成吸附圆（R32 决议） -------------
+       靠自定义事件通知 MiniPlayer，不去碰它的内部状态 —— 它那三态有一套自己的
+       落盘规则（吸附态刻意不记住），从外面改类名会把那套规则绕过去。 */
+    const setOpen = (on: boolean) => {
+      panel.hidden = !on;
+      key.setAttribute('aria-expanded', String(on));
+      root.classList.toggle('is-open', on);
+      document.dispatchEvent(new CustomEvent(on ? 'jk:dock' : 'jk:undock'));
+      if (on) setTimeout(() => input.focus(), 40);
+    };
+
+    key.addEventListener('click', () => setOpen(panel.hidden));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !panel.hidden) {
+        setOpen(false);
+        key.focus();
+      }
+    });
+
+    /* ---------- 流式回答 ---------------------------------------------------
+       Qwen3 是会「思考」的模型，输出可能裹一层 <think>…</think>。系统提示词里已经
+       加了 /no_think 软开关，这里再剥一遍：**流式过程中那层是逐字出现的**，
+       等整段收完再处理就已经被看见了。未闭合的 <think> 之后一律先不显示。 */
+    const shown = (raw: string) => {
+      let s = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
+      const open = s.search(/<think>/i);
+      if (open >= 0) s = s.slice(0, open);
+      return s.replace(/<\/?think>/gi, '').trimStart();
+    };
+
+    /** 一行 SSE 里抽增量。**这是本站自己的格式**：`data: {"d":"字"}`，收尾 `data: [DONE]`。
+        上游长什么样前端不知道，也不需要知道 —— Worker 那边已经统一转过一遍。 */
+    const delta = (line: string) => {
+      if (!line.startsWith('data:')) return '';
+      const p = line.slice(5).trim();
+      if (!p || p === '[DONE]') return '';
+      try {
+        const j = JSON.parse(p) as { d?: unknown };
+        return typeof j.d === 'string' ? j.d : '';
+      } catch {
+        return '';
+      }
+    };
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (busy) return;
+
+      const text = input.value.trim();
+      if (!text) return;
+
+      busy = true;
+      input.value = '';
+      input.disabled = true;
+      bubble('me', text);
+
+      const out = bubble('ai', '…');
+      let raw = '';
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session, message: text }),
+        });
+
+        if (!res.ok || !res.body) {
+          /* 错误一律是 JSON + 一句中文人话（worker.ts 的 fail()）。
+             读不出来就用兜底的那句，绝不显示状态码给访客看 */
+          let msg = '我这会儿答不上来，等一下再问';
+          try {
+            const j = (await res.json()) as { error?: unknown };
+            if (typeof j.error === 'string' && j.error) msg = j.error;
+          } catch {
+            /* 响应体不是 JSON，用兜底文案 */
+          }
+          out.textContent = msg;
+          out.classList.add('is-bad');
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          // 最后一段可能是半行，留到下一轮
+          buf = lines.pop() ?? '';
+          for (const line of lines) raw += delta(line);
+          const now = shown(raw);
+          if (now) out.textContent = now;
+          log.scrollTop = log.scrollHeight;
+        }
+
+        const final = shown(raw);
+        out.textContent = final || '这个我答不上来。';
+      } catch {
+        out.textContent = '网络断了，等一下再问';
+        out.classList.add('is-bad');
+      } finally {
+        busy = false;
+        input.disabled = false;
+        log.scrollTop = log.scrollHeight;
+        if (!panel.hidden) input.focus();
+      }
+    });
+  }
+</script>
+
+<style>
+  /* 玻璃那几行写在自己身上，不挂 global.css 的 `.glass` —— 见顶部注释 */
+  .ai {
+    position: fixed;
+    left: var(--sp-6);
+    bottom: var(--sp-6);
+    z-index: 61;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-3);
+  }
+
+  .ai__key {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    order: 2;
+    color: var(--ink-soft);
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 36px -14px rgba(0, 0, 0, 0.7);
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+
+  .ai__key:hover {
+    color: var(--seal);
+    border-color: var(--glass-border-lit);
+    transform: translateY(-2px);
+  }
+
+  .ai__ico {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  /* 两个图标叠在一个键里，露哪个由 `.is-open` 决定 —— 与播放/暂停那对同一套做法 */
+  .ai__ico--shut,
+  .ai.is-open .ai__ico--talk {
+    display: none;
+  }
+
+  .ai.is-open .ai__ico--shut {
+    display: block;
+  }
+
+  .ai__panel {
+    order: 1;
+    display: flex;
+    flex-direction: column;
+    width: min(23rem, calc(100vw - var(--sp-8)));
+    max-height: min(60vh, 30rem);
+    overflow: hidden;
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 28px 56px -20px rgba(0, 0, 0, 0.75);
+  }
+
+  /* ⚠ 这一条不能省。`hidden` 属性的 UA 样式是 `[hidden] { display: none }`，
+     特异性与 `.ai__panel` 相同（都是 0,1,0），而**作者样式优先于 UA 样式** ——
+     所以上面那句 `display: flex` 会把 `hidden` 整个盖掉，面板一进站就是展开的。
+     他 2026-08-24 报的「默认进入网站后不主动展开对话框」就是这个。 */
+  .ai__panel[hidden] {
+    display: none;
+  }
+
+  /* 不支持 backdrop-filter 时给一层不透明底 —— 半透明白字压在正文上没法读 */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .ai__key,
+    .ai__panel {
+      background-color: var(--glass-fallback);
+      background-image: none;
+    }
+  }
+
+  .ai__head {
+    padding: var(--sp-4) var(--sp-5) var(--sp-3);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .ai__who {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-variation-settings: 'opsz' 18, 'SOFT' 0, 'WONK' 0;
+    color: var(--ink);
+  }
+
+  .ai__log {
+    flex: 1;
+    min-height: 6rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--sp-4) var(--sp-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  /* 气泡是脚本 `document.createElement` 出来的，**吃不到 scoped CSS**
+     （那是靠给元素加 data-astro-cid 属性实现的，动态节点没有那个属性 ——
+     R14 那一轮就是被这条坑掉的）。所以子选择器用 :global()，
+     父选择器 `.ai__log` 仍是 scoped 的，不会漏到别处。 */
+  .ai__log :global(.ai__msg) {
+    margin: 0;
+    max-width: 88%;
+    padding: var(--sp-3) var(--sp-4);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    border-radius: var(--r-md);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .ai__log :global(.ai__msg--ai) {
+    align-self: flex-start;
+    color: var(--ink-soft);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--rule);
+  }
+
+  .ai__log :global(.ai__msg--me) {
+    align-self: flex-end;
+    color: var(--ink);
+    background: var(--seal-wash);
+    border: 1px solid var(--seal-wash);
+  }
+
+  .ai__log :global(.ai__msg.is-bad) {
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+  }
+
+  .ai__form {
+    display: flex;
+    gap: var(--sp-2);
+    align-items: center;
+    padding: var(--sp-3) var(--sp-4);
+    border-top: 1px solid var(--rule);
+    background: rgba(0, 0, 0, 0.14);
+  }
+
+  .ai__in {
+    flex: 1;
+    min-width: 0;
+    padding: var(--sp-2) var(--sp-3);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    background: var(--glass-bg);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-full);
+  }
+
+  .ai__in::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .ai__in:focus-visible {
+    outline: none;
+    border-color: var(--glass-border-lit);
+  }
+
+  .ai__in:disabled {
+    color: var(--ink-faint);
+  }
+
+  .ai__send {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    color: var(--ink-soft);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-full);
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease;
+  }
+
+  .ai__send svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .ai__send:hover:not(:disabled) {
+    color: var(--seal);
+    border-color: var(--glass-border-lit);
+  }
+
+  /* 窄屏：面板按视口宽算，键收小一档。药丸在右下、这枚在左下，
+     再加上「开对话时药丸自动收成圆」，375 屏上两者不会挤在一起。 */
+  @media (max-width: 40rem) {
+    .ai {
+      left: var(--sp-4);
+      bottom: var(--sp-4);
+    }
+
+    .ai__key {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    .ai__panel {
+      width: calc(100vw - var(--sp-8));
+      max-height: 58vh;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai__key,
+    .ai__send {
+      transition: none;
+    }
+
+    .ai__key:hover {
+      transform: none;
+    }
+  }
+</style>

@@ -1,12 +1,10 @@
 ---
-# Claude 起草，事实核对过，口吻待沉麟重写。改完把 draft 去掉。
 question: 你怎么发文章的？
 aliases:
   - 写博客的流程是什么
   - 更新网站要做什么
   - 你用什么写文章
 topic: 这个站
-draft: true
 ---
 
 写一个 Markdown 文件，丢进 `src/content/` 下对应栏目的目录里。frontmatter 三个字段必填 ——

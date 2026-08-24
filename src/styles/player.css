@@ -297,17 +297,6 @@
   display: block;
 }
 
-/* 全展开 ↔ 药丸那枚切换键（R28）：展开态露 ⌃（意思是「收起」），药丸态露 ⌄（「展开」）。
-   与播放/暂停那对图标同一套做法，不新引入机制 */
-.jk-key__i--down,
-.is-fold .jk-key__i--up {
-  display: none;
-}
-
-.is-fold .jk-key__i--down {
-  display: block;
-}
-
 /* 播放方式键：四个图标叠在同一个按钮里，露哪个由脚本写的 data-m 决定 ——
    和播放/暂停那对是同一套做法，不新引入机制。
    没有 data-m 时（脚本还没跑到 paintMode）四个都藏着，键是空的但不会四个一起冒出来 */
@@ -1017,22 +1006,56 @@
 }
 
 /**
- * 长歌名与长歌词都在固定框里滚动展示（R27 起是歌名，**R29 加上歌词并把速度改成恒定的**）。
+ * 长歌名与长歌词都在固定框里滚动展示（R27 起是歌名，R29 加上歌词并把速度改成恒定的）。
  *
- * 溢出量与时长都由脚本量出来写进 `--jk-over` / `--jk-dur`，只有真的装不下时才挂
- * `is-marquee` —— 短歌名一动不动，不然状态栏会永远在晃。
+ * **R36：改成真跑马灯。** 他先说「不是左右滚动，是那种首尾滚动」，我第一版做成
+ * 「单向 + 尾部停顿 + 瞬间跳回」，他看了说「现在变成一直向左边滚动，我要的是跑马灯的
+ * 那种，包括歌词」—— 所以这一版是标准做法：**同一段文字并排放两份**，容器匀速左移
+ * 恰好一份的宽度（含两份之间的 gap），到点回到起点。因为第二份此刻正好落在第一份
+ * 原来的位置上，视觉上完全连续，没有跳变、没有空档、也不倒着走。
  *
- * **时长不能写死**（R29 的报修就是这么来的：「歌名过长的滚动太慢了」）：从前是固定 9s，
- * 于是路程越长滚得越慢，20 个字的歌名慢得像没动。现在脚本按 `路程 ÷ 恒定速度` 算时长，
- * 时间曲线也从 `ease-in-out` 换成 `linear` —— 匀速才叫「合适的速度」。
- * 两头的停顿改由 keyframes 里那两段（0–10%、90–100%）提供，跟着时长一起缩放。
+ * 三件事必须对上，错一个就会露馅：
+ * 1. `--jk-step` = **一份的宽度 + gap**（由脚本量第一个 `.jk-seg` 写进来）；
+ * 2. 时长 = `--jk-step ÷ 恒定速度`（脚本算，见 MiniPlayer 的 flow）；
+ * 3. 不滚的时候第二份必须 `display: none` —— 否则短歌名会并排显示两遍。
  *
- * 往复（alternate）而不是循环：循环要把文本复制一份才不留空档，往复只要一条 keyframes。
+ * 歌词那份的两个 `.jk-seg` 里各有一整套逐字 `.jk-w`，高亮由 `WordRun.paint` 同时刷
+ * （`twin` 那份不同步的话，滚到它时会看到高亮冻在上一次的位置）。
  */
-.jk-mini__t-i,
-.jk-mini__line-i {
-  display: inline-block;
+.jk-run {
+  display: inline-flex;
+  align-items: baseline;
   white-space: nowrap;
+}
+
+.jk-seg {
+  /* ⚠ 不许被压缩。`.jk-seg` 是 flex item，默认 `flex-shrink: 1` ——
+     窗口比一份文字窄时（跑马灯本来就是为这种情况存在的）两份会被各自挤扁，
+     实测 17 个字的歌名被压到 52.7px（窗口 122.8 ÷ 2），滚的就不是完整的一份了。
+     `flex: 0 0 auto` 让它保持内容宽，溢出的部分由外层 `overflow: hidden` 裁掉。 */
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/**
+ * 两份之间的间隔。**用 margin 而不是 flex 的 `gap`** —— 这是他报的第二个问题
+ * 「歌词漂移了，没有对齐左边的点」的根因：
+ *
+ * `.jk-line::before` 那个 4px 的圆点在普通行盒里只是个 inline-block，
+ * 但 `.jk-run` 是 flex 容器，**`::before` 于是变成一个 flex item**，
+ * `gap` 会连它一起隔开 —— 圆点与歌词之间凭空多出 40px，整行看着往右漂。
+ * 换成只作用在第二份身上的 `margin-left`，圆点一点不受影响。
+ *
+ * 间隔本身也从 2.5rem 收到 1.5rem（他说「歌名空隙太大，缩短一点」）——
+ * 约两个汉字宽，够看出「一轮结束了」，又不至于让人等一段空白。
+ */
+.jk-run > .jk-seg + .jk-seg {
+  display: none;
+  margin-left: var(--jk-gap, 1.5rem);
+}
+
+.is-marquee .jk-run > .jk-seg + .jk-seg {
+  display: inline;
 }
 
 .jk-mini__t.is-marquee,
@@ -1041,21 +1064,35 @@
   text-overflow: clip;
 }
 
-.jk-mini__t.is-marquee .jk-mini__t-i,
-.jk-mini__line.is-marquee .jk-mini__line-i {
-  animation: jk-marquee var(--jk-dur, 6s) linear infinite alternate;
+.is-marquee .jk-run {
+  animation: jk-marquee var(--jk-dur, 6s) linear infinite;
 }
 
 @keyframes jk-marquee {
-  0%,
-  10% {
+  from {
     transform: translateX(0);
   }
 
-  90%,
-  100% {
-    transform: translateX(calc(-1 * var(--jk-over, 0px)));
+  to {
+    transform: translateX(calc(-1 * var(--jk-step, 0px)));
   }
+}
+
+/**
+ * ⚠ 这三行是修「药丸太胖」的关键（R36）。
+ *
+ * 状态栏里歌词的宿主同时挂着 `.jk-line`（为了共用逐字渐变），于是把**舞台版**歌词的
+ * 字号与上下 padding 一起吃了进来：实测 `font-size: 17px`、`padding: 8px 0`、
+ * 行高 27.2px —— 歌词那一行因此高达 43.2px，而它该是 19.5px（13px × 1.5）。
+ * 药丸整体 105px 里有 23px 是这么来的。
+ *
+ * 特异度（0,2,0）高过 `.jk-line`，所以放哪儿都盖得住；写成后代选择器是为了
+ * **只管状态栏这一份**，舞台那份大歌词一个像素都不动。
+ */
+.jk-mini__line .jk-run {
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
 }
 
 .jk-mini__s {
@@ -1149,10 +1186,48 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   border-radius: var(--r-full);
-  padding: var(--sp-2) var(--sp-3);
-  /* 曲名与歌词是一组，行距比 --sp-2 再紧一档（药丸因此从 81.5px 降到 ~77px，
-     刚好压住「≤80px / ≤10% 占屏」那条判据）。没有更小的间距 token，就地写字面量 */
-  gap: 0.25rem;
+  /* R36「太胖了」：8px 12px → 6px 10px。上下各省 2px */
+  padding: 6px 10px;
+  /* 曲名与歌词是一组，行距比 --sp-2 再紧一档。没有更小的间距 token，就地写字面量 */
+  gap: 0.2rem;
+}
+
+/**
+ * R36 药丸瘦身。他的原话是「对药丸形态再做合理比例调节，现在的太『胖了』」。
+ *
+ * 实测 105px 的构成：padding 8+8、第一行 40（键组撑的）、gap 4、歌词行 **43.2**。
+ * 大头是歌词行 —— 那是个 bug（内层吃到了舞台版 `.jk-line` 的 17px 字号与 8px 上下
+ * padding，见本文件 `.jk-mini__line-i` 那一段），修完就回到 19.5px。
+ *
+ * 剩下的是比例：药丸里的键本来照抄全展开态（播放 40、其余 32、封面 36），
+ * 在一枚高七十来像素的药丸里显得过重。这里按 0.85 收一档，只在药丸态生效 ——
+ * 全展开态与 /music 唱盘台一个像素都不动。
+ *
+ * 最终 ≈70px（812 屏占 8.6%），仍在 R25 立的「≤80px / ≤10% 占屏」判据内。
+ */
+.jk-mini.is-fold .jk-mini__fold {
+  width: 2rem;
+  height: 2rem;
+}
+
+.jk-mini.is-fold .jk-key--sm {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.jk-mini.is-fold .jk-key--sm svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.jk-mini.is-fold .jk-key--sm.jk-key--play {
+  width: 2rem;
+  height: 2rem;
+}
+
+.jk-mini.is-fold .jk-key--sm.jk-key--play svg {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .jk-mini.is-fold .jk-mini__head {
@@ -1170,7 +1245,8 @@
 .jk-mini.is-fold .jk-mini__line {
   grid-column: 1 / span 2;
   grid-row: 2;
-  padding-left: calc(2.25rem + var(--sp-3));
+  /* 让开封面那一列。封面 R36 从 2.25rem 收到 2rem，这个数跟着改 —— 两处是同一个宽度 */
+  padding-left: calc(2rem + var(--sp-3));
 }
 
 /* 药丸按内容宽，不再通栏 —— 通栏的东西拖起来没有意义，也不像药丸。
@@ -1196,8 +1272,7 @@
 .jk-mini.is-dock .jk-mini__seek,
 .jk-mini.is-dock .jk-mini__vol,
 .jk-mini.is-dock .jk-mini__keys,
-.jk-mini.is-dock [data-open],
-.jk-mini.is-dock [data-toggle] {
+.jk-mini.is-dock [data-open] {
   display: none;
 }
 

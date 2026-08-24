@@ -39,7 +39,7 @@ git status -sb && git log --oneline -1 && git fetch --dry-run 2>&1 | tail -3
 npm run build
 ```
 
-判据：**`18 page(s) built`**。页数变了先弄清为什么（本轮是否真的增删了页面），别往下走。
+判据：**`16 page(s) built`**（R32 删掉 /now 与两组占位相册、R35 加了 /admin 之后是这个数）。页数变了先弄清为什么（本轮是否真的增删了页面），别往下走。
 
 ```bash
 npx astro check

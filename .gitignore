@@ -17,6 +17,13 @@ pnpm-debug.log*
 .env
 .env.production
 
+# wrangler 本地开发用的密钥（`wrangler dev` 自动读它注入 env）。
+# **这一行是安全前置**：仓库是公开的，中转站的 API key 一进 git 历史就等于对外分发，
+# 而 GitHub 上删不干净（R6 那次脱敏实测过：force push 之后旧提交仍匿名可读）。
+# 线上那份走 `npx wrangler secret put`，不在这个文件里，也不在 wrangler.toml 里。
+.dev.vars
+.dev.vars.*
+
 # macOS-specific files
 .DS_Store
 

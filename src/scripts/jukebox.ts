@@ -108,24 +108,52 @@ export class WordRun {
   /** 这一行的原文：离开时要拿它把逐段 <span> 折回一个纯文本节点 */
   private raw = '';
   private words: HTMLElement[] = [];
+  /**
+   * 第二份（R36）。只有状态栏那份歌词要它 —— 跑马灯必须首尾相接，
+   * 所以同一行文字并排放两份，滚过一份的宽度时视觉上正好接上。
+   * 舞台那份歌词 `twin` 传 false，行为与从前一个字都不差。
+   */
+  private twin: HTMLElement[] = [];
   private at = -1;
 
-  /** 接管一行。同一个元素同一段文字不重复拆 —— resize 后重挂也不会闪 */
-  mount(el: HTMLElement, text: string) {
+  /**
+   * 接管一行。同一个元素同一段文字不重复拆 —— resize 后重挂也不会闪。
+   * `twin` 为真时拆两份，各自包在一个 `.jk-seg` 里（跑马灯要量「一份的宽度」）。
+   */
+  mount(el: HTMLElement, text: string, twin = false) {
     if (this.host === el && this.raw === text) return;
     this.unmount();
     this.host = el;
     this.raw = text;
-    this.words = segment(text).map((s) => {
-      const w = document.createElement('span');
-      w.className = 'jk-w';
-      // 上游歌词是数据，一个字都不进 innerHTML
-      w.textContent = s;
-      return w;
-    });
+
+    const cut = () =>
+      segment(text).map((s) => {
+        const w = document.createElement('span');
+        w.className = 'jk-w';
+        // 上游歌词是数据，一个字都不进 innerHTML
+        w.textContent = s;
+        return w;
+      });
+
+    this.words = cut();
+    this.twin = twin ? cut() : [];
     this.at = -1;
     el.textContent = '';
-    el.append(...this.words);
+
+    if (twin) {
+      const seg = (kids: HTMLElement[], dup: boolean) => {
+        const box = document.createElement('span');
+        box.className = 'jk-seg';
+        // 第二份是纯视觉补位，读屏不该念两遍
+        if (dup) box.setAttribute('aria-hidden', 'true');
+        box.append(...kids);
+        return box;
+      };
+      el.append(seg(this.words, false), seg(this.twin, true));
+    } else {
+      el.append(...this.words);
+    }
+
     el.classList.add('is-on');
   }
 
@@ -142,6 +170,7 @@ export class WordRun {
     this.host = null;
     this.raw = '';
     this.words = [];
+    this.twin = [];
     this.at = -1;
   }
 
@@ -157,14 +186,20 @@ export class WordRun {
     if (!n) return;
     const at = Math.min(n - 1, Math.floor(p * n));
     if (at !== this.at) {
-      this.words.forEach((w, i) => {
-        w.classList.toggle('is-on', i < at);
-        w.classList.toggle('is-at', i === at);
-      });
+      const mark = (ws: HTMLElement[]) =>
+        ws.forEach((w, i) => {
+          w.classList.toggle('is-on', i < at);
+          w.classList.toggle('is-at', i === at);
+        });
+      mark(this.words);
+      // 第二份必须同步，否则跑马灯滚到它时高亮会冻在上一次的位置
+      if (this.twin.length) mark(this.twin);
       this.at = at;
     }
     // 段内进度：整行的 p 落在这一段里的那一小截
-    this.words[at].style.setProperty('--p', (p * n - at) * 100 + '%');
+    const inner = (p * n - at) * 100 + '%';
+    this.words[at].style.setProperty('--p', inner);
+    if (this.twin.length) this.twin[at].style.setProperty('--p', inner);
   }
 }
 /* ==========================================================================
