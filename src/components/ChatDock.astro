@@ -75,13 +75,13 @@ import { MSG_MAX, OPENING } from '../data/chat';
         placeholder="回车发送"
         aria-label="想问什么"
       />
-      {/* 他要的：这个键不再是「发送」，而是收起对话框（发送走回车 —— 单输入框的
-          form 会隐式提交，手机键盘上那颗键也是「发送」，`enterkeyhint` 已声明）。
-          交互语言与音乐药丸那枚 ⌃/⌄ 对齐：收起后由左下那枚浮动键再展开。 */}
-      <button class="ai__send" type="button" data-ai-fold aria-label="收起对话框">
+      {/* 发送键（R38 改回来的：R36 那一轮他要过「改成缩小/展开」，用过之后又要发送键）。
+          回车照样能发 —— 单输入框的 form 会隐式提交，手机键盘那颗键也是「发送」。
+          收起对话框走左下那枚浮动键。 */}
+      <button class="ai__send" type="submit" data-ai-send aria-label="发送">
         <svg viewBox="0 0 24 24" aria-hidden="true"
           ><path
-            d="M6 10l6 6 6-6"
+            d="M12 19V6M6 12l6-6 6 6"
             fill="none"
             stroke="currentColor"
             stroke-width="1.6"
@@ -109,12 +109,7 @@ import { MSG_MAX, OPENING } from '../data/chat';
     const log = pick('[data-ai-log]');
     const form = pick<HTMLFormElement>('[data-ai-form]');
     const input = pick<HTMLInputElement>('[data-ai-in]');
-    const send = pick<HTMLButtonElement>('[data-ai-fold]');
-
-    /* 面板里那枚键只做一件事：收起面板（他要的「改为缩小和展开对话框」）。
-       它不参与发送，所以发送期间**不禁用它** —— 等回答的时候照样收得起来，
-       流仍在后台跑完并落库。 */
-    send.addEventListener('click', () => setOpen(false));
+    const send = pick<HTMLButtonElement>('[data-ai-send]');
 
     /** 会话号：一个标签页一份，关掉标签就换新的。Durable Object 的实例名就是它 */
     const session = (() => {
@@ -198,6 +193,8 @@ import { MSG_MAX, OPENING } from '../data/chat';
       busy = true;
       input.value = '';
       input.disabled = true;
+      // 等回答期间把发送键也灰掉：`busy` 已经挡住了重复提交，这一下是让它看得出来
+      send.disabled = true;
       bubble('me', text);
 
       const out = bubble('ai', '…');
@@ -250,6 +247,7 @@ import { MSG_MAX, OPENING } from '../data/chat';
       } finally {
         busy = false;
         input.disabled = false;
+        send.disabled = false;
         log.scrollTop = log.scrollHeight;
         if (!panel.hidden) input.focus();
       }
@@ -459,6 +457,11 @@ import { MSG_MAX, OPENING } from '../data/chat';
   .ai__send:hover:not(:disabled) {
     color: var(--seal);
     border-color: var(--glass-border-lit);
+  }
+
+  .ai__send:disabled {
+    color: var(--ink-faint);
+    cursor: default;
   }
 
   /* 窄屏：面板按视口宽算，键收小一档。药丸在右下、这枚在左下，

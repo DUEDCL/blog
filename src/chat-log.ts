@@ -18,17 +18,23 @@
  * `fetch()` 风格 DO，调用方用 `stub.fetch()` —— 零类型依赖。
  */
 
-/** 一条消息。`ip` 只有 user 那条有值（R32 他定了要存 IP） */
+/** 一条消息。`ip` 只有 user 那条有值；`model` 只有 ai 那条有值 */
 export interface ChatRow {
   id: number;
   role: 'user' | 'ai';
   text: string;
   ip: string;
+  model: string;
   ts: number;
 }
 
-/** 喂给模型的历史条数上限。6 条 = 3 轮，再多就是拿 token 换记忆 */
-const HISTORY_MAX = 6;
+/**
+ * 喂给模型的历史条数上限。**4 条 = 2 轮**（R39 从 6 降下来的）：
+ * 每一轮都要把整个知识库连同历史一起送进去，历史每多一条就是几十到几百个 token
+ * 乘以往后每一次对话。两轮足够接住「那你……」「刚才说的那个……」这类指代，
+ * 再多就是拿钱买记忆了。
+ */
+const HISTORY_MAX = 4;
 
 /** 一条消息最长存多少字符。截断而不是拒绝 —— 落库不该因为一条超长消息失败 */
 const TEXT_MAX = 4000;
@@ -61,20 +67,47 @@ export class ChatLog {
 
     /* 后台那份可改的配置（端点、模型候选、密钥、开关）。
        **同一个 class、不同实例**：会话实例只用 msg 表，配置实例（`idFromName('config')`）
-       只用 cfg 表。这样不必新增第二个 DO 绑定，也不必给类改名
-       （改名要走 rename migration，不值得）。代价是两张空表各占几 KB。 */
+       用 cfg 与 ses 两张表。这样不必新增第二个 DO 绑定，也不必给类改名
+       （改名要走 rename migration，不值得）。代价是每个实例都多几张空表，各占几 KB。 */
     this.#sql.exec(
       `CREATE TABLE IF NOT EXISTS cfg (
          k TEXT PRIMARY KEY,
          v TEXT NOT NULL
        )`
     );
+
+    /**
+     * 会话索引（R38）—— 后台要能列出「有哪些人聊过」。
+     *
+     * 为什么需要它：DO 是**按会话分实例**的，一个会话一个对象，
+     * 彼此不知道对方存在，没有任何全局视图。所以必须在配置实例里单独记一份索引，
+     * 每轮对话往这儿 upsert 一次。
+     */
+    this.#sql.exec(
+      `CREATE TABLE IF NOT EXISTS ses (
+         id    TEXT PRIMARY KEY,
+         first INTEGER NOT NULL,
+         last  INTEGER NOT NULL,
+         n     INTEGER NOT NULL DEFAULT 0,
+         ip    TEXT    NOT NULL DEFAULT '',
+         model TEXT    NOT NULL DEFAULT ''
+       )`
+    );
+
+    /* 线上那些实例的 msg 表是 R33 建的，没有 model 列（他 R38 要看「模型使用」）。
+       SQLite 没有 `ADD COLUMN IF NOT EXISTS`，第二次跑必然抛「duplicate column」——
+       所以吞掉异常就是这里的正确写法，不是偷懒。 */
+    try {
+      this.#sql.exec("ALTER TABLE msg ADD COLUMN model TEXT NOT NULL DEFAULT ''");
+    } catch {
+      /* 已经有这一列了 */
+    }
   }
 
   #rows(limit: number, asc = true): ChatRow[] {
     const r = this.#sql
       .exec(
-        `SELECT id, role, text, ip, ts FROM msg ORDER BY id ${asc ? 'ASC' : 'DESC'} LIMIT ?`,
+        `SELECT id, role, text, ip, model, ts FROM msg ORDER BY id ${asc ? 'ASC' : 'DESC'} LIMIT ?`,
         limit
       )
       .toArray();
@@ -84,6 +117,7 @@ export class ChatLog {
       role: x.role === 'user' ? 'user' : 'ai',
       text: String(x.text ?? ''),
       ip: String(x.ip ?? ''),
+      model: String(x.model ?? ''),
       ts: Number(x.ts),
     }));
   }
@@ -99,16 +133,18 @@ export class ChatLog {
             role?: string;
             text?: string;
             ip?: string;
+            model?: string;
           };
           const role = b.role === 'user' ? 'user' : 'ai';
           const text = String(b.text ?? '').slice(0, TEXT_MAX);
           if (!text) return Response.json({ ok: false, error: 'empty' }, { status: 400 });
 
           this.#sql.exec(
-            'INSERT INTO msg (role, text, ip, ts) VALUES (?, ?, ?, ?)',
+            'INSERT INTO msg (role, text, ip, model, ts) VALUES (?, ?, ?, ?, ?)',
             role,
             text,
             String(b.ip ?? ''),
+            String(b.model ?? '').slice(0, 80),
             Date.now()
           );
           return Response.json({ ok: true });
@@ -156,6 +192,52 @@ export class ChatLog {
             }
           }
           return Response.json({ ok: true });
+        }
+
+        /**
+         * 会话索引的 upsert（只打在配置实例上）。每轮对话一次。
+         * `n` 累加、`last` 覆盖、`first` 只在第一次写，`ip`/`model` 取最近一次的值。
+         */
+        case '/touch': {
+          const b = (await req.json()) as { id?: string; ip?: string; model?: string; add?: number };
+          const id = String(b.id ?? '').slice(0, 64);
+          if (!id) return Response.json({ ok: false, error: 'no id' }, { status: 400 });
+
+          const now = Date.now();
+          const add = Number(b.add) || 0;
+          this.#sql.exec(
+            `INSERT INTO ses (id, first, last, n, ip, model) VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               last  = excluded.last,
+               n     = ses.n + excluded.n,
+               ip    = CASE WHEN excluded.ip    <> '' THEN excluded.ip    ELSE ses.ip    END,
+               model = CASE WHEN excluded.model <> '' THEN excluded.model ELSE ses.model END`,
+            id,
+            now,
+            now,
+            add,
+            String(b.ip ?? ''),
+            String(b.model ?? '').slice(0, 80)
+          );
+          return Response.json({ ok: true });
+        }
+
+        /** 会话列表（配置实例）。最近活跃的排前面 */
+        case '/sessions': {
+          const n = Math.min(200, Math.max(1, Number(url.searchParams.get('n')) || 60));
+          const rows = this.#sql
+            .exec('SELECT id, first, last, n, ip, model FROM ses ORDER BY last DESC LIMIT ?', n)
+            .toArray();
+          return Response.json({
+            items: rows.map((x) => ({
+              id: String(x.id),
+              first: Number(x.first),
+              last: Number(x.last),
+              n: Number(x.n),
+              ip: String(x.ip ?? ''),
+              model: String(x.model ?? ''),
+            })),
+          });
         }
 
         default:

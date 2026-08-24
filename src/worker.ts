@@ -37,6 +37,7 @@ import {
   TEMPERATURE,
   type KbItem,
 } from './data/chat';
+import { SHAPES, onceUrl, type Proto, type Shape, type Turn } from './data/proto';
 
 /** DO 类必须从入口文件导出，`wrangler.toml` 的 `[exports.ChatLog]` 才找得到它 */
 export { ChatLog } from './chat-log';
@@ -69,6 +70,8 @@ interface Env {
   CHAT_BASE?: string;
   CHAT_KEY?: string;
   CHAT_MODEL?: string;
+  /** 请求格式（R39）。`openai` / `responses` / `anthropic` / `gemini`，缺省 `openai` */
+  CHAT_PROTO?: string;
   /**
    * 后台（`/admin`）的口令哈希与 cookie 签名密钥 —— R20② 那把锁，方案 B。
    *
@@ -456,12 +459,35 @@ const stubOf = (env: Env, session: string) => env.CHAT.get(env.CHAT.idFromName(s
  */
 const cfgStub = (env: Env) => stubOf(env, 'config');
 
+/** 读「上一次为什么没走通」。后台面板顶上显示它 —— 排查上游问题的第一现场 */
+async function lastWhy(env: Env): Promise<string> {
+  try {
+    const res = await cfgStub(env).fetch(new Request('https://chat.do/cfg'));
+    if (!res.ok) return '';
+    const d = (await res.json()) as { cfg?: Record<string, string> };
+    return d.cfg?.lastwhy ?? '';
+  } catch {
+    return '';
+  }
+}
+
 /** 一次对话真正用到的配置 */
 interface Cfg {
   base: string;
   key: string;
   models: string[];
   off: boolean;
+  /** 请求格式（R39）。四种，见 `data/proto.ts` */
+  proto: Proto;
+  /**
+   * 这家服务商在**中国大陆**（R39 他要的那个开关）。
+   *
+   * 它不改变请求怎么发，只改变两件事：后台会明说「这条线 Cloudflare 边缘打不通」，
+   * 日志里也会标出来。依据是 R37 那次实测 —— 线上 Worker 打大陆 IP 30 秒无响应，
+   * 而同一个 Worker 打境外端点 0.5 秒就有回；本机直连那家却是好的。
+   * 标了这个之后再看到超时，就不必再怀疑代码或密钥。
+   */
+  domestic: boolean;
 }
 
 /**
@@ -483,6 +509,7 @@ async function loadCfg(env: Env): Promise<Cfg> {
   }
 
   const model = over.model || env.CHAT_MODEL || '';
+  const proto = (over.proto || env.CHAT_PROTO || 'openai') as Proto;
 
   return {
     base: (over.base || env.CHAT_BASE || '').replace(/\/+$/, ''),
@@ -492,6 +519,8 @@ async function loadCfg(env: Env): Promise<Cfg> {
       .map((s) => s.trim())
       .filter(Boolean),
     off: (over.off || env.CHAT_OFF || '') !== '',
+    proto: proto in SHAPES ? proto : 'openai',
+    domestic: (over.domestic || '') !== '',
   };
 }
 
@@ -501,18 +530,66 @@ async function logMsg(
   session: string,
   role: 'user' | 'ai',
   text: string,
-  ip: string
+  ip: string,
+  model = ''
 ): Promise<void> {
   try {
     await stubOf(env, session).fetch(
       new Request('https://chat.do/append', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role, text, ip }),
+        body: JSON.stringify({ role, text, ip, model }),
       })
     );
   } catch {
     /* 存不进去也不能影响这一轮对话 */
+  }
+}
+
+/**
+ * 把「这一轮为什么没走通主路」记一笔到配置表（R39）。
+ *
+ * 为什么要落库而不是只 `console.warn`：`wrangler tail` 在本机这条链路上时常抓不到东西，
+ * 而这类失败（上游 4xx、超时、抽不到内容）恰恰只有那一行原因有用。
+ * 落进 cfg 表之后后台直接能看，不必再去翻日志。**不进响应体** —— 那是给访客的。
+ */
+async function noteWhy(env: Env, text: string): Promise<void> {
+  try {
+    await cfgStub(env).fetch(
+      new Request('https://chat.do/cfg-set', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          lastwhy: new Date().toISOString().slice(5, 19).replace('T', ' ') + ' ｜ ' + text.slice(0, 600),
+        }),
+      })
+    );
+  } catch {
+    /* 记不上就算了 */
+  }
+}
+
+/**
+ * 更新会话索引（R38，后台要能列出「有哪些人聊过」）。
+ * DO 按会话分实例、彼此不可见，所以索引单独记在配置实例里。同样失败即吞。
+ */
+async function touchSession(
+  env: Env,
+  session: string,
+  ip: string,
+  model: string,
+  add: number
+): Promise<void> {
+  try {
+    await cfgStub(env).fetch(
+      new Request('https://chat.do/touch', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: session, ip, model, add }),
+      })
+    );
+  } catch {
+    /* 索引丢一条不影响对话，也不影响那条消息本身已经落库 */
   }
 }
 
@@ -540,25 +617,25 @@ const strip = (s: string) =>
 /**
  * 从一行 SSE 的 payload 里抽出这一小段增量文本。
  *
- * 两种上游格式都认，因为主路与兜底路的格式不一样：
- * - OpenAI 兼容（主路）：`{"choices":[{"delta":{"content":"字"}}]}`
- * - Workers AI 绑定（兜底）：`{"response":"字"}`
- *
- * 认不出来就返回空串 —— 半行 JSON、心跳、注释行都走这条。
+ * **先按配置的协议解析，抽不到再挨个嗅探**（R39）。为什么要嗅探这一层：
+ * 协议是他在后台手选的，选错一档就会一个字都出不来 —— 而那种失败长得跟
+ * 「模型不可用」一模一样，很难查。嗅探让配错协议最多损失一点点 CPU，不损失功能。
+ * 顺带兜住 Workers AI 兜底那条路（`{"response":"字"}`，不属于任何一个协议）。
  */
-function deltaOf(payload: string): string {
+function deltaOf(payload: string, shape: Shape): string {
   if (!payload || payload === '[DONE]') return '';
   try {
-    const j = JSON.parse(payload) as {
-      response?: unknown;
-      choices?: { delta?: { content?: unknown }; text?: unknown }[];
-    };
-    if (typeof j.response === 'string') return j.response;
-    const c = j.choices?.[0];
-    if (c) {
-      if (typeof c.delta?.content === 'string') return c.delta.content;
-      if (typeof c.text === 'string') return c.text;
+    const j = JSON.parse(payload) as Record<string, unknown>;
+
+    const d = shape.delta(j);
+    if (d) return d;
+
+    for (const p of ['openai', 'anthropic', 'gemini', 'responses'] as Proto[]) {
+      const alt = SHAPES[p].delta(j);
+      if (alt) return alt;
     }
+    // Workers AI 绑定
+    return typeof j.response === 'string' ? j.response : '';
   } catch {
     /* 不是完整 JSON */
   }
@@ -575,29 +652,62 @@ function lines(buf: string): [string[], string] {
  * 把 SSE 流读完并抽出正文。这一路是 `tee()` 出来的副本，
  * **客户端断开不影响它** —— 所以「访客问完就关页面」那种情况回答照样存得下来。
  */
-async function collect(stream: ReadableStream): Promise<string> {
+async function collect(stream: ReadableStream, shape: Shape): Promise<string> {
   const reader = stream.getReader();
   const dec = new TextDecoder();
   let buf = '';
   let out = '';
+  /** 全部原文，只在逐行扫不出东西时用来做非流式兜底（与 toSiteStream 同一个理由，R38） */
+  let raw = '';
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      buf += dec.decode(value as Uint8Array, { stream: true });
+      const chunk = dec.decode(value as Uint8Array, { stream: true });
+      if (raw.length < 262144) raw += chunk;
+      buf += chunk;
       const [rows, rest] = lines(buf);
       buf = rest;
       for (const row of rows) {
         if (!row.startsWith('data:')) continue;
-        out += deltaOf(row.slice(5).trim());
+        out += deltaOf(row.slice(5).trim(), shape);
       }
     }
   } catch {
     /* 上游断了：把已经收到的那部分存下来，半句也比丢掉好 */
   }
 
+  // 上游没走 SSE：整段当一块 JSON 再试一次，否则这一轮落库会是空的
+  if (!out) return onceOf(raw, shape);
   return strip(out);
+}
+
+/**
+ * 上游**没有走 SSE**时的解析：整个响应体是一块普通 JSON。
+ *
+ * R38 实测出来的：他换到一个「可用」的模型之后，每一句回答都变成兜底文案
+ * 「这个我答不上来。」—— 因为那个渠道对 `stream: true` 根本不流式返回，
+ * 直接吐一整块 `{"choices":[{"message":{"content":"…"}}]}`。
+ * 那里面**一行都不以 `data:` 开头**，逐行扫的解析器于是一个字都抽不出来。
+ */
+function onceOf(text: string, shape: Shape): string {
+  try {
+    const j = JSON.parse(text.trim()) as Record<string, unknown>;
+
+    const one = shape.once(j);
+    if (one) return strip(one);
+
+    // 与 deltaOf 同一套嗅探：协议选错了也别让内容整段丢掉
+    for (const p of ['openai', 'anthropic', 'gemini', 'responses'] as Proto[]) {
+      const alt = SHAPES[p].once(j);
+      if (alt) return strip(alt);
+    }
+    if (typeof j.response === 'string') return strip(j.response);
+  } catch {
+    /* 不是 JSON */
+  }
+  return '';
 }
 
 /**
@@ -608,40 +718,76 @@ async function collect(stream: ReadableStream): Promise<string> {
  * - **响应体里不留任何上游痕迹**（字段名、模型名、请求 id、usage 统计都会被丢掉）。
  *
  * **为什么手写 ReadableStream 而不用 `pipeThrough(new TransformStream(...))`**：
- * 上游中途断线或 `AbortSignal.timeout` 触发时，pipeThrough 会把错误往下游传播成一个
- * 未捕获的 rejection —— 本机实测过一次，`wrangler dev` 直接崩在
+ * 上游中途断线或超时触发时，pipeThrough 会把错误往下游传播成一个未捕获的 rejection ——
+ * 本机实测过一次，`wrangler dev` 直接崩在
  * `Uncaught TimeoutError: The operation was aborted due to timeout`，线上则会变成 500。
  * 手写之后错误在 `pull()` 里被吞掉，客户端收到一个正常的 `[DONE]`，
  * **已经吐出来的字都保留**，只是提前收尾。
+ *
+ * **兜住「上游其实没流式」这种情况**（R38）：一路累积原文，收尾时如果一个字都没发出去，
+ * 就把整段当普通 JSON 再解析一次。不这么兜的话，那种渠道下每句回答都是空的。
  */
-function toSiteStream(upstream: ReadableStream): ReadableStream {
+function toSiteStream(upstream: ReadableStream, shape: Shape): ReadableStream {
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   const reader = upstream.getReader();
   let buf = '';
+  /** 全部原文，只在「一个字都没发出」时用来做非流式兜底。上限防着异常大的响应 */
+  let raw = '';
+  let sent = 0;
 
   const bye = (ctrl: { enqueue(c: Uint8Array): void; close(): void }) => {
+    // 没走 SSE 的渠道：整段当一块 JSON 再试一次
+    if (!sent) {
+      const once = onceOf(raw, shape);
+      if (once) ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ d: once })}\n\n`));
+    }
     ctrl.enqueue(enc.encode('data: [DONE]\n\n'));
     ctrl.close();
   };
 
   return new ReadableStream({
     async pull(ctrl) {
+      /**
+       * ⚠ **必须在 pull 里循环读到「有东西可发」为止**（R39 的坑，查了很久）。
+       *
+       * 原来是「读一批 → 解析 → 有内容才 enqueue → 返回」。上游那些 chunk 里有大量
+       * 不含正文的行（`{"delta":{"role":"assistant"}}`、心跳、空 `content`、
+       * `finish_reason` 那条），碰上它们这一次 pull 就什么都没 enqueue ——
+       * 而实测的结果是**之后 pull 再也不被调用**，客户端于是收到 0 个字。
+       *
+       * 证据是同一个流 tee 出来的另一路（落库用的 `collect`，写法是 `for(;;)` 一读到底）
+       * 内容完整：库里存着「在蚌埠读书。具体学校就不说了。」，而客户端拿到的是空。
+       * 两路用的是同一个 `deltaOf`，差别只在这个结构上。
+       *
+       * 所以这里自己兜住：一次 pull 内一直读，直到解析出内容（enqueue 后返回）
+       * 或者上游结束（`bye`）。
+       */
       try {
-        const { done, value } = await reader.read();
-        if (done) return bye(ctrl);
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return bye(ctrl);
 
-        buf += dec.decode(value as Uint8Array, { stream: true });
-        const [rows, rest] = lines(buf);
-        buf = rest;
+          const chunk = dec.decode(value as Uint8Array, { stream: true });
+          if (raw.length < 262144) raw += chunk;
+          buf += chunk;
+          const [rows, rest] = lines(buf);
+          buf = rest;
 
-        let out = '';
-        for (const row of rows) {
-          if (!row.startsWith('data:')) continue;
-          const d = deltaOf(row.slice(5).trim());
-          if (d) out += `data: ${JSON.stringify({ d })}\n\n`;
+          let out = '';
+          for (const row of rows) {
+            if (!row.startsWith('data:')) continue;
+            const d = deltaOf(row.slice(5).trim(), shape);
+            if (d) out += `data: ${JSON.stringify({ d })}\n\n`;
+          }
+
+          if (out) {
+            sent += out.length;
+            ctrl.enqueue(enc.encode(out));
+            return;
+          }
+          // 这一批全是心跳／空 delta／状态行 —— 继续读，别把 pull 让出去
         }
-        if (out) ctrl.enqueue(enc.encode(out));
       } catch {
         bye(ctrl);
       }
@@ -757,19 +903,21 @@ async function route(url: URL): Promise<Response> {
  * 等上游**响应头**的上限。拿到头之后就不限了 —— 用 `AbortSignal.timeout(总时长)`
  * 会把正常的长回答一起掐断。
  *
- * 12 秒是按线上实测定的：那家上游正常出字要 3–5 秒，而完全不通的时候 Cloudflare 侧
- * 要 **30 秒**才放弃。两个候选各等 30 秒、再加兜底，访客要盯着「…」看一分半 ——
- * 那比直接说答不上来更糟。
+ * **30 秒不是随便定的**（R39 的坑）：一开始给 12 秒，理由是「不通的时候 Cloudflare 侧
+ * 要 30 秒才放弃，别让访客干等」。结果换到一个真能用的上游之后，对话仍然一个字都不出 ——
+ * 而后台的非流式测试是好的。原因是**很多上游要先把 prompt 读完、开始生成，才发响应头**：
+ * 系统提示词有一万多 token 时那一步就要十几秒，12 秒正好卡在中间，
+ * 于是每次都 abort 掉主路、掉进兜底，表现成「所有回答都一样」。
+ *
+ * 首字延迟因此与提示词长度直接相关 —— 这是「精简提示词」除了省钱之外的第二个理由。
  */
-const HEAD_TIMEOUT_MS = 12000;
+const HEAD_TIMEOUT_MS = 30000;
 
 /** 兜底（Workers AI 绑定）也要有上限。它 hang 住时同样不能让访客干等 */
 const BIND_TIMEOUT_MS = 20000;
 
 /** 探针（后台最小测试）用的上限。那是他自己在看，愿意多等一会儿换一个明确结论 */
 const PROBE_TIMEOUT_MS = 30000;
-
-type Msg = { role: string; content: string };
 
 /**
  * 打上游时带的请求头。除了鉴权与 content-type，其余是一个**真实 OpenAI 客户端**
@@ -790,13 +938,20 @@ const CLIENT_HEADERS: Record<string, string> = {
 };
 
 /**
- * 主路：OpenAI 兼容端点。地址、模型、密钥全部来自 secret ——
+ * 主路。地址、模型、密钥、**请求格式**全部来自配置 ——
  * 这个函数里没有任何一个值是写在仓库里的。
  *
  * 抛出的 Error 的 message 只有我自己写的字 + HTTP 状态码，
  * **上游响应体一个字都不外泄**（它可能带自己的域名、模型名与报错细节）。
  */
-async function askUpstream(cfg: Cfg, model: string, messages: Msg[]): Promise<ReadableStream> {
+async function askUpstream(
+  cfg: Cfg,
+  model: string,
+  system: string,
+  turns: Turn[]
+): Promise<ReadableStream> {
+  const shape = SHAPES[cfg.proto];
+
   /* 只给「建连 + 拿到响应头」设超时，拿到之后 `clearTimeout` —— 流式读取不受限。
      abort 会真正取消这次 fetch，不是只放弃等待。 */
   const ac = new AbortController();
@@ -804,20 +959,23 @@ async function askUpstream(cfg: Cfg, model: string, messages: Msg[]): Promise<Re
 
   let res: Response;
   try {
-    res = await fetch(`${cfg.base}/chat/completions`, {
+    res = await fetch(shape.url(cfg.base, model, cfg.key), {
       method: 'POST',
       headers: {
         ...CLIENT_HEADERS,
-        authorization: `Bearer ${cfg.key}`,
+        ...shape.headers(cfg.key),
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        max_tokens: MAX_TOKENS,
-        temperature: TEMPERATURE,
-      }),
+      body: JSON.stringify(
+        shape.body({
+          model,
+          system,
+          turns,
+          max: MAX_TOKENS,
+          temp: TEMPERATURE,
+          stream: true,
+        })
+      ),
       signal: ac.signal,
     });
   } finally {
@@ -829,7 +987,9 @@ async function askUpstream(cfg: Cfg, model: string, messages: Msg[]): Promise<Re
 }
 
 /** 兜底：Workers AI 绑定。零密钥、零第三方，主路缺配置或这一次失败时走它 */
-async function askBinding(env: Env, messages: Msg[]): Promise<ReadableStream> {
+async function askBinding(env: Env, system: string, turns: Turn[]): Promise<ReadableStream> {
+  // Workers AI 的绑定就是 OpenAI 那套形状，直接借 openai 的 body
+  const messages = [{ role: 'system', content: system }, ...turns];
   /* `env.AI.run` 不收 AbortSignal，所以只能 race。**race 不会取消底层请求** ——
      它挂住的话那个 promise 会一直悬着（Worker 生命周期结束时才收），
      但至少访客不用陪它等。线上实测这个绑定在本账号上就是会挂（R37）。 */
@@ -890,13 +1050,26 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
 
   const history = await loadHistory(env, session);
 
-  const messages = [
-    { role: 'system', content: buildSystem(kb) },
+  /* system 与对话分开传：四个协议里有三个把 system 放在 body 顶层
+     （Anthropic 的 `system`、Responses 的 `instructions`、Gemini 的 `systemInstruction`），
+     只有 OpenAI 兼容那套塞在 messages 里。拼装的活交给 `data/proto.ts`。 */
+  /* ⚠ **知识库全带，不做检索**（R39 试过又退回来了）。
+     一度改成「按字面重叠挑最相关的 8 条」，`prompt_tokens` 从 14722 降到 9162（省 38%）。
+     但线上三轮实测立刻暴露代价：第二轮问工具时 `where-i-live` 没被挑中，
+     分身看到自己上一句说过「蚌埠」而当前依据里没有，于是**当场自我否认** ——
+     「先纠一下上一句：地点我不该说，那不是他写过的东西」。第三轮又否认了一次工具那段。
+     一个会怀疑自己说过的话的分身，比多花 38% 的 token 糟得多。
+
+     真要再省，方向是**把条目本身写短**（现在平均四百多字），不是随机抽几条 ——
+     那是他的内容，得他自己动手。`pickKb` 留在 `data/chat.ts` 里没删，
+     等哪天条目多到装不下（六十条以上）再启用，那时漏检的代价才小于装不下的代价。 */
+  const system = buildSystem(kb);
+  const turns: Turn[] = [
     ...history.map((h) => ({
-      role: h.role === 'user' ? 'user' : 'assistant',
+      role: (h.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: h.text,
     })),
-    { role: 'user', content: message },
+    { role: 'user' as const, content: message },
   ];
 
   // 访客那条先落库：模型这一轮失败了，他说过的话也还在
@@ -922,12 +1095,15 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   }
 
   let raw: ReadableStream | null = null;
+  /** 这一轮真正出字的是谁 —— 落库与后台的「模型使用」都靠它 */
+  let used = '';
   const why: string[] = [];
 
   if (cfg.base && cfg.key) {
     for (const m of cfg.models) {
       try {
-        raw = await askUpstream(cfg, m, messages);
+        raw = await askUpstream(cfg, m, system, turns);
+        used = m;
         break;
       } catch (e) {
         why.push('主路 ' + m + '：' + (e instanceof Error ? e.message : String(e)));
@@ -937,7 +1113,8 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
 
   if (!raw) {
     try {
-      raw = await askBinding(env, messages);
+      raw = await askBinding(env, system, turns);
+      used = FALLBACK_MODEL;
     } catch (e) {
       /* Workers AI 免费额度用完也走这儿（官方 pricing：超额后该类型操作直接报错，
          不自动计费也不降级） */
@@ -947,17 +1124,29 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
 
   if (!raw) {
     console.error('两条路都没通 —— ' + why.join('｜'));
+    ctx.waitUntil(noteWhy(env, '两条路都没通 ｜ ' + why.join(' ｜ ')));
+    // 这一轮虽然没答上来，访客那句话已经落库了，索引也要跟上（不然后台看不到这次来访）
+    ctx.waitUntil(touchSession(env, session, ip, '', 1));
     return fail(502, '我这会儿答不上来，等一下再问');
   }
 
-  if (why.length) console.warn('主路没走通，已退回兜底 —— ' + why.join('｜'));
+  if (why.length) {
+    console.warn('主路没走通，已退回兜底 —— ' + why.join('｜'));
+    ctx.waitUntil(noteWhy(env, '退回兜底 ｜ ' + why.join(' ｜ ')));
+  }
 
   const [toClient, toLog] = raw.tee();
   ctx.waitUntil(
-    collect(toLog).then((text) => (text ? logMsg(env, session, 'ai', text, '') : undefined))
+    collect(toLog, SHAPES[cfg.proto]).then(async (text) => {
+      if (text) await logMsg(env, session, 'ai', text, '', used);
+      // 一个字都没抽出来：把它也记一笔，否则这种失败在后台完全看不见
+      else await noteWhy(env, '出字 0 ｜ 用的是 ' + (used || '（无）') + ' ｜ 协议 ' + cfg.proto);
+      // 一问一答算两条；答没出来就只算问的那一条
+      await touchSession(env, session, ip, used, text ? 2 : 1);
+    })
   );
 
-  return new Response(toSiteStream(toClient), {
+  return new Response(toSiteStream(toClient, SHAPES[cfg.proto]), {
     headers: {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store',
@@ -1008,7 +1197,7 @@ function timingEq(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function pbkdf2(pass: string, salt: Uint8Array, iterations: number): Promise<string> {
+async function pbkdf2(pass: string, salt: BufferSource, iterations: number): Promise<string> {
   const key = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, [
     'deriveBits',
   ]);
@@ -1120,30 +1309,32 @@ const NOT_OBEDIENT =
   /deepseek|chatgpt|openai|gpt-[0-9]|qwen|通义|千问|智谱|glm|kimi|月之暗面|深度求索|minimax|海螺|claude|anthropic|gemini|文心|讯飞|星火|豆包|step-?[0-9]|ai\s*助手|人工智能助手|大模型|语言模型/i;
 
 async function probe(cfg: Cfg, model: string, kb: KbItem[]): Promise<Record<string, unknown>> {
+  const shape = SHAPES[cfg.proto];
   const t0 = Date.now();
+
   try {
-    const res = await fetch(`${cfg.base}/chat/completions`, {
+    const res = await fetch(onceUrl(cfg.proto, shape.url(cfg.base, model, cfg.key)), {
       method: 'POST',
       headers: {
         ...CLIENT_HEADERS,
+        ...shape.headers(cfg.key),
         accept: 'application/json',
-        authorization: `Bearer ${cfg.key}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        /* **带上真实的系统提示词**（R37 之后改的）：他换了模型之后报「明显没连接到
-           知识库」，而光问「说三个字」是查不出这件事的。台账 R34 记过一个模型
-           `prompt_tokens` 只有 8 —— 它把 system 整个丢了。
-           所以这里照真实对话的样子送 system，再看回来的 `prompt_tokens`：
-           约 9000 说明知识库送到了，几十就是被丢了。 */
-        messages: [
-          { role: 'system', content: buildSystem(kb) },
-          { role: 'user', content: '你是谁？' },
-        ],
-        max_tokens: PROBE_MAX_TOKENS,
-        stream: false,
-      }),
+      /* **带上真实的系统提示词**：他换了模型之后报「明显没连接到知识库」，
+         而光问「说三个字」是查不出这件事的。台账 R34 记过一个模型 `prompt_tokens`
+         只有 8 —— 它把 system 整个丢了。送 system 再看回来的 token 数就能定性。 */
+      body: JSON.stringify(
+        shape.body({
+          model,
+          // 与真实对话一致：全带。报出来的 prompt_tokens 就是真实开销
+          system: buildSystem(kb),
+          turns: [{ role: 'user', content: '你是谁？' }],
+          max: PROBE_MAX_TOKENS,
+          temp: TEMPERATURE,
+          stream: false,
+        })
+      ),
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
 
@@ -1153,32 +1344,30 @@ async function probe(cfg: Cfg, model: string, kb: KbItem[]): Promise<Record<stri
     // 上游的错误原文只回给**已登录的他自己**，这是诊断必需的（截断到 200 字）
     if (!res.ok) return { model, ok: false, ms, status: res.status, error: body.slice(0, 200) };
 
+    let j: Record<string, unknown>;
     try {
-      const j = JSON.parse(body) as {
-        choices?: { message?: { content?: string; reasoning_content?: string } }[];
-        usage?: { prompt_tokens?: unknown };
-      };
-      const msg = j.choices?.[0]?.message;
-      const out = strip(String(msg?.content ?? ''));
-      const think = String(msg?.reasoning_content ?? '').length;
-      /* 这个数是「知识库到没到」的判据：送进去的 system 有 24 条问答、约 9000 token。
-         回来只有几十就说明这个模型把 system 丢了（台账 R34 见过一次 prompt_tokens=8），
-         那对话就会变成一个通用助手 —— 他报的「明显没连接到知识库」正是这种。 */
-      const pt = Number(j.usage?.prompt_tokens);
-      return {
-        model,
-        ok: !!out,
-        ms,
-        status: res.status,
-        text: out.slice(0, 160),
-        think,
-        promptTokens: Number.isFinite(pt) ? pt : null,
-        /* 「能连通」与「能当分身」是两件事。只有两者都成立才算可用 */
-        obedient: !!out && !NOT_OBEDIENT.test(out),
-      };
+      j = JSON.parse(body) as Record<string, unknown>;
     } catch {
       return { model, ok: false, ms, status: res.status, error: '上游返回的不是 JSON' };
     }
+
+    const out = onceOf(body, shape);
+    const think = String(
+      (j.choices as { message?: { reasoning_content?: unknown } }[] | undefined)?.[0]?.message
+        ?.reasoning_content ?? ''
+    ).length;
+
+    return {
+      model,
+      ok: !!out,
+      ms,
+      status: res.status,
+      text: out.slice(0, 160),
+      think,
+      promptTokens: tokensOf(j),
+      /* 「能连通」与「能当分身」是两件事。只有两者都成立才算可用 */
+      obedient: !!out && !NOT_OBEDIENT.test(out),
+    };
   } catch (e) {
     return {
       model,
@@ -1187,6 +1376,21 @@ async function probe(cfg: Cfg, model: string, kb: KbItem[]): Promise<Record<stri
       error: e instanceof Error ? e.message : String(e),
     };
   }
+}
+
+/**
+ * 送进去的提示词有多少 token —— 「知识库到没到」的判据。三个协议放在三个地方：
+ * OpenAI 系 `usage.prompt_tokens`、Anthropic `usage.input_tokens`、
+ * Gemini `usageMetadata.promptTokenCount`。取不到就返回 null（不猜）。
+ */
+function tokensOf(j: Record<string, unknown>): number | null {
+  const u = j.usage as { prompt_tokens?: unknown; input_tokens?: unknown } | undefined;
+  const g = j.usageMetadata as { promptTokenCount?: unknown } | undefined;
+  for (const v of [u?.prompt_tokens, u?.input_tokens, g?.promptTokenCount]) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
 }
 
 /**
@@ -1235,7 +1439,15 @@ async function admin(req: Request, env: Env): Promise<Response> {
         logged: true,
         ready,
         // key **永不回显**，只报有无
-        cfg: { base: cfg.base, model: cfg.models.join(', '), hasKey: !!cfg.key, off: cfg.off },
+        cfg: {
+          base: cfg.base,
+          model: cfg.models.join(', '),
+          hasKey: !!cfg.key,
+          off: cfg.off,
+          proto: cfg.proto,
+          domestic: cfg.domestic,
+        },
+        lastWhy: await lastWhy(env),
         fallback: FALLBACK_MODEL,
       },
       CACHE.none
@@ -1243,6 +1455,72 @@ async function admin(req: Request, env: Env): Promise<Response> {
   }
 
   if (!logged) return json({ ok: false, error: '进不去' }, CACHE.none, 401);
+
+  /* ---- 对话记录（R38 他要的「查看对话记录详情」）------------------------
+     两条都是 GET，所以在这儿处理，不进 adminWrite（那边只接 POST）。
+     这两条会返回访客的 IP 与原文，**只有登录后能打**。 */
+
+  /** 会话列表。最近活跃的排前面 */
+  if (path === 'sessions') {
+    try {
+      const res = await cfgStub(env).fetch(
+        new Request('https://chat.do/sessions?n=' + (new URL(req.url).searchParams.get('n') ?? '60'))
+      );
+      const d = (await res.json()) as { items?: unknown };
+      return json({ ok: true, items: Array.isArray(d.items) ? d.items : [] }, CACHE.none);
+    } catch {
+      return fail(502, '会话索引读不出来');
+    }
+  }
+
+  /** 某一个会话的全部消息 */
+  if (path === 'log') {
+    const id = new URL(req.url).searchParams.get('session') ?? '';
+    if (!SESSION_RE.test(id)) return fail(400, '会话号不对');
+    try {
+      const res = await stubOf(env, id).fetch(new Request('https://chat.do/all?n=400'));
+      const d = (await res.json()) as { items?: unknown };
+      return json({ ok: true, items: Array.isArray(d.items) ? d.items : [] }, CACHE.none);
+    } catch {
+      return fail(502, '这个会话读不出来');
+    }
+  }
+
+  /**
+   * 拉这家服务商下**所有有权限的模型**（R39 他要的「一键拉取」）。
+   * 表单里填了 base/key/proto 就用填的（还没保存也能先拉），否则用当前生效值。
+   */
+  if (path === 'models') {
+    const p = new URL(req.url).searchParams;
+    const now = await loadCfg(env);
+    const base = (p.get('base') || now.base).replace(/\/+$/, '');
+    const key = p.get('key') || now.key;
+    const protoRaw = p.get('proto') || now.proto;
+    const proto = (protoRaw in SHAPES ? protoRaw : 'openai') as Proto;
+
+    if (!base || !key) return json({ ok: false, error: '先填端点与密钥' }, CACHE.none, 400);
+
+    const shape = SHAPES[proto];
+    try {
+      const res = await fetch(shape.listUrl(base, key), {
+        headers: { ...CLIENT_HEADERS, ...shape.headers(key), accept: 'application/json' },
+        signal: AbortSignal.timeout(HEAD_TIMEOUT_MS),
+      });
+      const text = await res.text();
+      if (!res.ok)
+        return json({ ok: false, error: 'HTTP ' + res.status + '：' + text.slice(0, 160) }, CACHE.none, 502);
+
+      const list = shape.listPick(JSON.parse(text) as Record<string, unknown>);
+      // 名字排序，方便在几百个里找；上限 400 防着某些站返回上千条
+      return json({ ok: true, models: list.sort().slice(0, 400) }, CACHE.none);
+    } catch (e) {
+      return json(
+        { ok: false, error: e instanceof Error ? e.message : String(e) },
+        CACHE.none,
+        502
+      );
+    }
+  }
 
   return adminWrite(req, env, path);
 }
@@ -1262,9 +1540,11 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
 
   if (path === 'save') {
     const patch: Record<string, string> = {};
-    // 只认这四个键。**空字符串是有意义的动作** —— 删掉这一项，回落到 secret 的默认值
-    for (const k of ['base', 'model', 'key'] as const) if (k in b) patch[k] = str(b[k]);
+    /* 只认这几个键。**空字符串是有意义的动作** —— 删掉这一项，回落到 secret 的默认值。
+       `proto` 与 `domestic` 是 R39 加的：请求格式与「这家在国内」那个标记。 */
+    for (const k of ['base', 'model', 'key', 'proto'] as const) if (k in b) patch[k] = str(b[k]);
     if ('off' in b) patch.off = b.off ? '1' : '';
+    if ('domestic' in b) patch.domestic = b.domestic ? '1' : '';
 
     try {
       await cfgStub(env).fetch(
@@ -1291,10 +1571,71 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
         .map((s) => s.trim())
         .filter(Boolean),
       off: false,
+      proto: ((str(b.proto) || now.proto) in SHAPES ? str(b.proto) || now.proto : 'openai') as Proto,
+      domestic: 'domestic' in b ? !!b.domestic : now.domestic,
     };
 
     if (!cfg.base || !cfg.key || !cfg.models.length)
       return json({ ok: false, error: '端点、密钥、模型三样都要有' }, CACHE.none, 400);
+
+    /**
+     * `raw: true` —— 把**流式**响应的头几百字节原样吐回来。
+     *
+     * 这一条是 R39 加的，起因是一个查了很久的现象：非流式（测试台）能拿到完整回答，
+     * 流式（真实对话）却一个字都没有。那种失败下唯一有用的信息就是「上游到底吐了什么」，
+     * 而任何解析器都会把它吃掉。所以留一条不解析的通道。
+     *
+     * 只有已登录能打，与 probe 的 `error` 字段同一个口径（诊断必需，值不外泄给访客）。
+     */
+    if (b.raw) {
+      const shape = SHAPES[cfg.proto];
+      const model = cfg.models[0];
+      try {
+        const res = await fetch(shape.url(cfg.base, model, cfg.key), {
+          method: 'POST',
+          headers: {
+            ...CLIENT_HEADERS,
+            ...shape.headers(cfg.key),
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(
+            shape.body({
+              model,
+              system: '你只需要回答两个字：好的',
+              turns: [{ role: 'user', content: '在吗' }],
+              max: 64,
+              temp: 0,
+              stream: true,
+            })
+          ),
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        });
+
+        const ct = res.headers.get('content-type') ?? '';
+        let raw = '';
+        if (res.body) {
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          while (raw.length < 900) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            raw += dec.decode(value as Uint8Array, { stream: true });
+          }
+          try {
+            await reader.cancel();
+          } catch {
+            /* 已经关了 */
+          }
+        }
+        return json({ ok: true, model, status: res.status, ct, raw: raw.slice(0, 900) }, CACHE.none);
+      } catch (e) {
+        return json(
+          { ok: false, error: e instanceof Error ? e.message : String(e) },
+          CACHE.none,
+          502
+        );
+      }
+    }
 
     /* 带真实的系统提示词去测，所以这里要先把知识库读出来。
        读不到就报出来 —— 那本身就是个要修的问题（对话也会因此走不通）。 */

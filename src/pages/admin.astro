@@ -13,6 +13,7 @@
  * 这条约束来自 R20 那张表 —— HTML 走边缘缓存，而边缘缓存是共享的。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { PROTO_LABEL } from '../data/proto';
 
 /* 生成口令哈希的命令。写在这儿是为了他能直接复制 —— 明文口令只出现在他自己的终端里，
    不进这个文件、不进 secret、不进任何日志。迭代数与 worker.ts 的校验必须一致。 */
@@ -62,6 +63,20 @@ const HASH_CMD =
       </p>
 
       <label class="field">
+        <span class="lab">请求格式</span>
+        <select class="in" data-proto aria-label="请求格式">
+          {Object.entries(PROTO_LABEL).map(([v, label]) => (
+            <option value={v} disabled={v === 'bedrock'}>{label}</option>
+          ))}
+        </select>
+      </label>
+      <p class="dim tip">
+        选错这一档最多损失一点点速度 —— 抽不到内容时会自动挨个嗅探其余几种格式。
+        <strong>Amazon Bedrock 不支持</strong>：它每个请求要按 AWS SigV4 签名、端点还按区域走，
+        与「一个端点 + 一个密钥」这套配置对不上。要用它就在前面挂一层 OpenAI 兼容的转发。
+      </p>
+
+      <label class="field">
         <span class="lab">端点</span>
         <input class="in" data-base placeholder="https://…/v1" aria-label="端点" />
       </label>
@@ -70,6 +85,14 @@ const HASH_CMD =
         <span class="lab">模型（逗号分隔多个，按顺序试，第一个挂了自动换下一个）</span>
         <input class="in" data-model placeholder="model-a, model-b" aria-label="模型" />
       </label>
+
+      <div class="row">
+        <button class="key key--quiet2" type="button" data-pull>拉取可用模型</button>
+        <span class="dim" data-pull-msg></span>
+      </div>
+      {/* 拉回来的模型名。点一个就追加到上面那个输入框里 —— 不是覆盖，
+          因为多候选是这套配置的常态（上游会漂移）。 */}
+      <div class="picks" data-picks hidden></div>
 
       <label class="field">
         <span class="lab">密钥 <em class="dim" data-keystate></em></span>
@@ -81,6 +104,17 @@ const HASH_CMD =
           placeholder="留空＝不改"
           aria-label="密钥"
         />
+      </label>
+
+      <label class="check">
+        <input type="checkbox" data-domestic />
+        <span>
+          这家服务商在国内
+          <em class="dim"
+            >—— 勾上只是给你自己留个记号：线上是 Cloudflare 的境外边缘出网，
+            打大陆机器实测 30 秒无响应，那种超时不是代码或密钥的问题。</em
+          >
+        </span>
       </label>
 
       <label class="check">
@@ -100,6 +134,17 @@ const HASH_CMD =
       <p class="dim foot">
         兜底模型：<code data-fallback></code> —— 上面这些全失效时走它（Workers AI，零密钥）。
       </p>
+
+      {/* ---- 对话记录（R38 他要的）------------------------------------------
+          会话列表 + 点开看全文。这一片会显示访客的 IP 与原话，
+          所以整页都在登录后面，接口也各自校验 cookie。 */}
+      <h2 class="sub">对话记录</h2>
+      <div class="row">
+        <button class="key" type="button" data-logs>刷新列表</button>
+        <span class="dim" data-logs-msg></span>
+      </div>
+      <div data-sessions></div>
+      <div data-detail></div>
     </div>
   </div>
 </BaseLayout>
@@ -120,6 +165,13 @@ const HASH_CMD =
   const model = q<HTMLInputElement>('[data-model]');
   const key = q<HTMLInputElement>('[data-key]');
   const off = q<HTMLInputElement>('[data-off]');
+  const proto = q<HTMLSelectElement>('[data-proto]');
+  const domestic = q<HTMLInputElement>('[data-domestic]');
+  const picks = q('[data-picks]');
+  const pullMsg = q('[data-pull-msg]');
+  const sessions = q('[data-sessions]');
+  const detail = q('[data-detail]');
+  const logsMsg = q('[data-logs-msg]');
   const keystate = q('[data-keystate]');
   const msg = q('[data-msg]');
   const results = q('[data-results]');
@@ -169,10 +221,14 @@ const HASH_CMD =
       model?: string;
       hasKey?: boolean;
       off?: boolean;
+      proto?: string;
+      domestic?: boolean;
     };
     base.value = cfg.base ?? '';
     model.value = cfg.model ?? '';
     off.checked = !!cfg.off;
+    proto.value = cfg.proto ?? 'openai';
+    domestic.checked = !!cfg.domestic;
     key.value = '';
     keystate.textContent = cfg.hasKey ? '（已设置，留空＝不改）' : '（还没设）';
     fallback.textContent = String(data.fallback ?? '');
@@ -204,6 +260,8 @@ const HASH_CMD =
       base: base.value.trim(),
       model: model.value.trim(),
       off: off.checked,
+      proto: proto.value,
+      domestic: domestic.checked,
     };
     // 密钥留空＝不改（不传这个键）；要清掉就填一个空格
     if (key.value) patch.key = key.value.trim();
@@ -221,6 +279,8 @@ const HASH_CMD =
       base: base.value.trim(),
       model: model.value.trim(),
       key: key.value || '',
+      proto: proto.value,
+      domestic: domestic.checked,
     });
 
     if (!ok) {
@@ -284,6 +344,133 @@ const HASH_CMD =
       results.appendChild(box);
     }
   });
+
+  /* ---- 一键拉取可用模型（R39）--------------------------------------------
+     点一下就把这家服务商下所有有权限的模型列出来，再点哪个就**追加**到候选里
+     （不是覆盖 —— 多候选是常态，上游会漂移）。 */
+  q('[data-pull]').addEventListener('click', async () => {
+    pullMsg.textContent = '拉…';
+    picks.hidden = true;
+    picks.textContent = '';
+
+    const qs = new URLSearchParams({
+      base: base.value.trim(),
+      proto: proto.value,
+      ...(key.value ? { key: key.value } : {}),
+    });
+    const { ok, data } = await api('models?' + qs.toString());
+
+    if (!ok) {
+      pullMsg.textContent = '拉不到：' + String(data.error ?? '');
+      return;
+    }
+
+    const list = (data.models ?? []) as string[];
+    pullMsg.textContent = list.length + ' 个（点一个加进候选）';
+
+    const have = () =>
+      model.value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    for (const m of list) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick';
+      b.textContent = m;
+      b.addEventListener('click', () => {
+        const cur = have();
+        if (cur.includes(m)) {
+          // 点第二下就撤掉，省得手动删字符串
+          model.value = cur.filter((x) => x !== m).join(', ');
+          b.classList.remove('is-on');
+        } else {
+          model.value = [...cur, m].join(', ');
+          b.classList.add('is-on');
+        }
+      });
+      if (have().includes(m)) b.classList.add('is-on');
+      picks.appendChild(b);
+    }
+    picks.hidden = !list.length;
+  });
+
+  /* ---- 对话记录 ----------------------------------------------------------
+     会话列表 → 点一个看全文。IP 与原话都在这儿，所以这两条接口各自校验 cookie。 */
+  const when = (ms: number) =>
+    new Date(ms).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+
+  const openLog = async (id: string, title: string) => {
+    detail.textContent = '';
+    const head = document.createElement('p');
+    head.className = 'dim';
+    head.textContent = '读…';
+    detail.appendChild(head);
+
+    const { ok, data } = await api('log?session=' + encodeURIComponent(id));
+    if (!ok) {
+      head.textContent = '读不出来：' + String(data.error ?? '');
+      return;
+    }
+
+    const rows = (data.items ?? []) as {
+      role: string;
+      text: string;
+      ip: string;
+      model: string;
+      ts: number;
+    }[];
+    head.textContent = title + ' · 共 ' + rows.length + ' 条';
+
+    for (const r of rows) {
+      const p = document.createElement('p');
+      p.className = 'msg msg--' + (r.role === 'user' ? 'me' : 'ai');
+      const meta = [when(r.ts), r.role === 'user' ? '访客' : '分身', r.ip, r.model]
+        .filter(Boolean)
+        .join(' · ');
+      p.textContent = meta + '\n' + r.text;
+      detail.appendChild(p);
+    }
+  };
+
+  const loadSessions = async () => {
+    logsMsg.textContent = '读…';
+    sessions.textContent = '';
+    detail.textContent = '';
+
+    const { ok, data } = await api('sessions');
+    if (!ok) {
+      logsMsg.textContent = '读不出来：' + String(data.error ?? '');
+      return;
+    }
+
+    const items = (data.items ?? []) as {
+      id: string;
+      first: number;
+      last: number;
+      n: number;
+      ip: string;
+      model: string;
+    }[];
+    logsMsg.textContent = items.length ? items.length + ' 个会话' : '还没有人聊过';
+
+    for (const s of items) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ses';
+      const title = when(s.last) + ' · ' + (s.ip || '无 IP');
+      b.textContent = title + ' · ' + s.n + ' 条' + (s.model ? ' · ' + s.model : '');
+      b.addEventListener('click', () => {
+        for (const el of sessions.querySelectorAll('.ses')) el.classList.remove('is-on');
+        b.classList.add('is-on');
+        void openLog(s.id, title);
+      });
+      sessions.appendChild(b);
+    }
+  };
+
+  q('[data-logs]').addEventListener('click', () => void loadSessions());
 
   refresh();
 </script>
@@ -404,7 +591,7 @@ const HASH_CMD =
     border-top: 1px solid var(--rule);
   }
 
-  /* 测试结果是脚本造出来的，吃不到 scoped CSS —— 父选择器留着 scope，子用 :global()
+  /* 结果区里那些节点是脚本造的，吃不到 scoped CSS —— 父选择器留着 scope，子用 :global()
      （与 ChatDock 里那些气泡同一个坑，R14 记过） */
   [data-results] :global(.res) {
     margin-top: var(--sp-3);
@@ -438,5 +625,105 @@ const HASH_CMD =
     line-height: var(--leading-normal);
     color: var(--ink-soft);
     overflow-wrap: anywhere;
+  }
+
+  /* ---- 拉回来的模型名 ---------------------------------------------------- */
+  .picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+    max-height: 14rem;
+    overflow-y: auto;
+  }
+
+  .picks :global(.pick) {
+    padding: 2px var(--sp-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    background: var(--glass-bg);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-full);
+    cursor: pointer;
+  }
+
+  .picks :global(.pick:hover) {
+    color: var(--ink);
+    border-color: var(--glass-border-lit);
+  }
+
+  /* 已经在候选里的那些 —— 再点一下就撤掉 */
+  .picks :global(.pick.is-on) {
+    color: var(--ink);
+    background: var(--seal-wash);
+    border-color: var(--rule-strong);
+  }
+
+  .key--quiet2 {
+    background: none;
+  }
+
+  .tip {
+    margin-top: var(--sp-2);
+  }
+
+  /* ---- 对话记录 ---------------------------------------------------------- */
+  [data-sessions] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-top: var(--sp-4);
+    max-height: 18rem;
+    overflow-y: auto;
+  }
+
+  [data-sessions] :global(.ses) {
+    text-align: left;
+    padding: var(--sp-2) var(--sp-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+    background: var(--glass-bg);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--rule-strong);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+
+  [data-sessions] :global(.ses.is-on) {
+    color: var(--ink);
+    border-left-color: var(--seal);
+  }
+
+  [data-detail] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-top: var(--sp-4);
+  }
+
+  /* 记录里的每一条。`white-space: pre-line` 是为了让「元信息 ⏎ 原文」两行分开 */
+  [data-detail] :global(.msg) {
+    margin: 0;
+    max-width: 90%;
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    border-radius: var(--r-md);
+  }
+
+  [data-detail] :global(.msg--me) {
+    align-self: flex-end;
+    color: var(--ink);
+    background: var(--seal-wash);
+  }
+
+  [data-detail] :global(.msg--ai) {
+    align-self: flex-start;
+    color: var(--ink-soft);
+    background: var(--glass-bg-strong);
   }
 </style>
