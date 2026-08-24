@@ -236,6 +236,7 @@ const HASH_CMD =
       text?: string;
       think?: number;
       promptTokens?: number | null;
+      obedient?: boolean;
       error?: string;
     }[];
 
@@ -244,18 +245,20 @@ const HASH_CMD =
 
     for (const r of rows) {
       const box = document.createElement('div');
-      box.className = 'res ' + (r.ok ? 'res--ok' : 'res--bad');
+      /* 三档而不是两档：「能连通」与「能当分身」是两件事。
+         有的模型收到了知识库也照样自称「某公司的 AI 助手」，那种不能用。 */
+      box.className = 'res ' + (r.ok ? (r.obedient ? 'res--ok' : 'res--warn') : 'res--bad');
 
       const head = document.createElement('p');
       head.className = 'res__head';
-      /* promptTokens 是「这个模型收到知识库了吗」的判据：约 9000 才对，
+      /* promptTokens 是「这个模型收到知识库了吗」的判据：几千才对，
          几十就是它把 system 丢了（那时对话会变成通用助手）。 */
       const pt =
         r.promptTokens == null
           ? ''
           : ' · 提示词 ' + r.promptTokens + ' token' + (r.promptTokens < 2000 ? ' ⚠ 太少，system 被丢了' : '');
       head.textContent =
-        (r.ok ? '能用' : '不能用') +
+        (r.ok ? (r.obedient ? '可用' : '不认角色') : '连不上') +
         ' · ' +
         r.model +
         ' · ' +
@@ -414,6 +417,11 @@ const HASH_CMD =
 
   [data-results] :global(.res--ok) {
     border-left-color: var(--seal);
+  }
+
+  /* 能连通但不认角色 —— 比连不上更值得注意，因为它会「看着像在工作」 */
+  [data-results] :global(.res--warn) {
+    border-left-color: var(--brass-deep);
   }
 
   [data-results] :global(.res__head) {

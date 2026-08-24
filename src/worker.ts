@@ -1105,6 +1105,20 @@ const cookieJson = (data: unknown, cookie: string) =>
  */
 const PROBE_MAX_TOKENS = 300;
 
+/**
+ * 「这个模型认不认角色设定」的判据。
+ *
+ * R37 实测出的一个硬事实：**有的模型收到了 system 也照样不认**。
+ * 那次是 `prompt_tokens` 4125（24 条知识库确实送到了），可它仍然回
+ * 「我是 XX，由 XX 公司创造的 AI 助手，我可以帮你生成图片…」——
+ * 身份被写进了权重里，提示词怎么加强都改不动（加了最强的一段身份约束后重测，一字不改）。
+ *
+ * 所以测试台要能一眼看出这件事：回答里出现任何厂商名、模型名、或者「AI 助手」
+ * 这类自我介绍，就是不听话，这个模型不能拿来当分身。
+ */
+const NOT_OBEDIENT =
+  /deepseek|chatgpt|openai|gpt-[0-9]|qwen|通义|千问|智谱|glm|kimi|月之暗面|深度求索|minimax|海螺|claude|anthropic|gemini|文心|讯飞|星火|豆包|step-?[0-9]|ai\s*助手|人工智能助手|大模型|语言模型/i;
+
 async function probe(cfg: Cfg, model: string, kb: KbItem[]): Promise<Record<string, unknown>> {
   const t0 = Date.now();
   try {
@@ -1159,6 +1173,8 @@ async function probe(cfg: Cfg, model: string, kb: KbItem[]): Promise<Record<stri
         text: out.slice(0, 160),
         think,
         promptTokens: Number.isFinite(pt) ? pt : null,
+        /* 「能连通」与「能当分身」是两件事。只有两者都成立才算可用 */
+        obedient: !!out && !NOT_OBEDIENT.test(out),
       };
     } catch {
       return { model, ok: false, ms, status: res.status, error: '上游返回的不是 JSON' };
