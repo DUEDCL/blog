@@ -80,12 +80,22 @@ import '../styles/player.css';
         >
       </a>
     </div>
-    {/* 正在唱的那一行。套两层：外层是固定宽的窗口（截断／滚动都由它管），内层才是
-        WordRun 的宿主 —— `jk-line` 必须挂在**内层**，player.css 里那套逐字渐变的选择器
-        是 `.jk-line.is-on .jk-w`，而 WordRun 往宿主上加的正是 `is-on`。
-        内层同时是 `.jk-run`：R36 起 WordRun 在它里面塞**两份** `.jk-seg`，
-        长歌词就地做真跑马灯（两份的高亮由 WordRun.paint 一起刷）。 */}
-    <p class="jk-mini__line"><span class="jk-line jk-run" data-line></span></p>
+    {/* 正在唱的那一行。**三层**（R36 第五轮改成三层）：
+        - `.jk-mini__line` 是这一行的框，圆点由它出（`::before`），并且让开封面那一列；
+        - `.jk-win` 是**滚动窗口**，`overflow: hidden` 在它身上；
+        - `.jk-run` 才是跑马灯本体，里面两份 `.jk-seg`。
+
+        为什么非得多这一层：`overflow: hidden` 的裁剪边界是 **padding box**，
+        不是 content box —— 原来 padding 与 overflow 都在 `.jk-mini__line` 上，
+        `transform` 平移后的歌词会滑进那 44px 的 padding 里照样显示，
+        把圆点整个盖掉（他连报三次「不是以圆点为起点」）。
+        窗口独立成一层之后，滚动内容不可能越过圆点。
+
+        `jk-line` 必须挂在 `.jk-run` 上：逐字渐变的选择器是 `.jk-line.is-on .jk-w`，
+        而 WordRun 往宿主上加的正是 `is-on`。 */}
+    <p class="jk-mini__line">
+      <span class="jk-win"><span class="jk-line jk-run" data-line></span></span>
+    </p>
 
     <div class="jk-mini__seek">
       <span class="jk-mini__time" data-cur>0:00</span>
@@ -216,7 +226,8 @@ import '../styles/player.css';
     };
     const sub = pick('[data-sub]');
     const line = pick('[data-line]');
-    const lineBox = pick('.jk-mini__line');
+    /** 歌词的滚动窗口（R36 第五轮那一层）。`is-marquee` 与 `--jk-step` 都写在它身上 */
+    const lineBox = pick('.jk-win');
     const cur = pick('[data-cur]');
     const durEl = pick('[data-dur]');
     const seek = pick<HTMLInputElement>('[data-seek]');
@@ -369,11 +380,15 @@ import '../styles/player.css';
         !!document.querySelector('[data-deck]') ||
         (!portal && !everPlayed() && !wants());
       /* 藏着时量不出尺寸，位置与跑马灯都算不准 —— 所以在「藏↔露」翻转的那一刻补算一次。
-         只在翻转时做：show() 由 sync 频繁调用，每次都重算是白费。 */
+         只在翻转时做：show() 由 sync 频繁调用，每次都重算是白费。
+         **歌词那条也要算**（R36 第五轮）：原来这儿只补了歌名，于是首屏那一刻
+         `marqueeLine()` 是在 hidden 状态下跑的（量到 0 就直接返回，不挂 `is-marquee`），
+         显形之后再没人重算 —— 长歌词于是一直停在「省略号」那一档，永远不滚。 */
       if (wasHidden !== root.hidden) {
         wasHidden = root.hidden;
         applyPos();
         marquee();
+        marqueeLine();
       }
       room();
     };

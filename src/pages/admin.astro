@@ -227,7 +227,6 @@ const HASH_CMD =
       say('测不了：' + String(data.error ?? ''));
       return;
     }
-    say('');
 
     const rows = (data.results ?? []) as {
       model: string;
@@ -236,8 +235,12 @@ const HASH_CMD =
       status?: number;
       text?: string;
       think?: number;
+      promptTokens?: number | null;
       error?: string;
     }[];
+
+    // 知识库有多少条送进去了 —— 与每一行的 promptTokens 对照着看
+    say(data.kbCount ? `知识库 ${data.kbCount} 条已送进提示词` : '');
 
     for (const r of rows) {
       const box = document.createElement('div');
@@ -245,6 +248,12 @@ const HASH_CMD =
 
       const head = document.createElement('p');
       head.className = 'res__head';
+      /* promptTokens 是「这个模型收到知识库了吗」的判据：约 9000 才对，
+         几十就是它把 system 丢了（那时对话会变成通用助手）。 */
+      const pt =
+        r.promptTokens == null
+          ? ''
+          : ' · 提示词 ' + r.promptTokens + ' token' + (r.promptTokens < 2000 ? ' ⚠ 太少，system 被丢了' : '');
       head.textContent =
         (r.ok ? '能用' : '不能用') +
         ' · ' +
@@ -253,7 +262,8 @@ const HASH_CMD =
         (r.ms / 1000).toFixed(1) +
         's' +
         (r.status ? ' · HTTP ' + r.status : '') +
-        (r.think ? ' · 思考 ' + r.think + ' 字' : '');
+        (r.think ? ' · 思考 ' + r.think + ' 字' : '') +
+        pt;
       box.appendChild(head);
 
       const body = document.createElement('p');

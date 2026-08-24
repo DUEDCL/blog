@@ -1105,7 +1105,7 @@ const cookieJson = (data: unknown, cookie: string) =>
  */
 const PROBE_MAX_TOKENS = 300;
 
-async function probe(cfg: Cfg, model: string): Promise<Record<string, unknown>> {
+async function probe(cfg: Cfg, model: string, kb: KbItem[]): Promise<Record<string, unknown>> {
   const t0 = Date.now();
   try {
     const res = await fetch(`${cfg.base}/chat/completions`, {
@@ -1118,7 +1118,15 @@ async function probe(cfg: Cfg, model: string): Promise<Record<string, unknown>> 
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: '说三个字' }],
+        /* **带上真实的系统提示词**（R37 之后改的）：他换了模型之后报「明显没连接到
+           知识库」，而光问「说三个字」是查不出这件事的。台账 R34 记过一个模型
+           `prompt_tokens` 只有 8 —— 它把 system 整个丢了。
+           所以这里照真实对话的样子送 system，再看回来的 `prompt_tokens`：
+           约 9000 说明知识库送到了，几十就是被丢了。 */
+        messages: [
+          { role: 'system', content: buildSystem(kb) },
+          { role: 'user', content: '你是谁？' },
+        ],
         max_tokens: PROBE_MAX_TOKENS,
         stream: false,
       }),
@@ -1134,11 +1142,24 @@ async function probe(cfg: Cfg, model: string): Promise<Record<string, unknown>> 
     try {
       const j = JSON.parse(body) as {
         choices?: { message?: { content?: string; reasoning_content?: string } }[];
+        usage?: { prompt_tokens?: unknown };
       };
       const msg = j.choices?.[0]?.message;
       const out = strip(String(msg?.content ?? ''));
       const think = String(msg?.reasoning_content ?? '').length;
-      return { model, ok: !!out, ms, status: res.status, text: out.slice(0, 120), think };
+      /* 这个数是「知识库到没到」的判据：送进去的 system 有 24 条问答、约 9000 token。
+         回来只有几十就说明这个模型把 system 丢了（台账 R34 见过一次 prompt_tokens=8），
+         那对话就会变成一个通用助手 —— 他报的「明显没连接到知识库」正是这种。 */
+      const pt = Number(j.usage?.prompt_tokens);
+      return {
+        model,
+        ok: !!out,
+        ms,
+        status: res.status,
+        text: out.slice(0, 160),
+        think,
+        promptTokens: Number.isFinite(pt) ? pt : null,
+      };
     } catch {
       return { model, ok: false, ms, status: res.status, error: '上游返回的不是 JSON' };
     }
@@ -1259,10 +1280,19 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
     if (!cfg.base || !cfg.key || !cfg.models.length)
       return json({ ok: false, error: '端点、密钥、模型三样都要有' }, CACHE.none, 400);
 
+    /* 带真实的系统提示词去测，所以这里要先把知识库读出来。
+       读不到就报出来 —— 那本身就是个要修的问题（对话也会因此走不通）。 */
+    let kb: KbItem[];
+    try {
+      kb = await loadKb(env, req.url);
+    } catch {
+      return json({ ok: false, error: '知识库读不出来，先看 /kb.json 是不是空的' }, CACHE.none, 503);
+    }
+
     /* 并行打，总时长 = 最慢那个（串行 6 个 ×30s 会撞上响应超时）。
        上限 6 个：subrequest 免费档 50，这里离得很远 */
-    const results = await Promise.all(cfg.models.slice(0, 6).map((m) => probe(cfg, m)));
-    return json({ ok: true, results }, CACHE.none);
+    const results = await Promise.all(cfg.models.slice(0, 6).map((m) => probe(cfg, m, kb)));
+    return json({ ok: true, kbCount: kb.length, results }, CACHE.none);
   }
 
   return fail(404, '没有这个接口');

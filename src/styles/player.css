@@ -1062,7 +1062,7 @@
 }
 
 .jk-mini__t.is-marquee,
-.jk-mini__line.is-marquee {
+.jk-win.is-marquee {
   /* 滚起来就不需要省略号了 —— 留着会在右边缘一直闪一个「…」 */
   text-overflow: clip;
 }
@@ -1098,6 +1098,22 @@
   padding: 0;
 }
 
+/**
+ * 滚动窗口（R36 第五轮新增的一层）。`overflow: hidden` **只在这一层** ——
+ * 它的 padding 是 0，所以裁剪边界就是内容边界，跑马灯不可能滑到圆点上去。
+ *
+ * `min-width: 0` 与 `flex: 1 1 auto`：它是 `.jk-mini__line` 那个 flex 容器的第二个
+ * item，默认 `min-width: auto` 会被 nowrap 的两份内容顶开（那正是上一轮把卡片
+ * 撑破的原因），必须显式解除。
+ */
+.jk-win {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .jk-mini__s {
   font-size: var(--text-xs);
   color: var(--ink-faint);
@@ -1128,16 +1144,14 @@
    悬浮窗里点它不跳播（跳播要有整份词表当参照，那是舞台的事）。
    min-height 撑住一行的高度 —— 前奏、间奏、没歌词时这里是空的，
    不撑住的话卡片会一高一低地跳。 */
+/* 单行歌词。三层结构见 MiniPlayer.astro 那段注释：这一层出圆点、让开封面，
+   真正的滚动窗口是里面的 `.jk-win`。 */
 .jk-mini__line {
   margin: 0;
   padding: 0;
-  /* ⚠ 这一行是「歌词跑到药丸外面去了」的解药（R36 第四轮返修）。
-     `.jk-mini__line` 是卡片那个 grid 的 item，而 **grid item 默认 `min-width: auto`** ——
-     也就是「不许小于内容的 min-content 宽度」。里面是 `white-space: nowrap` 的歌词，
-     R36 又把它变成**两份**并排，min-content 直接翻倍：于是这个 item 把 grid 列顶开、
-     把卡片撑破，歌词整条跑到药丸轮廓外面，`overflow: hidden` 也裁不住
-     （它自己就已经那么宽了，裁的是更外面的东西）。
-     `min-width: 0` 解除这条下限，宽度回到 grid 列给的值，`overflow: hidden` 才有意义。 */
+  /* 圆点 + 窗口横排。圆点是第一个 flex item，固定不动；窗口吃掉剩下的宽度 */
+  display: flex;
+  align-items: baseline;
   min-width: 0;
   min-height: 1.5em;
   font-size: var(--text-sm);
@@ -1147,10 +1161,12 @@
   font-family: var(--font-body);
   list-style: none;
   cursor: default;
-  /* 折行会让卡片变高，进而把整个悬浮窗顶起来。截断成一行 */
+  /* 折行会让卡片变高，进而把整个悬浮窗顶起来。截断成一行。
+     **裁剪的正主是里面那层 `.jk-win`** —— 这一条留着当兜底（万一 padding 又被加回来，
+     它裁的是 padding box，会放歌词滑到圆点上）。省略号也归 `.jk-win`：
+     这一层是 flex 容器，`text-overflow` 在它身上无效。 */
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 /**
@@ -1171,7 +1187,9 @@
 
 .jk-mini__line::before {
   content: '';
-  display: inline-block;
+  /* flex item：不许被压缩，也不许被两份内容挤走 */
+  flex: 0 0 auto;
+  display: block;
   width: 4px;
   height: 4px;
   margin-right: var(--sp-2);
@@ -1426,14 +1444,19 @@
     transition: none;
   }
 
-  /* 跑马灯一律停掉，退回省略号 —— 一条永不停下的横向动画正是这条偏好在拒绝的东西 */
-  .jk-mini__t.is-marquee .jk-mini__t-i,
-  .jk-mini__line.is-marquee .jk-mini__line-i {
+  /* 跑马灯一律停掉，退回省略号 —— 一条永不停下的横向动画正是这条偏好在拒绝的东西。
+     R36 起动画挂在 `.jk-run` 上，窗口是 `.jk-mini__t` 与 `.jk-win` 两处 */
+  .is-marquee .jk-run {
     animation: none;
   }
 
+  /* 停了就只留一份，不然第二份会并排露出来 */
+  .is-marquee .jk-run > .jk-seg + .jk-seg {
+    display: none;
+  }
+
   .jk-mini__t.is-marquee,
-  .jk-mini__line.is-marquee {
+  .jk-win.is-marquee {
     text-overflow: ellipsis;
   }
 
