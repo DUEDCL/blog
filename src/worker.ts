@@ -754,11 +754,20 @@ async function route(url: URL): Promise<Response> {
 }
 
 /**
- * 上游一次对话最多等多久。90 秒是给「首字要五六秒、还带思考」的慢模型留的余量 ——
- * 本机实测过 60 秒把一段话截在半句上（某个候选首字 5.1s，然后拖到 60s 被切断）。
- * 超时本身现在是安全的：`toSiteStream` 会把它收成一个正常的 `[DONE]`。
+ * 等上游**响应头**的上限。拿到头之后就不限了 —— 用 `AbortSignal.timeout(总时长)`
+ * 会把正常的长回答一起掐断。
+ *
+ * 12 秒是按线上实测定的：那家上游正常出字要 3–5 秒，而完全不通的时候 Cloudflare 侧
+ * 要 **30 秒**才放弃。两个候选各等 30 秒、再加兜底，访客要盯着「…」看一分半 ——
+ * 那比直接说答不上来更糟。
  */
-const CHAT_TIMEOUT_MS = 90000;
+const HEAD_TIMEOUT_MS = 12000;
+
+/** 兜底（Workers AI 绑定）也要有上限。它 hang 住时同样不能让访客干等 */
+const BIND_TIMEOUT_MS = 20000;
+
+/** 探针（后台最小测试）用的上限。那是他自己在看，愿意多等一会儿换一个明确结论 */
+const PROBE_TIMEOUT_MS = 30000;
 
 type Msg = { role: string; content: string };
 
@@ -788,22 +797,32 @@ const CLIENT_HEADERS: Record<string, string> = {
  * **上游响应体一个字都不外泄**（它可能带自己的域名、模型名与报错细节）。
  */
 async function askUpstream(cfg: Cfg, model: string, messages: Msg[]): Promise<ReadableStream> {
-  const res = await fetch(`${cfg.base}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      ...CLIENT_HEADERS,
-      authorization: `Bearer ${cfg.key}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: true,
-      max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE,
-    }),
-    signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
-  });
+  /* 只给「建连 + 拿到响应头」设超时，拿到之后 `clearTimeout` —— 流式读取不受限。
+     abort 会真正取消这次 fetch，不是只放弃等待。 */
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), HEAD_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        ...CLIENT_HEADERS,
+        authorization: `Bearer ${cfg.key}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        stream: true,
+        max_tokens: MAX_TOKENS,
+        temperature: TEMPERATURE,
+      }),
+      signal: ac.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok || !res.body) throw new Error('上游 HTTP ' + res.status);
   return res.body;
@@ -811,12 +830,21 @@ async function askUpstream(cfg: Cfg, model: string, messages: Msg[]): Promise<Re
 
 /** 兜底：Workers AI 绑定。零密钥、零第三方，主路缺配置或这一次失败时走它 */
 async function askBinding(env: Env, messages: Msg[]): Promise<ReadableStream> {
-  const out = await env.AI.run(FALLBACK_MODEL, {
-    messages,
-    stream: true,
-    max_tokens: MAX_TOKENS,
-    temperature: TEMPERATURE,
-  });
+  /* `env.AI.run` 不收 AbortSignal，所以只能 race。**race 不会取消底层请求** ——
+     它挂住的话那个 promise 会一直悬着（Worker 生命周期结束时才收），
+     但至少访客不用陪它等。线上实测这个绑定在本账号上就是会挂（R37）。 */
+  const out = await Promise.race([
+    env.AI.run(FALLBACK_MODEL, {
+      messages,
+      stream: true,
+      max_tokens: MAX_TOKENS,
+      temperature: TEMPERATURE,
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('兜底 ' + BIND_TIMEOUT_MS + 'ms 没响应')), BIND_TIMEOUT_MS)
+    ),
+  ]);
+
   if (!(out instanceof ReadableStream)) throw new Error('绑定返回的不是流');
   return out;
 }
@@ -1094,7 +1122,7 @@ async function probe(cfg: Cfg, model: string): Promise<Record<string, unknown>> 
         max_tokens: PROBE_MAX_TOKENS,
         stream: false,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
 
     const ms = Date.now() - t0;

@@ -998,6 +998,9 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  /* 与 `.jk-mini__line` 同一个理由：这两个也是 grid item（在 `.jk-mini__now` 里），
+     `min-width: auto` 会让 nowrap 的内容把列顶开。歌名那份现在也是两份并排。 */
+  min-width: 0;
 }
 
 .jk-mini__t {
@@ -1128,6 +1131,14 @@
 .jk-mini__line {
   margin: 0;
   padding: 0;
+  /* ⚠ 这一行是「歌词跑到药丸外面去了」的解药（R36 第四轮返修）。
+     `.jk-mini__line` 是卡片那个 grid 的 item，而 **grid item 默认 `min-width: auto`** ——
+     也就是「不许小于内容的 min-content 宽度」。里面是 `white-space: nowrap` 的歌词，
+     R36 又把它变成**两份**并排，min-content 直接翻倍：于是这个 item 把 grid 列顶开、
+     把卡片撑破，歌词整条跑到药丸轮廓外面，`overflow: hidden` 也裁不住
+     （它自己就已经那么宽了，裁的是更外面的东西）。
+     `min-width: 0` 解除这条下限，宽度回到 grid 列给的值，`overflow: hidden` 才有意义。 */
+  min-width: 0;
   min-height: 1.5em;
   font-size: var(--text-sm);
   line-height: 1.5;
@@ -1140,6 +1151,39 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/**
+ * ⚠ 圆点必须搬出 `.jk-run`（R36 第三轮返修）。
+ *
+ * `.jk-line::before` 原来长在 `.jk-run` 上，而跑马灯的 `transform: translateX()`
+ * 正是作用在 `.jk-run` 上 —— **圆点于是跟着歌词一起滚走了**，滚起来之后行首空空的。
+ * 他的原话是「固定为原点为起点……内跑动」：圆点该是固定的起点，歌词在它右边跑。
+ *
+ * 所以状态栏这份把 `.jk-run` 上那个 `::before` 关掉，改由外层 `.jk-mini__line` 自己出 ——
+ * 它不参与 transform，钉在行首不动。亮不亮跟着里面那个 `.is-on`（WordRun 挂的）走，
+ * 靠 `:has()` 从子元素状态回推父元素，省掉再往脚本里加一处类名维护。
+ * 舞台那份大歌词不受影响（它没有 `.jk-mini__line` 这个祖先）。
+ */
+.jk-mini__line .jk-run::before {
+  display: none;
+}
+
+.jk-mini__line::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-right: var(--sp-2);
+  margin-bottom: 3px;
+  border-radius: 50%;
+  background: var(--seal);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.jk-mini__line:has(.is-on)::before {
+  opacity: 1;
 }
 
 .jk-mini__seek {
