@@ -14,6 +14,6 @@ topic: 这个站
 DNS 记录和证书都是自动生成的，不用手工加任何解析。裸域按 DNS 规范不能用 CNAME，
 Cloudflare 用 CNAME 展平在内部绕开了这个限制，前提是 DNS 托管在它这里。
 
-两者有个差异踩过一次：**Workers 不会自动认 `404.html`**，必须在 `[assets]` 里显式声明
+两者有个差异踩过一次：Workers 不会自动认 `404.html`，必须在 `[assets]` 里显式声明
 `not_found_handling`，Pages 是自动的。另外面板上的 Cache Rules 对 Workers 完全不生效，
 缓存只能靠响应头。
