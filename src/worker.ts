@@ -38,6 +38,14 @@ import {
   type KbItem,
 } from './data/chat';
 import { SHAPES, onceUrl, type Proto, type Shape, type Turn } from './data/proto';
+/** 服务商预设与探测用的对照端点（R41③）。端点表在那个文件里，实测记录也在 */
+import { CONTROLS } from './data/providers';
+/**
+ * 仓库里现有内容的原样快照（R41②）。**构建期生成、编译进 Worker 包**，
+ * 不是静态资源 —— 为什么这么绕，见 `scripts/gen-content.mjs` 顶部那段
+ * （一句话：`dist/` 全是公开可取的，而草稿正文不该有 URL）。
+ */
+import { CONTENT } from './data/content.generated';
 
 /** DO 类必须从入口文件导出，`wrangler.toml` 的 `[exports.ChatLog]` 才找得到它 */
 export { ChatLog } from './chat-log';
@@ -424,8 +432,50 @@ async function pickBest(
 
 const CHAT_PATH = '/api/chat';
 
-/** 会话 id 的形状（前端生成的 uuid）。它要当 DO 的名字用，所以字符集必须收紧 */
+/** 会话 id 的形状。它要当 DO 的名字用，所以字符集必须收紧 */
 const SESSION_RE = /^[0-9a-f-]{8,64}$/i;
+
+/**
+ * 会话号 = 访客 IP 的指纹（R42 他要的「同一 IP 使用相同会话」）。
+ *
+ * ## 为什么改成服务端派生
+ *
+ * R41 及之前，会话号是**前端生成的一个 uuid**，存在 `sessionStorage` 里 ——
+ * 那意味着一个标签页一份、关掉标签就换新的。后果有三个，都是刚做完接管才看清的：
+ * 访客一刷新就换了一条会话，他正在接的那个人突然「不见了」；同一个人开两个标签
+ * 在后台是两条线；换个浏览器回来又是新的一条。
+ *
+ * 而 IP 只有服务端知道（`cf-connecting-ip`，Cloudflare 注入，访客改不了）。
+ * 所以会话号必须在这儿算，前端传什么都不作为会话号采信。
+ *
+ * ## 为什么取 hash 而不是直接用 IP
+ *
+ * 会话号就是 Durable Object 的实例名，它会出现在后台的接口参数、`console` 日志里。
+ * IP 不该在那些地方裸奔。**这不是加密**（IPv4 空间小，能枚举），只是不让它一眼可读；
+ * 真正的保护是「记录要登录才能读」。
+ *
+ * 不加盐是刻意的：加了就与某个 secret 绑死，**那个 secret 一换，所有会话号跟着变**
+ * （等于历史记录集体失联）。会话号本身不是凭据，不需要防枚举。
+ *
+ * 取前 16 字节 = 32 个十六进制字符，正好落在 `SESSION_RE` 里，
+ * 也不会与配置实例的名字 `'config'` 相撞（那里面有 n/g/i/o，十六进制里没有）。
+ */
+async function sessionOf(ip: string): Promise<string> {
+  const bits = await crypto.subtle.digest('SHA-256', enc.encode('ip:' + ip));
+  return [...new Uint8Array(bits).slice(0, 16)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * 窗口号的形状（R42）。前端 `sessionStorage` 里那个 uuid ——
+ * 它从「会话号」降级成了「这一个浏览器窗口」。
+ *
+ * 会话按 IP 合并之后，同一条会话下可能有好几个不同的人（学校、公司、运营商 NAT，
+ * 手机的 CGNAT 更是常态）。窗口号管两件事：**喂给模型的上下文按它过滤**、
+ * **接管时那句话按它定向**。不这么分的话，隔壁那个人说的话会串进你的对话里。
+ */
+const TAB_RE = /^[0-9a-zA-Z_-]{8,64}$/;
 
 /** 知识库在 isolate 里缓存 5 分钟，省掉每次对话都读一遍 `/kb.json` 的 subrequest */
 const KB_TTL_MS = 5 * 60 * 1000;
@@ -473,22 +523,52 @@ async function lastWhy(env: Env): Promise<string> {
 
 /** 一次对话真正用到的配置 */
 interface Cfg {
+  /**
+   * 上游线路，**按顺序试**（R41③）。第一条打不通就换第二条，全打不通才掉 Workers AI 兜底。
+   *
+   * 为什么从「一条线路」改成「一串」：他的要求逐字是「我必须能使用国内的服务商，
+   * 无论你使用什么办法」。国内那几家从 Cloudflare 的境外边缘打过去**不保证通**
+   * （R37 那次就是上游拦 workerd），而「通不通」只有打了才知道。
+   * 一条线路的配置下，赌错就是整个功能停摆；一串线路下，赌错只是换下一条。
+   *
+   * 典型用法：主线填国内服务商（便宜、中文好），备线填一个境外可达的，
+   * 两条都挂了还有 Workers AI。
+   */
+  routes: Route[];
+  off: boolean;
+}
+
+/** 一条上游线路。四样缺一样这条就是不完整的，`chat()` 会直接跳过它 */
+interface Route {
   base: string;
   key: string;
   models: string[];
-  off: boolean;
   /** 请求格式（R39）。四种，见 `data/proto.ts` */
   proto: Proto;
   /**
    * 这家服务商在**中国大陆**（R39 他要的那个开关）。
    *
-   * 它不改变请求怎么发，只改变两件事：后台会明说「这条线 Cloudflare 边缘打不通」，
-   * 日志里也会标出来。依据是 R37 那次实测 —— 线上 Worker 打大陆 IP 30 秒无响应，
-   * 而同一个 Worker 打境外端点 0.5 秒就有回；本机直连那家却是好的。
-   * 标了这个之后再看到超时，就不必再怀疑代码或密钥。
+   * 它不改变请求怎么发，只改变后台怎么解读失败：线上是 Cloudflare 的境外边缘出网，
+   * 跨境到大陆的链路本来就不稳。**但不要把它读成「大陆的一律打不通」** ——
+   * R37 那次的结论是「那一家中转站在区别对待 workerd」（同一个 Worker 打
+   * `api.openai.com` 0.5 秒就拿到 401）。到底通不通用后台的「探一下能不能连」当场测。
    */
   domestic: boolean;
 }
+
+/** 线路上限。免费档 subrequest 是 50 个／请求，三条线路各两三个模型离得还远 */
+const ROUTE_MAX = 3;
+
+const asProto = (v: unknown): Proto => {
+  const s = typeof v === 'string' ? v : '';
+  return (s in SHAPES ? s : 'openai') as Proto;
+};
+
+const asModels = (v: unknown): string[] =>
+  String(typeof v === 'string' ? v : '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 /**
  * 生效配置 = **后台改过的值覆盖 secret 里的默认值**。
@@ -498,6 +578,12 @@ interface Cfg {
  * 重新 deploy 太慢，所以配置进 DO，后台存完立刻生效。
  *
  * 读不到 DO（它挂了、或者从没写过）就整份回落到 secret，功能不受影响。
+ *
+ * **线路的读法有两条路（R41③）**：新格式是 `routes` 那一个 JSON 数组；
+ * 没有它的时候（线上刚部署完、DO 里还是 R39 存的那几个键）按老的
+ * `base`/`key`/`model`/`proto`/`domestic` 拼出一条线路。
+ * 这条回落不是过渡期的临时代码 —— 三个 secret（`CHAT_BASE`/`CHAT_KEY`/`CHAT_MODEL`）
+ * 永远是「后台被清空时」的底座，它们只描述得了一条线路。
  */
 async function loadCfg(env: Env): Promise<Cfg> {
   let over: Record<string, string> = {};
@@ -508,20 +594,42 @@ async function loadCfg(env: Env): Promise<Cfg> {
     /* 读不到就用 secret */
   }
 
-  const model = over.model || env.CHAT_MODEL || '';
-  const proto = (over.proto || env.CHAT_PROTO || 'openai') as Proto;
+  const off = (over.off || env.CHAT_OFF || '') !== '';
 
-  return {
+  /* 老格式的那一条。`routes` 存在时它只当第 0 条的兜底值，不会被独立算进去 */
+  const legacy: Route = {
     base: (over.base || env.CHAT_BASE || '').replace(/\/+$/, ''),
     key: over.key || env.CHAT_KEY || '',
-    models: model
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-    off: (over.off || env.CHAT_OFF || '') !== '',
-    proto: proto in SHAPES ? proto : 'openai',
+    models: asModels(over.model || env.CHAT_MODEL || ''),
+    proto: asProto(over.proto || env.CHAT_PROTO || 'openai'),
     domestic: (over.domestic || '') !== '',
   };
+
+  let routes: Route[] = [];
+  if (over.routes) {
+    try {
+      const raw = JSON.parse(over.routes) as unknown;
+      if (Array.isArray(raw)) {
+        routes = raw.slice(0, ROUTE_MAX).map((r) => {
+          const o = (r ?? {}) as Record<string, unknown>;
+          return {
+            base: String(o.base ?? '').replace(/\/+$/, ''),
+            key: String(o.key ?? ''),
+            models: asModels(o.model),
+            proto: asProto(o.proto),
+            domestic: !!o.domestic,
+          };
+        });
+      }
+    } catch {
+      /* 存坏了就当没有这一项 —— 下面会退回老格式那条，对话不会因为一个坏 JSON 停掉 */
+    }
+  }
+
+  // 一条完整的都没有就用老格式那条（它也可能是空的，那时 `chat()` 直接走兜底）
+  if (!routes.some((r) => r.base && r.key && r.models.length)) routes = [legacy];
+
+  return { routes, off };
 }
 
 /** 往 DO 里追加一条。失败一律吞掉 —— 落库不该反过来把访客的对话弄坏 */
@@ -531,18 +639,86 @@ async function logMsg(
   role: 'user' | 'ai',
   text: string,
   ip: string,
-  model = ''
+  model = '',
+  /** 哪个浏览器窗口（R42）。空串是拿不到窗口号的老前端 */
+  tab = ''
 ): Promise<void> {
   try {
     await stubOf(env, session).fetch(
       new Request('https://chat.do/append', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role, text, ip, model }),
+        body: JSON.stringify({ role, text, ip, model, tab }),
       })
     );
   } catch {
     /* 存不进去也不能影响这一轮对话 */
+  }
+}
+
+/**
+ * 沉麟离开多久之后就不再让访客等（R41②）。
+ *
+ * 后台「聊天实时接管」那一页每 3 秒刷一次会话列表，每次刷新都会把「他还在」这个时刻
+ * 记一笔。90 秒的容忍是给「切到别的浏览器标签看一眼」留的余地 ——
+ * 那种情况下轮询会停（`document.hidden` 一到就停），但他人还在。
+ *
+ * 没有这一条的后果很具体：接管开着而他去睡了，之后每一个访客的每一句话都要先白等
+ * 25 秒才轮到模型。这个开关因此是**可以放心一直开着**的。
+ */
+const AWAY_MS = 90000;
+
+/**
+ * 这个会话现在该由沉麟本人接吗（R41②）。两个条件都要成立：
+ * 接管开着 **且** 他此刻人在后台。读不到一律当「不接管」——
+ * 宁可让模型答，不让访客卡住。
+ */
+async function takenOver(env: Env, session: string): Promise<boolean> {
+  try {
+    const res = await cfgStub(env).fetch(
+      new Request('https://chat.do/flag?id=' + encodeURIComponent(session))
+    );
+    if (!res.ok) return false;
+    const d = (await res.json()) as { takeover?: unknown; seen?: unknown };
+    if (!d.takeover) return false;
+    return Date.now() - (Number(d.seen) || 0) < AWAY_MS;
+  } catch {
+    return false;
+  }
+}
+
+/** 记一笔「他此刻在后台」。后台每次刷会话列表都会走这儿 */
+async function noteSeen(env: Env): Promise<void> {
+  try {
+    await cfgStub(env).fetch(
+      new Request('https://chat.do/cfg-set', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ seen: String(Date.now()) }),
+      })
+    );
+  } catch {
+    /* 记不上就当他不在 —— 那只是让接管这一次不生效，不会坏事 */
+  }
+}
+
+/**
+ * 挂起等沉麟本人回话（R41②）。返回空串＝他这一轮没回（超时），调用方退回模型生成。
+ *
+ * 不需要传游标：DO 那边的判据是「有没有比**最后一条访客消息**更新的人工回复」——
+ * 访客这一句在调用前已经 `await` 落库了，所以那之后出现的人工回复必然是回它的。
+ * 这样一来沉麟提前打好的回复也不会让访客白等（那条已经在库里，DO 立刻返回）。
+ * 等待期间不烧 CPU（Workers 免费档限的是 10 ms **CPU** 时间，等 I/O 不计）。
+ */
+async function waitHuman(env: Env, session: string, tab: string): Promise<string> {
+  try {
+    const res = await stubOf(env, session).fetch(
+      new Request('https://chat.do/wait?tab=' + encodeURIComponent(tab))
+    );
+    if (!res.ok) return '';
+    return String(((await res.json()) as { text?: unknown }).text ?? '');
+  } catch {
+    return '';
   }
 }
 
@@ -578,14 +754,16 @@ async function touchSession(
   session: string,
   ip: string,
   model: string,
-  add: number
+  add: number,
+  /** 1 = 这个会话正等沉麟本人回话，0 = 不等了。不传就不动那一列（R41②） */
+  wait?: number
 ): Promise<void> {
   try {
     await cfgStub(env).fetch(
       new Request('https://chat.do/touch', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: session, ip, model, add }),
+        body: JSON.stringify({ id: session, ip, model, add, wait }),
       })
     );
   } catch {
@@ -593,10 +771,17 @@ async function touchSession(
   }
 }
 
-/** 取最近几轮当上下文。取不到就当没有历史，从头聊 —— 比整条请求失败好 */
-async function loadHistory(env: Env, session: string): Promise<{ role: string; text: string }[]> {
+/** 取最近几轮当上下文。取不到就当没有历史，从头聊 —— 比整条请求失败好。
+    `tab` 是窗口号（R42）：同一条会话里别人说的话不该串进这个人的上下文 */
+async function loadHistory(
+  env: Env,
+  session: string,
+  tab: string
+): Promise<{ role: string; text: string }[]> {
   try {
-    const res = await stubOf(env, session).fetch(new Request('https://chat.do/history'));
+    const res = await stubOf(env, session).fetch(
+      new Request('https://chat.do/history?tab=' + encodeURIComponent(tab))
+    );
     if (!res.ok) return [];
     const d = (await res.json()) as { items?: { role?: string; text?: string }[] };
     return Array.isArray(d.items)
@@ -920,6 +1105,14 @@ const BIND_TIMEOUT_MS = 20000;
 const PROBE_TIMEOUT_MS = 30000;
 
 /**
+ * 可达性探测的上限（R41③）。比 `PROBE_TIMEOUT_MS` 短得多，因为它问的是另一个问题：
+ * **「能不能拿到响应头」**，而不是「能不能生成一段回答」。通的路径实测都在 0.5–4 秒
+ * （本机打十四家国内端点，最慢的讯飞 5.8 秒），10 秒还没有头就可以判定为不通了。
+ * 短一点还有一个好处：一次探测要打目标 + 对照两个地址，不通时他只用等 10 秒不是 30 秒。
+ */
+const REACH_TIMEOUT_MS = 10000;
+
+/**
  * 打上游时带的请求头。除了鉴权与 content-type，其余是一个**真实 OpenAI 客户端**
  * （`openai-node` SDK）会发的那一套 —— 裸 fetch 只带两个头，在按客户端做路由或
  * 限流的网关那儿容易被区别对待。这些头不含任何本站信息，也不含访客信息。
@@ -945,12 +1138,12 @@ const CLIENT_HEADERS: Record<string, string> = {
  * **上游响应体一个字都不外泄**（它可能带自己的域名、模型名与报错细节）。
  */
 async function askUpstream(
-  cfg: Cfg,
+  route: Route,
   model: string,
   system: string,
   turns: Turn[]
 ): Promise<ReadableStream> {
-  const shape = SHAPES[cfg.proto];
+  const shape = SHAPES[route.proto];
 
   /* 只给「建连 + 拿到响应头」设超时，拿到之后 `clearTimeout` —— 流式读取不受限。
      abort 会真正取消这次 fetch，不是只放弃等待。 */
@@ -959,11 +1152,11 @@ async function askUpstream(
 
   let res: Response;
   try {
-    res = await fetch(shape.url(cfg.base, model, cfg.key), {
+    res = await fetch(shape.url(route.base, model, route.key), {
       method: 'POST',
       headers: {
         ...CLIENT_HEADERS,
-        ...shape.headers(cfg.key),
+        ...shape.headers(route.key),
         'content-type': 'application/json',
       },
       body: JSON.stringify(
@@ -1010,6 +1203,40 @@ async function askBinding(env: Env, system: string, turns: Turn[]): Promise<Read
 }
 
 /**
+ * 把一段现成的文字包成本站自己的 SSE（R41②，人工接管时用）。
+ *
+ * 切成小块逐段发而不是一次吐完：前端那套渲染是按增量追加的，一次一大块会「啪」地
+ * 整段出现，和模型回答时的逐字长得不一样 —— 访客不该从节奏上看出这一句是人打的。
+ * 24 个字符一块、每块间隔 40 ms，一句两百字的话大约 0.35 秒出完。
+ */
+function textStream(text: string): ReadableStream {
+  const enc = new TextEncoder();
+  const chars = [...text];
+  let i = 0;
+
+  return new ReadableStream({
+    async pull(ctrl) {
+      if (i >= chars.length) {
+        ctrl.enqueue(enc.encode('data: [DONE]\n\n'));
+        ctrl.close();
+        return;
+      }
+      const piece = chars.slice(i, i + 24).join('');
+      i += 24;
+      ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ d: piece })}\n\n`));
+      if (i < chars.length) await new Promise((r) => setTimeout(r, 40));
+    },
+  });
+}
+
+/** 流式响应的头。三处共用（模型、人工接管、兜底），漏掉 no-store 就会把一次问答缓存给下一个人 */
+const STREAM_HEADERS = {
+  'content-type': 'text/event-stream; charset=utf-8',
+  'cache-control': 'no-store',
+  'x-robots-tag': 'noindex',
+} as const;
+
+/**
  * `POST /api/chat` —— 一句话进，一段流出。
  *
  * 失败一律返回 JSON + 一句中文人话，前端照原样显示给访客：
@@ -1023,15 +1250,12 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   // 保险丝（R32：护栏先不设，但要有关停开关）。后台那个开关也走这一条
   if (cfg.off) return fail(503, '今天先不聊了，回头再来');
 
-  let body: { session?: unknown; message?: unknown };
+  let body: { session?: unknown; tab?: unknown; message?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return fail(400, '请求体不是 JSON');
   }
-
-  const session = typeof body.session === 'string' ? body.session : '';
-  if (!SESSION_RE.test(session)) return fail(400, '会话号不对');
 
   const message = (typeof body.message === 'string' ? body.message : '').trim();
   if (!message) return fail(400, '说点什么');
@@ -1048,7 +1272,47 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   // R32 他定了要存 IP。这是 Cloudflare 注入的头，访客改不了
   const ip = req.headers.get('cf-connecting-ip') ?? '';
 
-  const history = await loadHistory(env, session);
+  /* ---- 会话号与窗口号（R42：「同一 IP 使用相同会话」）---------------------
+     **会话号一律在服务端按 IP 算**，前端传什么都不采信 —— 前端不知道自己的 IP，
+     而且它传上来的值本来就是「一个标签页一份、关掉就换新的」（见 `sessionOf` 的注释）。
+
+     `tab` 是那个 uuid 现在的用途：窗口号。老前端（边缘缓存里最多还能活 7 天的那些页面）
+     发的是 `session` 字段，把它当窗口号收下 —— 形状一样，语义正好也对得上
+     「一个标签页一份」。
+
+     **拿不到 IP 时**（本机 `curl` 没有 `cf-connecting-ip`）退回用窗口号当会话号，
+     与 R41 的行为一致；本机验收因此不受影响。 */
+  const given = typeof body.tab === 'string' ? body.tab : typeof body.session === 'string' ? body.session : '';
+  const tab = TAB_RE.test(given) ? given : '';
+  if (!tab) return fail(400, '窗口号不对');
+
+  const session = ip ? await sessionOf(ip) : tab;
+  if (!SESSION_RE.test(session)) return fail(400, '会话号不对');
+
+  /* ---- 人工接管（R41②）--------------------------------------------------
+     沉麟在后台把这个会话标成「我自己接」时，这一轮不调模型：访客那句话落库之后
+     挂起等他打字（最多 25 秒），他一按发送就把原话流给访客。
+
+     三个决定：
+     ① 访客那条必须 **await** 落库，不能用 waitUntil —— 后台要立刻看到这句话才有得可回，
+        而且 DO 那边判断「有没有新的人工回复」用的就是「最后一条访客消息」这个锚点；
+     ② 超时之后**退回模型**，不是回一句「他不在」。访客不知道有接管这回事，
+        他等了 25 秒该拿到一个回答；
+     ③ 访客侧看不出区别 —— 同一条 SSE 格式、同样逐段出字（见 `textStream`）。 */
+  if (await takenOver(env, session)) {
+    await logMsg(env, session, 'user', message, ip, '', tab);
+    await touchSession(env, session, ip, '', 1, 1);
+
+    const human = await waitHuman(env, session, tab);
+    await touchSession(env, session, ip, '', 0, 0);
+
+    // 那句话在 DO 的 `/reply` 里已经落库了，这儿只负责送出去，不重复写一遍
+    if (human) return new Response(textStream(human), { headers: STREAM_HEADERS });
+    /* 他没接上 —— 往下走模型那条路。访客这句已经在库里了，下面靠 `dup` 认出来，
+       不会把同一句话问两遍 */
+  }
+
+  const history = await loadHistory(env, session, tab);
 
   /* system 与对话分开传：四个协议里有三个把 system 放在 body 顶层
      （Anthropic 的 `system`、Responses 的 `instructions`、Gemini 的 `systemInstruction`），
@@ -1064,57 +1328,87 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
      那是他的内容，得他自己动手。`pickKb` 留在 `data/chat.ts` 里没删，
      等哪天条目多到装不下（六十条以上）再启用，那时漏检的代价才小于装不下的代价。 */
   const system = buildSystem(kb);
-  const turns: Turn[] = [
-    ...history.map((h) => ({
-      role: (h.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: h.text,
-    })),
-    { role: 'user' as const, content: message },
-  ];
+  const past: Turn[] = history.map((h) => ({
+    role: (h.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+    content: h.text,
+  }));
+  /* 接管超时那条路上访客这句已经在历史里了（上面 await 落库过），再追加一次就变成
+     「同一句话问了两遍」。判据用「最后一条历史是不是逐字相同的访客消息」而不是传一个
+     布尔值进来 —— 将来谁改了上面的顺序，这一条也不会悄悄坏掉。 */
+  const dup =
+    past.length > 0 &&
+    past[past.length - 1].role === 'user' &&
+    past[past.length - 1].content === message;
+  const turns: Turn[] = dup ? past : [...past, { role: 'user' as const, content: message }];
 
   // 访客那条先落库：模型这一轮失败了，他说过的话也还在
-  ctx.waitUntil(logMsg(env, session, 'user', message, ip));
+  if (!dup) ctx.waitUntil(logMsg(env, session, 'user', message, ip, '', tab));
 
-  /* 三条路：主路的候选模型（`model` 可以写成逗号分隔的多个，按顺序试）→
-     Workers AI 兜底。失败原因只进 Worker 日志，**不进响应体**。
+  /* 路径顺序：**每条线路的每个候选模型**（R41③ 起线路也可以有多条）→ Workers AI 兜底。
+     失败原因只进 Worker 日志与 `lastwhy`，**不进响应体**。
 
      为什么要多候选：这家上游的模型可用性会漂移 —— 本机实测同一个模型 20 分钟前还好，
      再调就返「没有可用通道」。写两三个候选，第一个挂了自动换下一个，
-     比直接掉到兜底（免费档 196 次/天）划算。 */
-  if (!cfg.base || !cfg.key || !cfg.models.length) {
-    /* 缺配置就整条主路不走。线上如果 secret 忘配、或者后台把它清空了，
+     比直接掉到兜底（免费档 196 次/天）划算。线路那一层是同一个道理、粒度更大：
+     国内服务商从境外边缘打不通时，第二条线路顶上，功能不停。 */
+  const usable = cfg.routes.filter((r) => r.base && r.key && r.models.length);
+  if (!usable.length) {
+    /* 一条完整线路都没有就整段主路不走。线上如果 secret 忘配、或者后台把它清空了，
        这一行是唯一能看出来的地方（只报有无，不报值） */
     console.warn(
-      '主路没配全，直接走兜底 —— base:' +
-        (cfg.base ? '有' : '无') +
-        ' key:' +
-        (cfg.key ? '有' : '无') +
-        ' model:' +
-        (cfg.models.length ? cfg.models.length + ' 个' : '无')
+      '没有可用线路，直接走兜底 —— 共 ' +
+        cfg.routes.length +
+        ' 条：' +
+        cfg.routes
+          .map(
+            (r, i) =>
+              `#${i + 1} base:${r.base ? '有' : '无'} key:${r.key ? '有' : '无'} model:${r.models.length}`
+          )
+          .join('，')
     );
   }
 
   let raw: ReadableStream | null = null;
   /** 这一轮真正出字的是谁 —— 落库与后台的「模型使用」都靠它 */
   let used = '';
+  /**
+   * 出字那条线路的协议形状。**不能统一用第一条线路的** —— 三条线路可以各配不同协议，
+   * 解析器拿错协议就一个字都抽不出来（R39 那个坑的加强版：那次是选错协议，
+   * 这次会是「换了线路但还拿着上一条的解析器」）。
+   */
+  let shape = SHAPES[usable[0]?.proto ?? 'openai'];
   const why: string[] = [];
 
-  if (cfg.base && cfg.key) {
-    for (const m of cfg.models) {
+  for (const route of usable) {
+    for (const m of route.models) {
       try {
-        raw = await askUpstream(cfg, m, system, turns);
+        raw = await askUpstream(route, m, system, turns);
         used = m;
+        shape = SHAPES[route.proto];
         break;
       } catch (e) {
-        why.push('主路 ' + m + '：' + (e instanceof Error ? e.message : String(e)));
+        why.push(
+          '线路 ' +
+            route.proto +
+            (route.domestic ? '·国内' : '') +
+            ' 的 ' +
+            m +
+            '：' +
+            (e instanceof Error ? e.message : String(e))
+        );
       }
     }
+    if (raw) break;
   }
 
   if (!raw) {
     try {
       raw = await askBinding(env, system, turns);
       used = FALLBACK_MODEL;
+      /* 绑定回的是 `{"response":"字"}`，四个协议都不认它 ——
+         `deltaOf`／`onceOf` 里各有一条专门的兜底分支接着，所以这儿给哪个 shape 都行，
+         给 openai 是因为它的嗅探顺序最短 */
+      shape = SHAPES.openai;
     } catch (e) {
       /* Workers AI 免费额度用完也走这儿（官方 pricing：超额后该类型操作直接报错，
          不自动计费也不降级） */
@@ -1123,36 +1417,30 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   }
 
   if (!raw) {
-    console.error('两条路都没通 —— ' + why.join('｜'));
-    ctx.waitUntil(noteWhy(env, '两条路都没通 ｜ ' + why.join(' ｜ ')));
+    console.error('全部线路都没通 —— ' + why.join('｜'));
+    ctx.waitUntil(noteWhy(env, '全部线路都没通 ｜ ' + why.join(' ｜ ')));
     // 这一轮虽然没答上来，访客那句话已经落库了，索引也要跟上（不然后台看不到这次来访）
-    ctx.waitUntil(touchSession(env, session, ip, '', 1));
+    ctx.waitUntil(touchSession(env, session, ip, '', dup ? 0 : 1));
     return fail(502, '我这会儿答不上来，等一下再问');
   }
 
   if (why.length) {
-    console.warn('主路没走通，已退回兜底 —— ' + why.join('｜'));
-    ctx.waitUntil(noteWhy(env, '退回兜底 ｜ ' + why.join(' ｜ ')));
+    console.warn('前面的线路没走通，最后用的是 ' + used + ' —— ' + why.join('｜'));
+    ctx.waitUntil(noteWhy(env, '最后用的是 ' + used + ' ｜ ' + why.join(' ｜ ')));
   }
 
   const [toClient, toLog] = raw.tee();
   ctx.waitUntil(
-    collect(toLog, SHAPES[cfg.proto]).then(async (text) => {
-      if (text) await logMsg(env, session, 'ai', text, '', used);
+    collect(toLog, shape).then(async (text) => {
+      if (text) await logMsg(env, session, 'ai', text, '', used, tab);
       // 一个字都没抽出来：把它也记一笔，否则这种失败在后台完全看不见
-      else await noteWhy(env, '出字 0 ｜ 用的是 ' + (used || '（无）') + ' ｜ 协议 ' + cfg.proto);
-      // 一问一答算两条；答没出来就只算问的那一条
-      await touchSession(env, session, ip, used, text ? 2 : 1);
+      else await noteWhy(env, '出字 0 ｜ 用的是 ' + (used || '（无）'));
+      // 一问一答算两条；答没出来就只算问的那一条（接管超时那条路上问的那条已经算过了）
+      await touchSession(env, session, ip, used, (dup ? 0 : 1) + (text ? 1 : 0));
     })
   );
 
-  return new Response(toSiteStream(toClient, SHAPES[cfg.proto]), {
-    headers: {
-      'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': 'no-store',
-      'x-robots-tag': 'noindex',
-    },
-  });
+  return new Response(toSiteStream(toClient, shape), { headers: STREAM_HEADERS });
 }
 
 /* ==========================================================================
@@ -1308,16 +1596,16 @@ const PROBE_MAX_TOKENS = 300;
 const NOT_OBEDIENT =
   /deepseek|chatgpt|openai|gpt-[0-9]|qwen|通义|千问|智谱|glm|kimi|月之暗面|深度求索|minimax|海螺|claude|anthropic|gemini|文心|讯飞|星火|豆包|step-?[0-9]|ai\s*助手|人工智能助手|大模型|语言模型/i;
 
-async function probe(cfg: Cfg, model: string, kb: KbItem[]): Promise<Record<string, unknown>> {
-  const shape = SHAPES[cfg.proto];
+async function probe(route: Route, model: string, kb: KbItem[]): Promise<Record<string, unknown>> {
+  const shape = SHAPES[route.proto];
   const t0 = Date.now();
 
   try {
-    const res = await fetch(onceUrl(cfg.proto, shape.url(cfg.base, model, cfg.key)), {
+    const res = await fetch(onceUrl(route.proto, shape.url(route.base, model, route.key)), {
       method: 'POST',
       headers: {
         ...CLIENT_HEADERS,
-        ...shape.headers(cfg.key),
+        ...shape.headers(route.key),
         accept: 'application/json',
         'content-type': 'application/json',
       },
@@ -1438,17 +1726,19 @@ async function admin(req: Request, env: Env): Promise<Response> {
       {
         logged: true,
         ready,
-        // key **永不回显**，只报有无
-        cfg: {
-          base: cfg.base,
-          model: cfg.models.join(', '),
-          hasKey: !!cfg.key,
-          off: cfg.off,
-          proto: cfg.proto,
-          domestic: cfg.domestic,
-        },
+        /* 线路数组。**密钥永不回显**，只报有无 —— 后台那个输入框留空就是「不改」，
+           填了才覆盖。R41 起是数组；前端仍然按下标一条条渲染，第一条就是主线 */
+        routes: cfg.routes.map((r) => ({
+          base: r.base,
+          model: r.models.join(', '),
+          hasKey: !!r.key,
+          proto: r.proto,
+          domestic: r.domestic,
+        })),
+        off: cfg.off,
         lastWhy: await lastWhy(env),
         fallback: FALLBACK_MODEL,
+        routeMax: ROUTE_MAX,
       },
       CACHE.none
     );
@@ -1457,12 +1747,16 @@ async function admin(req: Request, env: Env): Promise<Response> {
   if (!logged) return json({ ok: false, error: '进不去' }, CACHE.none, 401);
 
   /* ---- 对话记录（R38 他要的「查看对话记录详情」）------------------------
-     两条都是 GET，所以在这儿处理，不进 adminWrite（那边只接 POST）。
-     这两条会返回访客的 IP 与原文，**只有登录后能打**。 */
+     这一段都是 GET，所以在这儿处理，不进 adminWrite（那边只接 POST）。
+     它们会返回访客的 IP 与原文，**只有登录后能打**。 */
 
-  /** 会话列表。最近活跃的排前面 */
+  /** 会话列表。最近活跃的排前面。R41 起每条还带「接管中／有人在等」两个标记 */
   if (path === 'sessions') {
     try {
+      /* 顺手记一笔「他此刻在后台」—— 接管要靠它判断「人在不在」（见 `takenOver`）。
+         这一条接口是后台每 3 秒必打的那一条，挂在这儿不必再多一个心跳接口。
+         `await` 而不是丢在后台：它就是一次本地 DO 调用，几毫秒 */
+      await noteSeen(env);
       const res = await cfgStub(env).fetch(
         new Request('https://chat.do/sessions?n=' + (new URL(req.url).searchParams.get('n') ?? '60'))
       );
@@ -1473,30 +1767,189 @@ async function admin(req: Request, env: Env): Promise<Response> {
     }
   }
 
-  /** 某一个会话的全部消息 */
+  /**
+   * 某一个会话的消息。`after` 给「实时接管」那一页的轮询用：
+   * 带上上一轮拿到的最后一条 id，这一轮只回比它更新的几条，不必每 1.5 秒搬四百条。
+   */
   if (path === 'log') {
-    const id = new URL(req.url).searchParams.get('session') ?? '';
+    const p = new URL(req.url).searchParams;
+    const id = p.get('session') ?? '';
     if (!SESSION_RE.test(id)) return fail(400, '会话号不对');
+    const after = Math.max(0, Math.trunc(Number(p.get('after'))) || 0);
     try {
-      const res = await stubOf(env, id).fetch(new Request('https://chat.do/all?n=400'));
-      const d = (await res.json()) as { items?: unknown };
-      return json({ ok: true, items: Array.isArray(d.items) ? d.items : [] }, CACHE.none);
+      const res = await stubOf(env, id).fetch(
+        new Request('https://chat.do/all?n=400&after=' + after)
+      );
+      const d = (await res.json()) as { items?: unknown; last?: unknown };
+      return json(
+        {
+          ok: true,
+          items: Array.isArray(d.items) ? d.items : [],
+          last: Number(d.last) || after,
+        },
+        CACHE.none
+      );
     } catch {
       return fail(502, '这个会话读不出来');
     }
   }
 
+  /** 顶栏那几个实时数字（R41②）。所有 tab 的角标都从这一条来，一次问完 */
+  if (path === 'stat') {
+    try {
+      const res = await cfgStub(env).fetch(new Request('https://chat.do/stat'));
+      const d = (await res.json()) as Record<string, unknown>;
+      return json({ ok: true, ...d, content: CONTENT.length }, CACHE.none);
+    } catch {
+      return fail(502, '数字读不出来');
+    }
+  }
+
+  /**
+   * 仓库里现有内容的原文（R41②「文章编辑」与「图库管理」）。
+   *
+   * 来自 `src/data/content.generated.ts` —— **编译进 Worker 包，不是静态资源**。
+   * 那个文件为什么不做成 `/admin-content.json`，理由写在 `scripts/gen-content.mjs` 顶部：
+   * `dist/` 里的东西全是公开可取的，而 `draft: true` 的正文恰恰是他还没决定要不要公开的。
+   *
+   * 默认只回目录（不含正文）：33 个文件的正文加起来 39 KB，列表页用不着。
+   * 带 `?path=` 才回那一份的 frontmatter 与正文。
+   */
+  if (path === 'content') {
+    const p = new URL(req.url).searchParams;
+    const want = p.get('path') ?? '';
+    if (want) {
+      const one = CONTENT.find((c) => c.path === want);
+      if (!one) return fail(404, '没有这个文件');
+      return json({ ok: true, item: one }, CACHE.none);
+    }
+    /* `?coll=` 回**整个集合的全文**（含 frontmatter 与正文）。图库管理要靠它 ——
+       一个相册的封面、alt、图片数全在 frontmatter 里，一条条 `?path=` 拉是
+       N 次往返。全站正文加起来 39 KB，一次发完比来回问便宜。 */
+    const coll = p.get('coll') ?? '';
+    if (coll) {
+      return json({ ok: true, items: CONTENT.filter((c) => c.coll === coll) }, CACHE.none);
+    }
+    return json(
+      {
+        ok: true,
+        items: CONTENT.map((c) => ({
+          coll: c.coll,
+          slug: c.slug,
+          path: c.path,
+          title: c.title,
+          draft: c.draft,
+          pubDate: c.pubDate,
+          chars: [...c.body].length,
+        })),
+      },
+      CACHE.none
+    );
+  }
+
+  /** 后台草稿列表（R41②）。不含正文，点开才拉 */
+  if (path === 'drafts') {
+    try {
+      const res = await cfgStub(env).fetch(new Request('https://chat.do/drafts'));
+      const d = (await res.json()) as { items?: unknown };
+      return json({ ok: true, items: Array.isArray(d.items) ? d.items : [] }, CACHE.none);
+    } catch {
+      return fail(502, '草稿读不出来');
+    }
+  }
+
+  /** 一份草稿的全文 */
+  if (path === 'draft') {
+    const id = new URL(req.url).searchParams.get('id') ?? '';
+    if (!id) return fail(400, '缺 id');
+    try {
+      const res = await cfgStub(env).fetch(
+        new Request('https://chat.do/draft?id=' + encodeURIComponent(id))
+      );
+      if (!res.ok) return fail(404, '没有这份草稿');
+      const d = (await res.json()) as { item?: unknown };
+      return json({ ok: true, item: d.item ?? null }, CACHE.none);
+    } catch {
+      return fail(502, '草稿读不出来');
+    }
+  }
+
+  /**
+   * 能不能连上这家服务商（R41③）—— 他那句「我必须能使用国内的服务商」的第一件工具。
+   *
+   * 打的是模型列表端点（`/models`），**不发一次推理**：只要拿到任何 HTTP 状态码，
+   * 「Cloudflare 边缘到这个域名」这条路就是通的 —— 401 也算通（那只是密钥不对）。
+   * 同时打**两个对照端点**（一个境外、一个国内可达，见 `data/providers.ts` 的 `CONTROLS`）：
+   *
+   * | 目标 | 对照 | 结论 |
+   * | :-- | :-- | :-- |
+   * | 有状态码 | —— | 通了，接下来看密钥与模型 |
+   * | 超时 | 至少一个有状态码 | **这一家不通**（跨境被掐，或者它在拦云厂商出网 —— R37 那次就是） |
+   * | 超时 | 两个都超时 | 出网整体有问题，与这家无关 |
+   *
+   * R37 那一整轮就是靠这个对照才把「代码写错」「密钥不对」「上游在拦我」三者分开的。
+   * 把它做成一颗按钮，是为了下次不用再手搓一遍。
+   */
+  if (path === 'reach') {
+    const p = new URL(req.url).searchParams;
+    const base = (p.get('base') ?? '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\/[^\s]+$/.test(base))
+      return json({ ok: false, error: '端点要是一个完整的 http(s) 地址' }, CACHE.none, 400);
+
+    const proto = asProto(p.get('proto'));
+    // 探可达性不需要真密钥；填了就带上，那样 200 与 401 还能分得开
+    const key = p.get('key') ?? 'probe';
+
+    const hit = async (b: string, pr: Proto) => {
+      const t0 = Date.now();
+      const shape = SHAPES[pr];
+      try {
+        const res = await fetch(shape.listUrl(b, key), {
+          headers: { ...CLIENT_HEADERS, ...shape.headers(key), accept: 'application/json' },
+          signal: AbortSignal.timeout(REACH_TIMEOUT_MS),
+        });
+        // 响应体不要 —— 这里只关心「有没有响应」，读它只会多花时间
+        try {
+          await res.body?.cancel();
+        } catch {
+          /* 已经关了 */
+        }
+        return { ms: Date.now() - t0, status: res.status };
+      } catch (e) {
+        return { ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
+      }
+    };
+
+    /* 三个一起打，总时长 = 最慢那个（10 秒），而不是三倍。
+       对照组固定走 openai 形状：它就是 `<base>/models`，最省事的一条 */
+    const [target, ...controls] = await Promise.all([
+      hit(base, proto),
+      ...CONTROLS.map((c) => hit(c.base, 'openai')),
+    ]);
+
+    const okTarget = 'status' in target;
+    const okControl = controls.some((c) => 'status' in c);
+    return json(
+      {
+        ok: true,
+        target,
+        controls: controls.map((c, i) => ({ label: CONTROLS[i].label, ...c })),
+        verdict: okTarget ? 'reachable' : okControl ? 'blocked' : 'egress',
+      },
+      CACHE.none
+    );
+  }
+
   /**
    * 拉这家服务商下**所有有权限的模型**（R39 他要的「一键拉取」）。
-   * 表单里填了 base/key/proto 就用填的（还没保存也能先拉），否则用当前生效值。
+   * 表单里填了 base/key/proto 就用填的（还没保存也能先拉），否则用主线的当前生效值。
    */
   if (path === 'models') {
     const p = new URL(req.url).searchParams;
-    const now = await loadCfg(env);
+    const now = (await loadCfg(env)).routes[0];
     const base = (p.get('base') || now.base).replace(/\/+$/, '');
     const key = p.get('key') || now.key;
-    const protoRaw = p.get('proto') || now.proto;
-    const proto = (protoRaw in SHAPES ? protoRaw : 'openai') as Proto;
+    const proto = asProto(p.get('proto') || now.proto);
 
     if (!base || !key) return json({ ok: false, error: '先填端点与密钥' }, CACHE.none, 400);
 
@@ -1525,7 +1978,7 @@ async function admin(req: Request, env: Env): Promise<Response> {
   return adminWrite(req, env, path);
 }
 
-/** save 与 test —— 都要求已登录，所以单独一段，调用方已经把门看住了 */
+/** 写操作（save / test / 接管 / 草稿）—— 都要求已登录，调用方已经把门看住了 */
 async function adminWrite(req: Request, env: Env, path: string): Promise<Response> {
   if (req.method !== 'POST') return fail(405, '只接 POST');
 
@@ -1540,8 +1993,34 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
 
   if (path === 'save') {
     const patch: Record<string, string> = {};
-    /* 只认这几个键。**空字符串是有意义的动作** —— 删掉这一项，回落到 secret 的默认值。
-       `proto` 与 `domestic` 是 R39 加的：请求格式与「这家在国内」那个标记。 */
+
+    /* ---- 线路（R41③）------------------------------------------------------
+       整个数组一起存成一个 JSON。为什么不按键分开存（`base1`/`base2`…）：
+       线路的**条数与顺序**本身就是配置的一部分，拆成散键之后「删掉中间那一条」
+       要靠一堆删除操作去表达，很容易留下半条脏数据。
+
+       **密钥留空 = 沿用这一条原来的密钥**（前端永远收不到密钥，所以它没法回填）。
+       要清掉某条的密钥就填一个空格 —— 与 R39 的口径一致。 */
+    if (Array.isArray(b.routes)) {
+      const now = (await loadCfg(env)).routes;
+      const routes = (b.routes as unknown[]).slice(0, ROUTE_MAX).map((r, i) => {
+        const o = (r ?? {}) as Record<string, unknown>;
+        const typed = str(o.key);
+        return {
+          base: str(o.base).replace(/\/+$/, ''),
+          // 没填就沿用同一位置原来的那把（数组重排过的话这里会跟着位置走，见后台上的提示）
+          key: typed || now[i]?.key || '',
+          model: str(o.model),
+          proto: asProto(o.proto),
+          domestic: !!o.domestic,
+        };
+      });
+      patch.routes = JSON.stringify(routes);
+    }
+
+    /* 老那五个键仍然认（R39 的格式）。它们现在只有一个用处：
+       `routes` 被清空时的底座。写进来也不会与 `routes` 打架 —— `loadCfg` 里
+       `routes` 有效就完全不看它们。 */
     for (const k of ['base', 'model', 'key', 'proto'] as const) if (k in b) patch[k] = str(b[k]);
     if ('off' in b) patch.off = b.off ? '1' : '';
     if ('domestic' in b) patch.domestic = b.domestic ? '1' : '';
@@ -1560,22 +2039,123 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
     return json({ ok: true, saved: Object.keys(patch) }, CACHE.none);
   }
 
+  /* ---- 人工接管（R41②）--------------------------------------------------- */
+
+  /** 打开／关掉某个会话的接管 */
+  if (path === 'takeover') {
+    const id = str(b.session);
+    if (!SESSION_RE.test(id)) return fail(400, '会话号不对');
+    try {
+      await cfgStub(env).fetch(
+        new Request('https://chat.do/takeover', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id, on: !!b.on }),
+        })
+      );
+    } catch {
+      return fail(502, '改不了，再试一次');
+    }
+    return json({ ok: true, takeover: !!b.on }, CACHE.none);
+  }
+
+  /**
+   * 沉麟本人回一句（R41②）。写进会话 DO，并放走正在挂着等的那条访客请求。
+   *
+   * `waiting` 回给前端看：它是「这一句放走了几个人」——
+   * 0 表示没人在等（访客还没发问、或者已经等超时走了模型那条路），
+   * 那这句话仍然进了记录，访客**下一次发问时**会被 DO 立刻取出来当回答。
+   */
+  if (path === 'reply') {
+    const id = str(b.session);
+    if (!SESSION_RE.test(id)) return fail(400, '会话号不对');
+    const text = str(b.text);
+    if (!text) return fail(400, '说点什么');
+    if ([...text].length > 2000) return fail(400, '一次最多 2000 个字');
+
+    try {
+      const res = await stubOf(env, id).fetch(
+        new Request('https://chat.do/reply', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+      );
+      const d = (await res.json()) as { waiting?: number };
+      // 索引里的条数要跟上，否则会话列表上的「N 条」与记录里的行数对不上
+      await touchSession(env, id, '', '沉麟本人', 1, 0);
+      return json({ ok: true, waiting: Number(d.waiting) || 0 }, CACHE.none);
+    } catch {
+      return fail(502, '没发出去，再试一次');
+    }
+  }
+
+  /* ---- 草稿（R41②）------------------------------------------------------ */
+
+  if (path === 'draft-save') {
+    const coll = str(b.coll);
+    const slug = str(b.slug);
+    if (!['posts', 'notes', 'projects', 'photos', 'kb'].includes(coll))
+      return fail(400, '不认识这个栏目');
+    /* slug 就是文件名，也是 URL 的一段。只放行小写字母、数字、连字符与斜杠
+       （斜杠是为了 `2026/foo` 这种子目录写法）—— 中文标题请他自己起一个英文 slug，
+       本项目没有拼音库，猜出来的 slug 比让他填一个更糟 */
+    if (!/^[a-z0-9][a-z0-9/-]{0,120}$/.test(slug))
+      return fail(400, 'slug 只能用小写字母、数字、连字符与斜杠');
+
+    try {
+      await cfgStub(env).fetch(
+        new Request('https://chat.do/draft-set', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: coll + '/' + slug,
+            coll,
+            slug,
+            title: str(b.title),
+            front: typeof b.front === 'string' ? b.front : '',
+            body: typeof b.body === 'string' ? b.body : '',
+          }),
+        })
+      );
+    } catch {
+      return fail(502, '存不进去，再试一次');
+    }
+    return json({ ok: true, id: coll + '/' + slug }, CACHE.none);
+  }
+
+  if (path === 'draft-del') {
+    const id = str(b.id);
+    if (!id) return fail(400, '缺 id');
+    try {
+      await cfgStub(env).fetch(
+        new Request('https://chat.do/draft-del', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id }),
+        })
+      );
+    } catch {
+      return fail(502, '删不掉，再试一次');
+    }
+    return json({ ok: true }, CACHE.none);
+  }
+
   if (path === 'test') {
-    const now = await loadCfg(env);
-    // 表单里填了就用填的（还没保存也能先测），没填就用当前生效值
-    const cfg: Cfg = {
-      base: (str(b.base) || now.base).replace(/\/+$/, ''),
-      key: str(b.key) || now.key,
-      models: (str(b.model) || now.models.join(','))
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-      off: false,
-      proto: ((str(b.proto) || now.proto) in SHAPES ? str(b.proto) || now.proto : 'openai') as Proto,
-      domestic: 'domestic' in b ? !!b.domestic : now.domestic,
+    const now = (await loadCfg(env)).routes;
+    /* 测哪一条线路：前端会把下标一起传上来。表单里填了就用填的（还没保存也能先测），
+       没填就用那一条的当前生效值 */
+    const at = Math.max(0, Math.min(ROUTE_MAX - 1, Math.trunc(Number(b.at)) || 0));
+    const mine = now[at] ?? now[0];
+    const route: Route = {
+      base: (str(b.base) || mine.base).replace(/\/+$/, ''),
+      key: str(b.key) || mine.key,
+      models: asModels(str(b.model) || mine.models.join(',')),
+      proto: asProto(str(b.proto) || mine.proto),
+      domestic: 'domestic' in b ? !!b.domestic : mine.domestic,
     };
 
-    if (!cfg.base || !cfg.key || !cfg.models.length)
+    if (!route.base || !route.key || !route.models.length)
       return json({ ok: false, error: '端点、密钥、模型三样都要有' }, CACHE.none, 400);
 
     /**
@@ -1588,14 +2168,14 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
      * 只有已登录能打，与 probe 的 `error` 字段同一个口径（诊断必需，值不外泄给访客）。
      */
     if (b.raw) {
-      const shape = SHAPES[cfg.proto];
-      const model = cfg.models[0];
+      const shape = SHAPES[route.proto];
+      const model = route.models[0];
       try {
-        const res = await fetch(shape.url(cfg.base, model, cfg.key), {
+        const res = await fetch(shape.url(route.base, model, route.key), {
           method: 'POST',
           headers: {
             ...CLIENT_HEADERS,
-            ...shape.headers(cfg.key),
+            ...shape.headers(route.key),
             'content-type': 'application/json',
           },
           body: JSON.stringify(
@@ -1648,7 +2228,7 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
 
     /* 并行打，总时长 = 最慢那个（串行 6 个 ×30s 会撞上响应超时）。
        上限 6 个：subrequest 免费档 50，这里离得很远 */
-    const results = await Promise.all(cfg.models.slice(0, 6).map((m) => probe(cfg, m, kb)));
+    const results = await Promise.all(route.models.slice(0, 6).map((m) => probe(route, m, kb)));
     return json({ ok: true, kbCount: kb.length, results }, CACHE.none);
   }
 

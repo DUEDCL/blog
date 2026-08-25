@@ -42,3 +42,8 @@ pnpm-debug.log*
 
 # 调色/取帧用的临时产物（起始页配色与视频抽帧时生成，一次性，不进仓库）
 .tmpcolor/
+
+# 构建期生成的内容索引（scripts/gen-content.mjs 打给 Worker 用的，见那个脚本顶部注释）。
+# 派生物，不进仓库：进了就等于每改一篇文章都要提交一份全站原文的副本。
+# `npm run dev` 与 `npm run build` 都会先生成它，部署流程第一步就是 build，所以线上不会缺。
+src/data/content.generated.ts

@@ -111,8 +111,16 @@ import { MSG_MAX, OPENING } from '../data/chat';
     const input = pick<HTMLInputElement>('[data-ai-in]');
     const send = pick<HTMLButtonElement>('[data-ai-send]');
 
-    /** 会话号：一个标签页一份，关掉标签就换新的。Durable Object 的实例名就是它 */
-    const session = (() => {
+    /**
+     * 窗口号：一个标签页一份，关掉标签就换新的（R42 起它不再是会话号）。
+     *
+     * **会话号现在由服务端按 IP 算** —— 他要的「同一 IP 使用相同会话」。
+     * 前端不知道自己的 IP，所以那件事只能在 Worker 里做（`sessionOf`）。
+     * 这个 uuid 留下来还有两个用处，都在服务端那侧：喂给模型的上下文按它过滤、
+     * 接管时那句话按它定向 —— 同一个 IP 后面可能有好几个人（NAT、手机的 CGNAT），
+     * 不分窗口的话隔壁那个人说的话会串进你的对话。
+     */
+    const tab = (() => {
       const KEY = 'ai:session';
       try {
         const had = sessionStorage.getItem(KEY);
@@ -121,7 +129,7 @@ import { MSG_MAX, OPENING } from '../data/chat';
         sessionStorage.setItem(KEY, made);
         return made;
       } catch {
-        /* 隐私模式下 sessionStorage 会抛 —— 那就这一次算一轮，不影响能不能聊 */
+        /* 隐私模式下 sessionStorage 会抛 —— 那就这一次算一个窗口，不影响能不能聊 */
         return crypto.randomUUID();
       }
     })();
@@ -204,7 +212,7 @@ import { MSG_MAX, OPENING } from '../data/chat';
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ session, message: text }),
+          body: JSON.stringify({ tab, message: text }),
         });
 
         if (!res.ok || !res.body) {

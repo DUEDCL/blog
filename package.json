@@ -6,8 +6,9 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "gen": "node scripts/gen-content.mjs",
+    "dev": "npm run gen && astro dev",
+    "build": "npm run gen && astro build",
     "preview": "astro preview",
     "astro": "astro"
   },

@@ -41,6 +41,12 @@ npm run build
 
 判据：**`16 page(s) built`**（R32 删掉 /now 与两组占位相册、R35 加了 /admin 之后是这个数）。页数变了先弄清为什么（本轮是否真的增删了页面），别往下走。
 
+**R41 起 `npm run build` 不只是 `astro build`**：它先跑 `scripts/gen-content.mjs`，
+把 `src/content/` 打成 `src/data/content.generated.ts`（后台读仓库内容用的，`.gitignore` 里）。
+第一行输出应该是 `内容索引：N 个文件（…）→ src/data/content.generated.ts`。
+**这一步不能跳**：`src/worker.ts` 静态引入那个文件，只跑 `npx wrangler deploy` 会在打包时报
+找不到 import。
+
 ```bash
 npx astro check
 ```
@@ -49,8 +55,10 @@ npx astro check
 `about.astro:19 ts(2352)`，是「联系名片填真实账号」那一轮把它修掉的 —— 看到那一条也算过；
 多出别的先修掉再提交。）
 
-上面这两个数（18 页、错误数）是**会过期的判据**：本轮如果有意增删了页面、或修掉／引入了错误，
+上面这两个数（16 页、错误数）是**会过期的判据**：本轮如果有意增删了页面、或修掉／引入了错误，
 报告里要说清，并**顺手把这份技能里的数字改掉** —— 判据留着旧值就等于没有判据。
+（`astro check` 眼下固定还剩 **2 个 hint**：`content.config.ts` 里两处 `z.string().url()`
+的弃用提示，zod 那边的事，看到这两条也算过。）
 
 `dist/`、`.wrangler/`、`node_modules/` 都在 `.gitignore` 里，不会被带进提交。
 

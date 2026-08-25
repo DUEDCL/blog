@@ -63,6 +63,15 @@ const wrapClass =
 <style>
   main {
     padding-top: var(--sp-8);
+    /**
+     * 页脚贴底的另一半（R41①）。body 是 flex 列（见 global.css 里 body 那段注释），
+     * 剩余高度全部给 main —— 内容不满一屏时页脚被推到视口底边，满了就照旧往下走。
+     *
+     * `flex-basis: auto` 不能省：flex 项的默认 `flex-basis` 是 0%，只写 `flex-grow: 1`
+     * 会让 main 的高度从零开始算，长内容页的 `min-height` 计算跟着变形。
+     * `flex-shrink: 0` 是不让长内容被压缩（flex 项默认可收缩）。
+     */
+    flex: 1 0 auto;
   }
 
   .skip-link {

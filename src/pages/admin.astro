@@ -1,7 +1,10 @@
 ---
 /**
- * 后台 —— R20② 那把锁 ＋ 模型配置台（他 2026-08-24 要的「藏起来的后台管理页面，
- * 可以实时更改模型配置并进行最小文本测试」）。
+ * 后台 —— 五个面板的空壳（R41②）。
+ *
+ * 他这一轮的原话：「优化后台管理界面，将其做成顶部的状态栏内为『模型』『聊天记录』
+ * 『聊天实时接管』『文章编辑』『图库管理』，这些都能实时更新，并加入写作工具，
+ * 将其作为完整高效逻辑的后台管理界面。」
  *
  * **「藏起来」是怎么做到的**：不在 `NAV`、不在 `PORTALS`、不在页脚、不在 `/llms.txt`；
  * sitemap 里排除（`astro.config.mjs`）；`public/_headers` 给它配了
@@ -9,11 +12,18 @@
  * 但真正把它关住的是登录 —— **地址难猜不是安全边界**，所以地址就用最直白的 `/admin`。
  *
  * **这一页是公开可取的静态 HTML**，里面一个字的敏感内容都没有：
- * 三个视图（加载中／登录框／控制台）全在这儿，但控制台里的值全部由登录后的 fetch 填。
- * 这条约束来自 R20 那张表 —— HTML 走边缘缓存，而边缘缓存是共享的。
+ * 三个视图（加载中／登录框／控制台）与五个面板的骨架全在这儿，值全部由登录后的 fetch 填。
+ * 这条约束来自 R20 那张表 —— HTML 走边缘缓存，而边缘缓存是共享的，
+ * 登录态一旦进 HTML 就会把一个人的页面发给另一个人。
+ *
+ * 脚本在 `src/scripts/admin/`，一个面板一个文件。R39 那一版是 320 行脚本混在这个文件里，
+ * 加一个面板要在 markup、脚本、样式三处来回跳 —— 五个面板之后那样没法维护。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { PROTO_LABEL } from '../data/proto';
+/* 样式整份提出来当普通 CSS（不是 scoped `<style>`）—— 这一页几乎每个节点都是脚本造的，
+   而 scoped CSS 靠 `data-astro-cid-*` 属性生效，动态节点吃不到。理由写在那个文件顶部。
+   它只被这一页 import，所以只进 /admin 的产物。 */
+import '../styles/admin.css';
 
 /* 生成口令哈希的命令。写在这儿是为了他能直接复制 —— 明文口令只出现在他自己的终端里，
    不进这个文件、不进 secret、不进任何日志。迭代数与 worker.ts 的校验必须一致。 */
@@ -21,709 +31,254 @@ const HASH_CMD =
   `node -e "const c=require('crypto');const s=c.randomBytes(16);` +
   `const h=c.pbkdf2Sync(process.argv[1],s,10000,32,'sha256');` +
   `console.log('pbkdf2$10000$'+s.toString('base64')+'$'+h.toString('base64'))" 你的口令`;
+
+/** 顶部状态栏的五项。名字与他给的一字不差；`badge` 是要不要挂那个实时角标 */
+const TABS = [
+  { id: 'models', label: '模型' },
+  { id: 'logs', label: '聊天记录', badge: 'logs' },
+  { id: 'live', label: '聊天实时接管', badge: 'live' },
+  { id: 'write', label: '文章编辑', badge: 'write' },
+  { id: 'gallery', label: '图库管理' },
+] as const;
 ---
 
-<BaseLayout title="后台" description="站点后台" width="prose">
-  <div class="prose glass rise rise-1">
+<BaseLayout title="后台" description="站点后台" width="wide">
+  <p class="dim" data-view="load">正在看你有没有登录…</p>
+
+  <form class="glass box" data-view="login" hidden>
     <h1 class="title">后台</h1>
+    <p class="dim">这一页只有沉麟能进。</p>
+    <div class="row">
+      <input
+        class="in in--pass"
+        type="password"
+        data-pass
+        autocomplete="current-password"
+        placeholder="口令"
+        aria-label="口令"
+      />
+      <button class="key" type="submit">进去</button>
+    </div>
+    <p class="bad" data-err hidden></p>
 
-    <p class="dim" data-view="load">正在看你有没有登录…</p>
-
-    <form class="box" data-view="login" hidden>
-      <p class="dim">这一页只有沉麟能进。</p>
-      <div class="row">
-        <input
-          class="in"
-          type="password"
-          data-pass
-          autocomplete="current-password"
-          placeholder="口令"
-          aria-label="口令"
-        />
-        <button class="key" type="submit">进去</button>
-      </div>
-      <p class="bad" data-err hidden></p>
-
-      <div class="note" data-noset hidden>
-        <p>还没设口令。在项目目录里跑这三条，跑完刷新这一页：</p>
-        <pre><code>{HASH_CMD}</code></pre>
-        <pre><code>npx wrangler secret put ADMIN_HASH</code></pre>
-        <pre><code>npx wrangler secret put ADMIN_SECRET</code></pre>
-        <p class="dim">
-          第一条把哈希打印出来（口令本身不会离开你的终端），第二条粘贴那串哈希，
-          第三条随便粘一串足够长的随机字符当 cookie 签名密钥。
-        </p>
-      </div>
-    </form>
-
-    <div data-view="panel" hidden>
-      <h2 class="sub">分身的模型</h2>
+    <div class="note" data-noset hidden>
+      <p>还没设口令。在项目目录里跑这三条，跑完刷新这一页：</p>
+      <pre><code>{HASH_CMD}</code></pre>
+      <pre><code>npx wrangler secret put ADMIN_HASH</code></pre>
+      <pre><code>npx wrangler secret put ADMIN_SECRET</code></pre>
       <p class="dim">
-        改完点保存，**下一次对话立刻生效**，不用重新部署。留空的项回落到 secret 里的默认值。
+        第一条把哈希打印出来（口令本身不会离开你的终端），第二条粘贴那串哈希，
+        第三条随便粘一串足够长的随机字符当 cookie 签名密钥。
       </p>
+    </div>
+  </form>
 
-      <label class="field">
-        <span class="lab">请求格式</span>
-        <select class="in" data-proto aria-label="请求格式">
-          {Object.entries(PROTO_LABEL).map(([v, label]) => (
-            <option value={v} disabled={v === 'bedrock'}>{label}</option>
-          ))}
-        </select>
-      </label>
-      <p class="dim tip">
-        选错这一档最多损失一点点速度 —— 抽不到内容时会自动挨个嗅探其余几种格式。
-        <strong>Amazon Bedrock 不支持</strong>：它每个请求要按 AWS SigV4 签名、端点还按区域走，
-        与「一个端点 + 一个密钥」这套配置对不上。要用它就在前面挂一层 OpenAI 兼容的转发。
-      </p>
-
-      <label class="field">
-        <span class="lab">端点</span>
-        <input class="in" data-base placeholder="https://…/v1" aria-label="端点" />
-      </label>
-
-      <label class="field">
-        <span class="lab">模型（逗号分隔多个，按顺序试，第一个挂了自动换下一个）</span>
-        <input class="in" data-model placeholder="model-a, model-b" aria-label="模型" />
-      </label>
-
-      <div class="row">
-        <button class="key key--quiet2" type="button" data-pull>拉取可用模型</button>
-        <span class="dim" data-pull-msg></span>
+  <div data-view="panel" hidden>
+    {/* ---- 顶部状态栏 ---------------------------------------------------
+        五项 + 一盏「实时」灯。灯上那个时间是**最后一次真的拉到数据**的时刻，
+        不是定时器的心跳 —— 接口挂了的时候它会停住，那本身就是信息。 */}
+    <header class="bar glass">
+      <span class="bar__brand">后台</span>
+      <nav class="bar__tabs" aria-label="后台分区">
+        {TABS.map((t) => (
+          <button class="tab" type="button" data-tab={t.id}>
+            {t.label}
+            {'badge' in t && <span class="tab__badge" data-badge={t.badge} hidden></span>}
+          </button>
+        ))}
+      </nav>
+      <span class="bar__live" title="最后一次拉到数据的时刻">
+        <span class="dot" aria-hidden="true"></span><span data-beat>—</span>
+      </span>
+      <button class="key key--quiet" type="button" data-logout>退出</button>
+    </header>
+    <p class="dim sum" data-sum></p>
+    {/* ---- 模型 ----------------------------------------------------------
+        线路块（端点／协议／密钥／模型／国内标记 + 四颗按钮）由脚本按线路条数造，
+        因为条数是配置的一部分 —— 见 scripts/admin/models.ts。 */}
+    <section class="pane glass" data-panel="models">
+      <div class="pane__head">
+        <h2 class="sub">分身的模型</h2>
+        <label class="check check--off">
+          <input type="checkbox" data-off />
+          <span>暂时关掉对话（访客会看到「今天先不聊了」）</span>
+        </label>
       </div>
-      {/* 拉回来的模型名。点一个就追加到上面那个输入框里 —— 不是覆盖，
-          因为多候选是这套配置的常态（上游会漂移）。 */}
-      <div class="picks" data-picks hidden></div>
+      <p class="dim">
+        改完点保存，<strong>下一次对话立刻生效</strong>，不用重新部署。
+        线路**按顺序试**：主线的模型挨个试，全挂了换备线，备线也挂了才走兜底。
+        国内服务商建议放主线 —— 点一下服务商名字，端点、协议、示例模型、国内标记会一起填上。
+      </p>
 
-      <label class="field">
-        <span class="lab">密钥 <em class="dim" data-keystate></em></span>
-        <input
-          class="in"
-          type="password"
-          data-key
-          autocomplete="off"
-          placeholder="留空＝不改"
-          aria-label="密钥"
-        />
-      </label>
+      <div class="why">
+        <span class="lab">上一次为什么没走通</span>
+        <p class="mono dim" data-why></p>
+      </div>
 
-      <label class="check">
-        <input type="checkbox" data-domestic />
-        <span>
-          这家服务商在国内
-          <em class="dim"
-            >—— 勾上只是给你自己留个记号：线上是 Cloudflare 的境外边缘出网，
-            打大陆机器实测 30 秒无响应，那种超时不是代码或密钥的问题。</em
-          >
-        </span>
-      </label>
-
-      <label class="check">
-        <input type="checkbox" data-off />
-        <span>暂时关掉对话（访客点开会看到一句「今天先不聊了」）</span>
-      </label>
+      <div data-routes></div>
 
       <div class="row">
+        <button class="key key--quiet2" type="button" data-add-route>加一条备用线路</button>
         <button class="key" type="button" data-save>保存</button>
-        <button class="key" type="button" data-test>测一下</button>
-        <button class="key key--quiet" type="button" data-logout>退出</button>
       </div>
-
-      <p class="dim" data-msg hidden></p>
-      <div data-results></div>
+      <p class="dim" data-model-msg hidden></p>
 
       <p class="dim foot">
         兜底模型：<code data-fallback></code> —— 上面这些全失效时走它（Workers AI，零密钥）。
+        <strong>Amazon Bedrock 不支持</strong>：它每个请求要按 AWS SigV4 签名、端点还按区域走，
+        与「一个端点 + 一个密钥」这套配置对不上。要用它就在前面挂一层 OpenAI 兼容的转发。
       </p>
-
-      {/* ---- 对话记录（R38 他要的）------------------------------------------
-          会话列表 + 点开看全文。这一片会显示访客的 IP 与原话，
-          所以整页都在登录后面，接口也各自校验 cookie。 */}
-      <h2 class="sub">对话记录</h2>
-      <div class="row">
-        <button class="key" type="button" data-logs>刷新列表</button>
-        <span class="dim" data-logs-msg></span>
+    </section>
+    {/* ---- 聊天记录 ------------------------------------------------------ */}
+    <section class="pane glass" data-panel="logs" hidden>
+      <div class="pane__head">
+        <h2 class="sub">聊天记录</h2>
+        <span class="dim" data-log-head></span>
       </div>
-      <div data-sessions></div>
-      <div data-detail></div>
-    </div>
+      <p class="dim">
+        列表每 5 秒自动重拉，打开的会话每 3 秒增量追加 —— 不用守着刷新键。
+        这一片会显示访客的 IP 与原话，所以整页在登录后面，接口也各自校验 cookie。
+        <strong>一条会话＝一个 IP</strong>（R42）：同一个人换标签、刷新、关掉再回来都还是这一条；
+        同一个 IP 后面有多个人时，靠每条消息上的「窗口」区分。
+      </p>
+      <div class="row">
+        <button class="key key--quiet2 is-on" type="button" data-log-filter="all">全部</button>
+        <button class="key key--quiet2" type="button" data-log-filter="takeover">接管中</button>
+        <button class="key key--quiet2" type="button" data-log-filter="wait">有人在等</button>
+        <button class="key key--quiet" type="button" data-log-refresh>立刻刷新</button>
+      </div>
+      <div class="split">
+        <div class="split__side" data-log-list></div>
+        <div class="split__main flow" data-log-detail></div>
+      </div>
+    </section>
+
+    {/* ---- 聊天实时接管 -------------------------------------------------- */}
+    <section class="pane glass" data-panel="live" hidden>
+      <div class="pane__head">
+        <h2 class="sub">聊天实时接管</h2>
+        <span class="dim" data-live-head></span>
+      </div>
+      <p class="dim">
+        打开某个会话的接管开关之后，<strong>那个会话的下一句不再由模型回答</strong>：
+        访客一发问，他的请求会挂在服务端等你最多 <strong>25 秒</strong>；你在这儿按发送，
+        他看到的就是你打的字，逐段出现、和模型回答长得一样。
+        25 秒内没回就退回模型 —— 访客不会空手，也不知道刚才有人在旁边。
+      </p>
+      <p class="dim">
+        <strong>这个开关可以放心一直开着</strong>：接管只在「你此刻正开着这一页」时才真的生效
+        （这一页每 3 秒刷一次列表，那就是「你还在」的信号）。
+        离开超过 90 秒之后访客不会再白等，直接交给模型。
+      </p>
+      <p class="dim">
+        <strong>一条会话＝一个 IP</strong>（R42）。同一个 IP 后面可能有好几个人
+        —— 学校、公司、运营商 NAT，手机的 CGNAT 更是常态，所以每条消息都标了「窗口」。
+        喂给模型的上下文按窗口分开，你回的那句话也只发给<strong>最近在等的那个窗口</strong>；
+        另一个人等到 25 秒超时后由模型接手。
+      </p>
+      <div class="row">
+        <span class="dim">左边那列，「有人在等」的排最前。</span>
+      </div>
+      <div class="split">
+        <div class="split__side" data-live-list></div>
+        <div class="split__main" data-live-panel hidden>
+          <div class="flow" data-live-flow></div>
+          <label class="check">
+            <input type="checkbox" data-live-on />
+            <span>我自己接这个会话</span>
+          </label>
+          <div class="row">
+            <textarea
+              class="in in--area"
+              data-live-in
+              rows="2"
+              placeholder="回车发送，Shift+回车换行"
+              aria-label="回访客"></textarea>
+            <button class="key" type="button" data-live-send>发送</button>
+          </div>
+          <p class="dim" data-live-msg hidden></p>
+        </div>
+      </div>
+    </section>
+    {/* ---- 文章编辑（写作工具）------------------------------------------- */}
+    <section class="pane glass" data-panel="write" hidden>
+      <div class="pane__head">
+        <h2 class="sub">文章编辑</h2>
+        <span class="dim" data-w-stat></span>
+      </div>
+      <p class="dim">
+        左边是仓库里现有的内容与后台草稿。改动**存的是草稿**（存在服务端，换设备也看得到），
+        <strong>不会自动上线</strong> —— 这个站是静态构建的，文章的真身是仓库里的 .md，
+        而线上没有仓库的写权限（有了就等于把一把能改代码的钥匙放在线上）。
+        定稿之后：下载 .md → 放进仓库 → 跑一次部署。
+      </p>
+      <div class="row">
+        <input class="in in--q" data-write-q placeholder="搜标题或 slug" aria-label="搜内容" />
+        <select class="in in--sel" data-write-coll aria-label="按栏目筛"></select>
+        <button class="key" type="button" data-w-new>新写一篇</button>
+      </div>
+
+      <div class="split">
+        <div class="split__side" data-write-list></div>
+
+        <div class="split__main" data-w-editor hidden>
+          <div class="row">
+            <select class="in in--sel" data-w-coll aria-label="栏目"></select>
+            <input class="in in--q" data-w-slug placeholder="slug（文件名）" aria-label="slug" />
+            <code class="dim path" data-w-path></code>
+          </div>
+
+          <label class="field">
+            <span class="lab">frontmatter（原样进原样出，不做解析 —— 导出的写法与仓库里一致）</span>
+            <textarea class="in in--area mono" data-w-front rows="7" aria-label="frontmatter"></textarea>
+          </label>
+
+          <div class="picks" data-w-tools></div>
+
+          <label class="field">
+            <span class="lab">正文（Markdown）</span>
+            <textarea class="in in--area in--body" data-w-body rows="16" aria-label="正文"></textarea>
+          </label>
+
+          <div class="row">
+            <button class="key" type="button" data-w-save>存草稿</button>
+            <button class="key" type="button" data-w-down>下载 .md</button>
+            <button class="key key--quiet2" type="button" data-w-copy>复制全文</button>
+            <button class="key key--quiet2" type="button" data-w-eye>收起预览</button>
+            <button class="key key--quiet" type="button" data-w-del>删草稿</button>
+          </div>
+          <p class="dim" data-w-msg hidden></p>
+
+          <div class="preview" data-w-preview></div>
+          <p class="dim">
+            预览是**排版草图**，不是最终样子：站上正文由构建期的 remark/rehype 渲染
+            （还有 KaTeX 公式与 Shiki 代码高亮），这儿只看结构 —— 标题层级、列表有没有断、
+            引用有没有闭合。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    {/* ---- 图库管理 ------------------------------------------------------ */}
+    <section class="pane glass" data-panel="gallery" hidden>
+      <div class="pane__head">
+        <h2 class="sub">图库管理</h2>
+        <span class="dim" data-gallery-sum></span>
+      </div>
+      <p class="dim">
+        管的是相册的**元信息与体检**：封面、alt、组图张数、还挂着没挂着 draft、
+        alt 里是不是还留着占位文案。<strong>图片本身要放进仓库</strong>
+        （`src/content/photos/`）—— 照片走的是 Astro 构建期的图片管线（srcset、转 webp、
+        算尺寸），存到别处就绕开了那条管线，而那是摄影页的立身之本。
+      </p>
+      <div class="row">
+        <button class="key key--quiet" type="button" data-gallery-refresh>立刻刷新</button>
+      </div>
+      <div data-gallery></div>
+    </section>
   </div>
 </BaseLayout>
 
 <script>
-  const q = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
-
-  const views = {
-    load: q('[data-view="load"]'),
-    login: q<HTMLFormElement>('[data-view="login"]'),
-    panel: q('[data-view="panel"]'),
-  };
-
-  const err = q('[data-err]');
-  const noset = q('[data-noset]');
-  const pass = q<HTMLInputElement>('[data-pass]');
-  const base = q<HTMLInputElement>('[data-base]');
-  const model = q<HTMLInputElement>('[data-model]');
-  const key = q<HTMLInputElement>('[data-key]');
-  const off = q<HTMLInputElement>('[data-off]');
-  const proto = q<HTMLSelectElement>('[data-proto]');
-  const domestic = q<HTMLInputElement>('[data-domestic]');
-  const picks = q('[data-picks]');
-  const pullMsg = q('[data-pull-msg]');
-  const sessions = q('[data-sessions]');
-  const detail = q('[data-detail]');
-  const logsMsg = q('[data-logs-msg]');
-  const keystate = q('[data-keystate]');
-  const msg = q('[data-msg]');
-  const results = q('[data-results]');
-  const fallback = q('[data-fallback]');
-
-  const show = (which: 'load' | 'login' | 'panel') => {
-    views.load.hidden = which !== 'load';
-    views.login.hidden = which !== 'login';
-    views.panel.hidden = which !== 'panel';
-  };
-
-  const say = (text: string) => {
-    msg.textContent = text;
-    msg.hidden = !text;
-  };
-
-  const api = async (path: string, body?: unknown) => {
-    const res = await fetch('/api/admin/' + path, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      cache: 'no-store',
-    });
-    let data: Record<string, unknown> = {};
-    try {
-      data = (await res.json()) as Record<string, unknown>;
-    } catch {
-      /* 非 JSON 一律当失败 */
-    }
-    return { ok: res.ok, status: res.status, data };
-  };
-
-  /** 拉一次状态，决定显示登录框还是控制台 */
-  const refresh = async () => {
-    const { data } = await api('state');
-
-    if (!data.logged) {
-      show('login');
-      // 「口令还没设」不是登录失败，要明确告诉他该跑哪几条命令
-      noset.hidden = data.ready !== false;
-      pass.focus();
-      return;
-    }
-
-    const cfg = (data.cfg ?? {}) as {
-      base?: string;
-      model?: string;
-      hasKey?: boolean;
-      off?: boolean;
-      proto?: string;
-      domestic?: boolean;
-    };
-    base.value = cfg.base ?? '';
-    model.value = cfg.model ?? '';
-    off.checked = !!cfg.off;
-    proto.value = cfg.proto ?? 'openai';
-    domestic.checked = !!cfg.domestic;
-    key.value = '';
-    keystate.textContent = cfg.hasKey ? '（已设置，留空＝不改）' : '（还没设）';
-    fallback.textContent = String(data.fallback ?? '');
-    show('panel');
-  };
-
-  views.login.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    err.hidden = true;
-    const { ok } = await api('login', { pass: pass.value });
-    pass.value = '';
-    if (!ok) {
-      err.textContent = '进不去';
-      err.hidden = false;
-      return;
-    }
-    show('load');
-    await refresh();
-  });
-
-  q('[data-logout]').addEventListener('click', async () => {
-    await api('logout', {});
-    location.reload();
-  });
-
-  q('[data-save]').addEventListener('click', async () => {
-    say('存…');
-    const patch: Record<string, unknown> = {
-      base: base.value.trim(),
-      model: model.value.trim(),
-      off: off.checked,
-      proto: proto.value,
-      domestic: domestic.checked,
-    };
-    // 密钥留空＝不改（不传这个键）；要清掉就填一个空格
-    if (key.value) patch.key = key.value.trim();
-
-    const { ok, data } = await api('save', patch);
-    say(ok ? '存好了，下一次对话就用新的' : '没存上：' + String(data.error ?? ''));
-    if (ok) await refresh();
-  });
-
-  q('[data-test]').addEventListener('click', async () => {
-    say('挨个打一次…（每个最多等 30 秒）');
-    results.textContent = '';
-
-    const { ok, data } = await api('test', {
-      base: base.value.trim(),
-      model: model.value.trim(),
-      key: key.value || '',
-      proto: proto.value,
-      domestic: domestic.checked,
-    });
-
-    if (!ok) {
-      say('测不了：' + String(data.error ?? ''));
-      return;
-    }
-
-    const rows = (data.results ?? []) as {
-      model: string;
-      ok: boolean;
-      ms: number;
-      status?: number;
-      text?: string;
-      think?: number;
-      promptTokens?: number | null;
-      obedient?: boolean;
-      error?: string;
-    }[];
-
-    // 知识库有多少条送进去了 —— 与每一行的 promptTokens 对照着看
-    say(data.kbCount ? `知识库 ${data.kbCount} 条已送进提示词` : '');
-
-    for (const r of rows) {
-      const box = document.createElement('div');
-      /* 三档而不是两档：「能连通」与「能当分身」是两件事。
-         有的模型收到了知识库也照样自称「某公司的 AI 助手」，那种不能用。 */
-      box.className = 'res ' + (r.ok ? (r.obedient ? 'res--ok' : 'res--warn') : 'res--bad');
-
-      const head = document.createElement('p');
-      head.className = 'res__head';
-      /* promptTokens 是「这个模型收到知识库了吗」的判据：几千才对，
-         几十就是它把 system 丢了（那时对话会变成通用助手）。 */
-      const pt =
-        r.promptTokens == null
-          ? ''
-          : ' · 提示词 ' + r.promptTokens + ' token' + (r.promptTokens < 2000 ? ' ⚠ 太少，system 被丢了' : '');
-      head.textContent =
-        (r.ok ? (r.obedient ? '可用' : '不认角色') : '连不上') +
-        ' · ' +
-        r.model +
-        ' · ' +
-        (r.ms / 1000).toFixed(1) +
-        's' +
-        (r.status ? ' · HTTP ' + r.status : '') +
-        (r.think ? ' · 思考 ' + r.think + ' 字' : '') +
-        pt;
-      box.appendChild(head);
-
-      const body = document.createElement('p');
-      body.className = 'res__body';
-      /* 「HTTP 200 + 正文空 + 思考很多」是会思考的模型把 300 token 预算全花在思考上，
-         不是它坏了 —— 真实对话给 700。这句话是本机踩过一次误报之后加的。 */
-      body.textContent = r.ok
-        ? r.text || '（正文是空的）'
-        : r.error ||
-          (r.think
-            ? '思考占满了测试预算（300 token），正文没出来 —— 真实对话给 700，不一定不行'
-            : '（没有错误信息）');
-      box.appendChild(body);
-
-      results.appendChild(box);
-    }
-  });
-
-  /* ---- 一键拉取可用模型（R39）--------------------------------------------
-     点一下就把这家服务商下所有有权限的模型列出来，再点哪个就**追加**到候选里
-     （不是覆盖 —— 多候选是常态，上游会漂移）。 */
-  q('[data-pull]').addEventListener('click', async () => {
-    pullMsg.textContent = '拉…';
-    picks.hidden = true;
-    picks.textContent = '';
-
-    const qs = new URLSearchParams({
-      base: base.value.trim(),
-      proto: proto.value,
-      ...(key.value ? { key: key.value } : {}),
-    });
-    const { ok, data } = await api('models?' + qs.toString());
-
-    if (!ok) {
-      pullMsg.textContent = '拉不到：' + String(data.error ?? '');
-      return;
-    }
-
-    const list = (data.models ?? []) as string[];
-    pullMsg.textContent = list.length + ' 个（点一个加进候选）';
-
-    const have = () =>
-      model.value
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-    for (const m of list) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'pick';
-      b.textContent = m;
-      b.addEventListener('click', () => {
-        const cur = have();
-        if (cur.includes(m)) {
-          // 点第二下就撤掉，省得手动删字符串
-          model.value = cur.filter((x) => x !== m).join(', ');
-          b.classList.remove('is-on');
-        } else {
-          model.value = [...cur, m].join(', ');
-          b.classList.add('is-on');
-        }
-      });
-      if (have().includes(m)) b.classList.add('is-on');
-      picks.appendChild(b);
-    }
-    picks.hidden = !list.length;
-  });
-
-  /* ---- 对话记录 ----------------------------------------------------------
-     会话列表 → 点一个看全文。IP 与原话都在这儿，所以这两条接口各自校验 cookie。 */
-  const when = (ms: number) =>
-    new Date(ms).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
-
-  const openLog = async (id: string, title: string) => {
-    detail.textContent = '';
-    const head = document.createElement('p');
-    head.className = 'dim';
-    head.textContent = '读…';
-    detail.appendChild(head);
-
-    const { ok, data } = await api('log?session=' + encodeURIComponent(id));
-    if (!ok) {
-      head.textContent = '读不出来：' + String(data.error ?? '');
-      return;
-    }
-
-    const rows = (data.items ?? []) as {
-      role: string;
-      text: string;
-      ip: string;
-      model: string;
-      ts: number;
-    }[];
-    head.textContent = title + ' · 共 ' + rows.length + ' 条';
-
-    for (const r of rows) {
-      const p = document.createElement('p');
-      p.className = 'msg msg--' + (r.role === 'user' ? 'me' : 'ai');
-      const meta = [when(r.ts), r.role === 'user' ? '访客' : '分身', r.ip, r.model]
-        .filter(Boolean)
-        .join(' · ');
-      p.textContent = meta + '\n' + r.text;
-      detail.appendChild(p);
-    }
-  };
-
-  const loadSessions = async () => {
-    logsMsg.textContent = '读…';
-    sessions.textContent = '';
-    detail.textContent = '';
-
-    const { ok, data } = await api('sessions');
-    if (!ok) {
-      logsMsg.textContent = '读不出来：' + String(data.error ?? '');
-      return;
-    }
-
-    const items = (data.items ?? []) as {
-      id: string;
-      first: number;
-      last: number;
-      n: number;
-      ip: string;
-      model: string;
-    }[];
-    logsMsg.textContent = items.length ? items.length + ' 个会话' : '还没有人聊过';
-
-    for (const s of items) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'ses';
-      const title = when(s.last) + ' · ' + (s.ip || '无 IP');
-      b.textContent = title + ' · ' + s.n + ' 条' + (s.model ? ' · ' + s.model : '');
-      b.addEventListener('click', () => {
-        for (const el of sessions.querySelectorAll('.ses')) el.classList.remove('is-on');
-        b.classList.add('is-on');
-        void openLog(s.id, title);
-      });
-      sessions.appendChild(b);
-    }
-  };
-
-  q('[data-logs]').addEventListener('click', () => void loadSessions());
-
-  refresh();
+  import '../scripts/admin/index';
 </script>
-
-<style>
-  .sub {
-    margin: var(--sp-8) 0 var(--sp-2);
-    font-family: var(--font-display);
-    font-size: var(--text-xl);
-    color: var(--ink);
-  }
-
-  .dim {
-    color: var(--ink-faint);
-    font-size: var(--text-sm);
-    line-height: var(--leading-normal);
-  }
-
-  .bad {
-    color: var(--seal);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-  }
-
-  .box {
-    margin-top: var(--sp-4);
-  }
-
-  .row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-    align-items: center;
-    margin-top: var(--sp-4);
-  }
-
-  .field {
-    display: block;
-    margin-top: var(--sp-5);
-  }
-
-  .lab {
-    display: block;
-    margin-bottom: var(--sp-2);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.04em;
-    color: var(--ink-faint);
-  }
-
-  .in {
-    width: 100%;
-    padding: var(--sp-2) var(--sp-3);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    background: var(--glass-bg);
-    border: 1px solid var(--rule);
-    border-radius: var(--r-sm);
-  }
-
-  .in:focus-visible {
-    outline: none;
-    border-color: var(--glass-border-lit);
-  }
-
-  .key {
-    padding: var(--sp-2) var(--sp-5);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    background: var(--seal-wash);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--r-full);
-    cursor: pointer;
-    transition: color 0.18s ease, border-color 0.18s ease;
-  }
-
-  .key:hover {
-    color: var(--seal);
-    border-color: var(--glass-border-lit);
-  }
-
-  .key--quiet {
-    background: none;
-    color: var(--ink-faint);
-    margin-left: auto;
-  }
-
-  .check {
-    display: flex;
-    gap: var(--sp-2);
-    align-items: flex-start;
-    margin-top: var(--sp-5);
-    font-size: var(--text-sm);
-    color: var(--ink-soft);
-    line-height: var(--leading-normal);
-  }
-
-  .note {
-    margin-top: var(--sp-6);
-    padding-top: var(--sp-4);
-    border-top: 1px solid var(--rule);
-  }
-
-  .note pre {
-    overflow-x: auto;
-    padding: var(--sp-3);
-    background: var(--paper-sunken);
-    border: 1px solid var(--rule);
-    border-radius: var(--r-sm);
-    font-size: var(--text-xs);
-  }
-
-  .foot {
-    margin-top: var(--sp-8);
-    padding-top: var(--sp-4);
-    border-top: 1px solid var(--rule);
-  }
-
-  /* 结果区里那些节点是脚本造的，吃不到 scoped CSS —— 父选择器留着 scope，子用 :global()
-     （与 ChatDock 里那些气泡同一个坑，R14 记过） */
-  [data-results] :global(.res) {
-    margin-top: var(--sp-3);
-    padding: var(--sp-3) var(--sp-4);
-    border: 1px solid var(--rule);
-    border-left: 2px solid var(--ink-faint);
-    border-radius: var(--r-sm);
-    background: var(--glass-bg);
-  }
-
-  [data-results] :global(.res--ok) {
-    border-left-color: var(--seal);
-  }
-
-  /* 能连通但不认角色 —— 比连不上更值得注意，因为它会「看着像在工作」 */
-  [data-results] :global(.res--warn) {
-    border-left-color: var(--brass-deep);
-  }
-
-  [data-results] :global(.res__head) {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.03em;
-    color: var(--ink);
-  }
-
-  [data-results] :global(.res__body) {
-    margin: var(--sp-2) 0 0;
-    font-size: var(--text-sm);
-    line-height: var(--leading-normal);
-    color: var(--ink-soft);
-    overflow-wrap: anywhere;
-  }
-
-  /* ---- 拉回来的模型名 ---------------------------------------------------- */
-  .picks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-    margin-top: var(--sp-3);
-    max-height: 14rem;
-    overflow-y: auto;
-  }
-
-  .picks :global(.pick) {
-    padding: 2px var(--sp-3);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--ink-faint);
-    background: var(--glass-bg);
-    border: 1px solid var(--rule);
-    border-radius: var(--r-full);
-    cursor: pointer;
-  }
-
-  .picks :global(.pick:hover) {
-    color: var(--ink);
-    border-color: var(--glass-border-lit);
-  }
-
-  /* 已经在候选里的那些 —— 再点一下就撤掉 */
-  .picks :global(.pick.is-on) {
-    color: var(--ink);
-    background: var(--seal-wash);
-    border-color: var(--rule-strong);
-  }
-
-  .key--quiet2 {
-    background: none;
-  }
-
-  .tip {
-    margin-top: var(--sp-2);
-  }
-
-  /* ---- 对话记录 ---------------------------------------------------------- */
-  [data-sessions] {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
-    margin-top: var(--sp-4);
-    max-height: 18rem;
-    overflow-y: auto;
-  }
-
-  [data-sessions] :global(.ses) {
-    text-align: left;
-    padding: var(--sp-2) var(--sp-3);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--rule);
-    border-left: 2px solid var(--rule-strong);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-  }
-
-  [data-sessions] :global(.ses.is-on) {
-    color: var(--ink);
-    border-left-color: var(--seal);
-  }
-
-  [data-detail] {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
-    margin-top: var(--sp-4);
-  }
-
-  /* 记录里的每一条。`white-space: pre-line` 是为了让「元信息 ⏎ 原文」两行分开 */
-  [data-detail] :global(.msg) {
-    margin: 0;
-    max-width: 90%;
-    padding: var(--sp-2) var(--sp-3);
-    font-size: var(--text-sm);
-    line-height: var(--leading-normal);
-    white-space: pre-line;
-    overflow-wrap: anywhere;
-    border-radius: var(--r-md);
-  }
-
-  [data-detail] :global(.msg--me) {
-    align-self: flex-end;
-    color: var(--ink);
-    background: var(--seal-wash);
-  }
-
-  [data-detail] :global(.msg--ai) {
-    align-self: flex-start;
-    color: var(--ink-soft);
-    background: var(--glass-bg-strong);
-  }
-</style>

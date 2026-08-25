@@ -214,7 +214,26 @@ html {
 body {
   position: relative;
   margin: 0;
+  /**
+   * 页脚贴底（R41①）。他报的是「有些页面底部的东西并没有在最底下」——
+   * 内容不满一屏时（`/notes` 只有一条、`/photos` 空、`/404`），页脚跟在内容后面，
+   * 下面露出一大片空白。原因是这里只有 `min-height: 100vh`，**没有把剩余空间分给谁**：
+   * body 够高，但三个块（页头／main／页脚）仍然只按自身高度从上往下堆。
+   *
+   * 改成 flex 列 + `main { flex: 1 0 auto }`（写在 BaseLayout 里）之后，
+   * 多出来的高度全部给 main，页脚被推到视口底边。内容超过一屏时 `flex-grow` 无事可做，
+   * 页脚照旧跟在内容后面 —— 两种情形一套规则。
+   *
+   * `100dvh` 那一行是给手机的：`100vh` 在移动浏览器上按**地址栏收起后**的高度算，
+   * 用它会让首屏多出一截、底部被地址栏盖住。两行都留，不认 dvh 的旧内核吃前一行。
+   *
+   * 三个浮层不受影响：`.skip-link` 是 absolute，播放器与对话键是 fixed，
+   * 都不在流内、不参与 flex 分配。
+   */
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   /* 注意：这里刻意不设 background-color。body 只有 position: relative、
      z-index: auto，不构成层叠上下文，所以下面两个 z-index 为负的伪元素会落到
      根（html）层叠上下文里 —— 在根上下文中负 z-index 后代先绘制、body 自身背景

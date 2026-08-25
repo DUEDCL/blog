@@ -1,0 +1,680 @@
+/**
+ * 后台（`/admin`）的样式（R41②）。
+ *
+ * **为什么不是 `.astro` 里的 scoped `<style>`**：这一页几乎每个节点都是脚本造的
+ * （线路块、会话按钮、消息气泡、相册卡、模型胶囊），而 Astro 的 scoped CSS 是靠给元素加
+ * `data-astro-cid-*` 属性实现的 —— 动态节点没有那个属性，吃不到样式。
+ * R39 那一版靠 `[data-results] :global(.res)` 这种写法绕，五个面板之后满页都是 `:global()`，
+ * 不如整份提出来当普通 CSS。它只被 `admin.astro` import，所以只进那一页的产物。
+ *
+ * 类名全部带自己的前缀或足够特指，不去动全站的通用类。
+ */
+
+/* ---- 通用（登录框与面板都用）--------------------------------------------- */
+
+.sub {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--ink);
+}
+
+.dim {
+  color: var(--ink-faint);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.bad {
+  color: var(--seal);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.box {
+  padding: var(--sp-8);
+  border-radius: var(--r-xl);
+}
+
+.box .title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--text-3xl);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-4);
+}
+
+.field {
+  display: block;
+  margin-top: var(--sp-4);
+}
+
+.lab {
+  display: block;
+  margin-bottom: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.in {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--glass-bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+}
+
+.in:focus-visible {
+  outline: none;
+  border-color: var(--glass-border-lit);
+}
+
+/* 一行里并排的几个控件：搜索框可伸缩，下拉与 slug 固定一档宽 */
+.in--q {
+  flex: 1 1 12rem;
+  width: auto;
+}
+
+.in--sel {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.in--pass {
+  flex: 1 1 14rem;
+  width: auto;
+}
+
+.in--area {
+  flex: 1 1 18rem;
+  width: 100%;
+  resize: vertical;
+  line-height: var(--leading-normal);
+}
+
+/* 正文那一栏用正文字体：写中文时等宽字体的标点间距会误导判断 */
+.in--body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+}
+
+.key {
+  padding: var(--sp-2) var(--sp-5);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--seal-wash);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+
+.key:hover {
+  color: var(--seal);
+  border-color: var(--glass-border-lit);
+}
+
+.key--quiet {
+  background: none;
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+
+.key--quiet2 {
+  background: none;
+}
+
+.key--quiet2.is-on {
+  background: var(--seal-wash);
+  color: var(--ink);
+}
+
+.check {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  margin-top: var(--sp-4);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  line-height: var(--leading-normal);
+}
+
+.note {
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--rule);
+}
+
+.note pre {
+  overflow-x: auto;
+  padding: var(--sp-3);
+  background: var(--paper-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  font-size: var(--text-xs);
+}
+
+.foot {
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--rule);
+}
+
+/* ---- 顶部状态栏 ----------------------------------------------------------
+   他要的那条「顶部的状态栏」。它 sticky 在顶栏下面 —— 页面往下滚的时候
+   五个分区与那盏实时灯要一直在。偏移量取全站顶栏的高度变量，不写死数字。 */
+
+.bar {
+  position: sticky;
+  top: calc(var(--header-h, 4.5rem) + var(--sp-2));
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--r-full);
+}
+
+.bar__brand {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--ink);
+}
+
+.bar__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  flex: 1 1 auto;
+}
+
+.tab {
+  position: relative;
+  padding: var(--sp-2) var(--sp-4);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab.is-on {
+  color: var(--ink);
+  background: var(--seal-wash);
+  border-color: var(--rule-strong);
+}
+
+/* 角标。数字本身就够，不加圆底 —— 顶栏已经是一排胶囊了 */
+.tab__badge {
+  margin-left: var(--sp-2);
+  color: var(--ink-soft);
+}
+
+/* 「有人在等」那个角标要抢眼：它是这一页唯一有时效的信息 */
+.tab__badge.is-hot {
+  color: var(--seal);
+  font-weight: 600;
+}
+
+.bar__live {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+.bar__live .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--brass);
+  animation: adm-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes adm-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar__live .dot { animation: none; opacity: 0.8; }
+}
+
+.sum {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* ---- 面板 ---------------------------------------------------------------- */
+
+.pane {
+  margin-top: var(--sp-4);
+  padding: var(--sp-6) var(--sp-8);
+  border-radius: var(--r-xl);
+}
+
+.pane__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+
+/* 会话／消息那一对两栏。左列固定一档、右列吃剩下的；窄屏叠成上下 */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 18rem) minmax(0, 1fr);
+  gap: var(--sp-5);
+  margin-top: var(--sp-5);
+}
+
+.split__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 30rem;
+  overflow-y: auto;
+  padding-right: var(--sp-2);
+}
+
+.split__main {
+  min-width: 0;
+}
+
+@media (max-width: 60rem) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .split__side {
+    max-height: 16rem;
+  }
+}
+
+/* ---- 线路块（脚本造的）--------------------------------------------------- */
+
+.route {
+  margin-top: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--glass-bg);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--rule-strong);
+  border-radius: var(--r-md);
+}
+
+/* 主线的左边框亮一档：三条线路排下来要一眼看出谁先试 */
+.route:first-child {
+  border-left-color: var(--seal);
+}
+
+.route__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.route__name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.route__head .key {
+  margin-left: auto;
+}
+
+.hint {
+  margin-top: var(--sp-2);
+  min-height: 1.2em;
+}
+
+.why {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--paper-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+}
+
+.why .mono {
+  margin: 0;
+}
+
+/* ---- 胶囊（服务商预设、模型名、工具条）----------------------------------- */
+
+.picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.picks--models {
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.pick {
+  padding: 2px var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  background: var(--glass-bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+
+.pick:hover {
+  color: var(--ink);
+  border-color: var(--glass-border-lit);
+}
+
+.pick.is-on {
+  color: var(--ink);
+  background: var(--seal-wash);
+  border-color: var(--rule-strong);
+}
+
+/* ---- 结果条（探测、测试、体检共用）--------------------------------------- */
+
+.res {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--ink-faint);
+  border-radius: var(--r-sm);
+  background: var(--glass-bg);
+}
+
+.res--ok {
+  border-left-color: var(--seal);
+}
+
+/* 能连通但不认角色 / 有待改的项 —— 比「连不上」更值得注意，因为它「看着像在工作」 */
+.res--warn {
+  border-left-color: var(--brass-deep);
+}
+
+.res--bad {
+  border-left-color: var(--seal);
+  background: var(--paper-sunken);
+}
+
+.res__head {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.03em;
+  color: var(--ink);
+}
+
+.res__body {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--ink-soft);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 会话按钮与消息气泡（两个面板共用）----------------------------------- */
+
+.ses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+  background: var(--glass-bg);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--rule-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.ses:hover {
+  color: var(--ink);
+}
+
+.ses.is-on {
+  color: var(--ink);
+  border-left-color: var(--seal);
+}
+
+.ses__line {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tag {
+  flex: 0 0 auto;
+  padding: 0 var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-full);
+}
+
+.tag--on {
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+/* 「有人在等」「draft」这类要立刻被看见的标记 */
+.tag--wait {
+  color: var(--seal);
+  border-color: var(--seal);
+}
+
+/* 消息流。定高 + 自己滚：接管那一页要一直看得见输入框 */
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--sp-2);
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  max-width: 90%;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  border-radius: var(--r-md);
+}
+
+.msg__meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+.msg__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg--me {
+  align-self: flex-end;
+  color: var(--ink);
+  background: var(--seal-wash);
+}
+
+.msg--ai {
+  align-self: flex-start;
+  color: var(--ink-soft);
+  background: var(--glass-bg-strong);
+}
+
+/* 沉麟自己打的那些。与模型的气泡必须一眼分得开 —— 翻记录时这是最要紧的一条区分 */
+.msg--human {
+  align-self: flex-start;
+  color: var(--ink);
+  background: var(--glass-bg-strong);
+  border-left: 2px solid var(--seal);
+}
+
+.is-hot {
+  color: var(--seal);
+}
+
+/* ---- 写作台 -------------------------------------------------------------- */
+
+.path {
+  flex: 1 1 100%;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+/* 预览。字号与行高照正文那一档给，才看得出段落的疏密 */
+.preview {
+  margin-top: var(--sp-5);
+  padding: var(--sp-5);
+  background: var(--paper-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--ink-soft);
+  max-height: 32rem;
+  overflow-y: auto;
+}
+
+.preview h1,
+.preview h2,
+.preview h3,
+.preview h4,
+.preview h5,
+.preview h6 {
+  margin: var(--sp-5) 0 var(--sp-2);
+  font-family: var(--font-display);
+  color: var(--ink);
+}
+
+.preview h1 { font-size: var(--text-2xl); }
+.preview h2 { font-size: var(--text-xl); }
+.preview h3 { font-size: var(--text-lg); }
+
+.preview p,
+.preview blockquote,
+.preview ul,
+.preview ol,
+.preview pre {
+  margin: var(--sp-3) 0;
+}
+
+.preview blockquote {
+  padding-left: var(--sp-4);
+  border-left: 2px solid var(--rule-strong);
+  color: var(--ink-faint);
+}
+
+.preview pre {
+  overflow-x: auto;
+  padding: var(--sp-3);
+  background: var(--glass-bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+}
+
+.preview code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.preview hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+}
+
+.preview a {
+  color: var(--seal);
+}
+
+/* 预览里的图片不真的加载 —— 相对路径在这一页解析不到，画一个占位标签更诚实 */
+.preview .mdimg {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+/* ---- 相册卡 -------------------------------------------------------------- */
+
+.album {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--glass-bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+}
+
+.album__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.album__title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--ink);
+}
+
+@media (max-width: 46rem) {
+  .pane {
+    padding: var(--sp-5);
+  }
+
+  .bar {
+    border-radius: var(--r-lg);
+  }
+}

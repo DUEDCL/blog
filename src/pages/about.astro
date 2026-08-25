@@ -16,7 +16,17 @@ type Card = {
   key: string;
   label: string;
   /** 真能点的链接。只有 QQ、Telegram、邮箱有；微信、抖音、Discord 技术上没有 */
-  action?: { href: string; text: string };
+  action?: {
+    href: string;
+    text: string;
+    /**
+     * 这条 `href` 是**唤起本机 APP 的自定义协议**（`tencent://`、`mqqapi://`），不是网页。
+     * 填了这一项会做两件事（R41④）：
+     * 1. 不加 `target="_blank"` —— 自定义协议开新标签会留下一张永远空白的页；
+     * 2. 手机上把 href 换成这里的值（桌面 QQ 与手机 QQ 的协议名不一样）。
+     */
+    app?: string;
+  };
   /** 二维码图。有图就可点开放大（R26），灯箱里带一键复制 */
   qr?: string;
   /**
@@ -52,13 +62,32 @@ const cards = [
   CONTACT.qq && {
     key: 'qq',
     label: 'QQ',
+    /**
+     * R41④：原来这里是 `wpa.qq.com/msgrd?v=3&uin=…`（网页版临时会话）。
+     * **腾讯已经把它关了** —— 沉麟点开看到的是那条链接 302 到
+     * `admin.qidian.qq.com/.../wpa-link` 之后的一句「抱歉，无法发起临时会话，
+     * 您可以先添加对方为好友，再发送消息」。那不是链接拼错：网页发起临时会话现在要么
+     * 目标方在 QQ 设置里开了「允许任何人临时会话」并加入 QQ 推广（shang.qq.com），
+     * 要么走企点（付费的企业客服）。两样都不是他的情况，所以这条路整条不通。
+     *
+     * 换成**唤起本机 QQ 的加好友入口**，桌面与手机两条协议（都来自多个社区来源、互相一致，
+     * 非腾讯官方文档 —— 这个能力从来没有官方文档）：
+     * - 桌面：`tencent://AddContact/?fromId=45&fromSubId=1&subcmd=all&uin=…` → 加好友窗口；
+     * - 手机：`mqqapi://card/show_pslcard?src_type=internal&version=1&uin=…` → 对方名片页，
+     *   从那儿点「加好友」。
+     *
+     * **它们不保证有反应**：装了 QQ 才会被唤起，新版浏览器还会先弹一次「要打开 QQ 吗」，
+     * 部分内核直接拦掉非 http 协议。所以按钮文案是「在 QQ 里打开」而不是「加好友」——
+     * 不许下做不到的承诺；真正稳的那条是旁边的「复制号码」。
+     */
     action: {
-      href: `http://wpa.qq.com/msgrd?v=3&uin=${CONTACT.qq}&site=qq&menu=yes`,
-      text: '加好友',
+      href: `tencent://AddContact/?fromId=45&fromSubId=1&subcmd=all&uin=${CONTACT.qq}`,
+      app: `mqqapi://card/show_pslcard?src_type=internal&version=1&uin=${CONTACT.qq}`,
+      text: '在 QQ 里打开',
     },
     qr: CONTACT.qqQr || undefined,
     copy: { value: CONTACT.qq, text: '复制号码' },
-    note: '点开直接弹出加好友页；没反应就复制号码手动搜。',
+    note: '腾讯已经不让网页发起临时会话了，只能加好友。复制号码去 QQ 里搜最稳；装了 QQ 的话上一颗键能直接跳过去。',
   },
   CONTACT.douyinQr && {
     key: 'douyin',
@@ -137,10 +166,14 @@ const cards = [
 
             <span class="card__acts">
               {c.action && (
+                /* 自定义协议（`app` 填了的那张，眼下只有 QQ）不开新标签：
+                   浏览器会先开一张空白页再去唤起 APP，唤不起就留下那张空白页。
+                   手机上的协议名不一样，由下面那段脚本按 UA 换掉。 */
                 <a
                   class="card__btn"
                   href={c.action.href}
-                  target="_blank"
+                  data-app-mobile={c.action.app}
+                  target={c.action.app ? undefined : '_blank'}
                   rel="noopener"
                 >
                   {c.action.text}
@@ -211,6 +244,18 @@ const cards = [
 
      只往按钮上绑，不往 window/document 上绑，所以每导航一次不会累积。 */
   document.addEventListener('astro:page-load', () => {
+    /* --- 手机上换成手机 QQ 的协议（R41④）---------------------------------
+       桌面 QQ 认 `tencent://`，手机 QQ 认 `mqqapi://`，两者互不相认 ——
+       填错平台的那一条就是「点了没反应」。HTML 里默认写桌面那条（静态页没有 UA），
+       在这儿按 UA 换掉。判据只用「是不是移动端」，不去区分 iOS/Android：
+       两家的手机 QQ 用的是同一个协议名。 */
+    if (/Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent)) {
+      document.querySelectorAll<HTMLAnchorElement>('[data-app-mobile]').forEach((a) => {
+        const mobile = a.dataset.appMobile;
+        if (mobile) a.href = mobile;
+      });
+    }
+
     /* 「已复制」的回退计时器。按元素存，连点两次不会把「已复制」当原文案存回去 */
     const timers = new WeakMap<HTMLElement, number>();
 
