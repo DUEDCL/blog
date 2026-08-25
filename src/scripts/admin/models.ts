@@ -97,8 +97,9 @@ function block(r: RouteView, at: number): HTMLElement {
   const chk = el('label', 'check');
   chk.innerHTML =
     `<input type="checkbox" data-domestic${r.domestic ? ' checked' : ''} />` +
-    '<span>这家服务商在国内 <em class="dim">—— 只是给失败定性用的记号：线上是境外边缘出网，' +
-    '跨境链路不稳。到底通不通按右边那颗「探一下」。</em></span>';
+    '<span>这家服务商在国内 <em class="dim">—— 只是个记号，不改变请求怎么发。' +
+    '2026-08-25 线上逐家实测过：预设里那十家**边缘全部打得通**（401/403，0.3–2.5 秒），' +
+    '所以「国内的用不了」这条不成立。换服务商时还是先点一下右边那颗「探一下」。</em></span>';
   box.appendChild(chk);
 
   const acts = el('div', 'row');
