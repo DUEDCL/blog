@@ -31,6 +31,13 @@ const show = (which: 'load' | 'login' | 'panel') => {
   views.load.hidden = which !== 'load';
   views.login.hidden = which !== 'login';
   views.panel.hidden = which !== 'panel';
+  /* 顶栏（= 功能栏）在三个视图之外，所以它自己控制显隐：未登录时只剩品牌位，
+     那是回站的入口 —— 全站顶栏被换掉了，没有它这一页就出不去 */
+  const on = which === 'panel';
+  for (const sel of ['[data-tabs]', '[data-livedot]', '[data-logout]']) {
+    const n = document.querySelector<HTMLElement>(sel);
+    if (n) n.hidden = !on;
+  }
 };
 
 /** 记住上次待在哪个 tab。他多半是为了同一件事反复回来 */

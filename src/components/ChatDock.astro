@@ -137,6 +137,53 @@ import { MSG_MAX, OPENING } from '../data/chat';
     /** 正在等回答时不接第二条：既防手抖连发，也防有人拿回车刷额度 */
     let busy = false;
 
+    /* ---------- 主动接收（R43）----------------------------------------------
+       他报的是「接管后不能主动发送消息」。原因在架构里：R41／R42 的接管是**应答式**的
+       —— 访客问一句才有一条请求挂在服务端，沉麟回一句把它放走。访客这边除此之外
+       没有任何常驻通道，所以他在「访客没发问」时打的字压根没地方送。
+
+       补法是让「开着对话框」本身成为一条挂着的连接（长轮询，`GET /api/chat`）：
+       挂 25 秒，沉麟一按发送就地放走 —— 零延迟，不是每几秒问一次。
+
+       三个约束：
+       ① **游标存 sessionStorage**：同一条人工消息不能出现两次。第一次打开时用 `after=-1`
+          只取游标不回放历史 —— 那时页面上一个气泡都没有，单方面把过去的人工消息倒出来
+          只会让人看不懂（自己问的那些不在）。
+       ② **`busy` 期间暂停**：那时接管的回复会从对话的 SSE 里出来（收尾带一条
+          `{"seen":id}` 把游标推过去），不暂停的话同一句会再从这条通道出来一次。
+       ③ **空转 40 轮（约 17 分钟）就停**：挂着的请求会让服务端那个对象一直活着，
+          按时长计费。一个被遗忘在后台标签页里的对话框不该一直烧配额 ——
+          访客再动一下（重开面板、切回这个标签、发一句话）就重新开始。 */
+    const SEEN_KEY = 'ai:seen';
+    /** −1 表示还没拿过游标，第一次请求只要 id 不要内容 */
+    let seen = -1;
+    try {
+      const had = sessionStorage.getItem(SEEN_KEY);
+      if (had) seen = Number(had) || 0;
+    } catch {
+      /* 隐私模式：这一次从头开始，不影响能不能收 */
+    }
+    const remember = (n: number) => {
+      seen = n;
+      try {
+        sessionStorage.setItem(SEEN_KEY, String(n));
+      } catch {
+        /* 记不住就只在这一次里有效 */
+      }
+    };
+
+    const IDLE_MAX = 40;
+    let idle = 0;
+    let listening = false;
+    /**
+     * 那条挂着的接收请求。访客一发问就要**主动掐掉它** ——
+     * 光靠 `busy` 标志不够：请求已经在服务端挂着了，标志变了它也不会自己回来，
+     * 于是同一句人工回复会被送出去两次（一次从对话的 SSE，一次从这条通道）。
+     * 服务端那边也堵了同一个洞（`/wait` 会踢掉同窗口的 listen），两边各一层。
+     */
+    let listenAc: AbortController | null = null;
+    const nap = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
     const bubble = (who: 'me' | 'ai', text: string) => {
       const p = document.createElement('p');
       p.className = 'ai__msg ai__msg--' + who;
@@ -155,9 +202,72 @@ import { MSG_MAX, OPENING } from '../data/chat';
       root.classList.toggle('is-open', on);
       document.dispatchEvent(new CustomEvent(on ? 'jk:dock' : 'jk:undock'));
       if (on) setTimeout(() => input.focus(), 40);
+      // 开着对话框才挂那条接收通道；关掉时循环自己会在下一圈退出
+      if (on) wake();
     };
 
     key.addEventListener('click', () => setOpen(panel.hidden));
+
+    /** 让接收通道重新转起来。访客每次「动一下」都调它 —— 空转停下之后靠这个复活 */
+    const wake = () => {
+      idle = 0;
+      void listenLoop();
+    };
+
+    /**
+     * 接收循环。一次挂 25 秒，拿到东西就渲染成一条普通的分身气泡 ——
+     * **访客不该看出这一句是人打的**，所以类名与模型回答完全一样。
+     */
+    async function listenLoop() {
+      if (listening) return;
+      listening = true;
+      try {
+        while (!panel.hidden && !document.hidden && idle < IDLE_MAX) {
+          // 对话进行中：那一轮的回复会从 SSE 里出来，这条通道让开
+          if (busy) {
+            await nap(400);
+            continue;
+          }
+          let res: Response;
+          try {
+            listenAc = new AbortController();
+            res = await fetch('/api/chat?tab=' + encodeURIComponent(tab) + '&after=' + seen, {
+              cache: 'no-store',
+              signal: listenAc.signal,
+            });
+          } catch {
+            // 断网／被掐（访客发问时会主动掐）：歇一会儿再挂，不报错给访客看
+            await nap(busy ? 200 : 3000);
+            continue;
+          } finally {
+            listenAc = null;
+          }
+          if (!res.ok) {
+            await nap(5000);
+            idle++;
+            continue;
+          }
+          const got = (await res.json()) as { id?: unknown; text?: unknown };
+          const id = Number(got.id) || 0;
+          const text = typeof got.text === 'string' ? got.text : '';
+          if (id > seen) remember(id);
+          if (text) {
+            bubble('ai', text);
+            idle = 0;
+          } else {
+            idle++;
+          }
+        }
+      } finally {
+        listening = false;
+      }
+    }
+
+    /* 切回这个标签页时重新挂上。切走时循环会在下一圈自己退出 ——
+       `document.hidden` 是循环条件之一，不用在这儿显式停 */
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !panel.hidden) wake();
+    });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !panel.hidden) {
@@ -178,16 +288,22 @@ import { MSG_MAX, OPENING } from '../data/chat';
     };
 
     /** 一行 SSE 里抽增量。**这是本站自己的格式**：`data: {"d":"字"}`，收尾 `data: [DONE]`。
-        上游长什么样前端不知道，也不需要知道 —— Worker 那边已经统一转过一遍。 */
-    const delta = (line: string) => {
-      if (!line.startsWith('data:')) return '';
+        上游长什么样前端不知道，也不需要知道 —— Worker 那边已经统一转过一遍。
+        R43 起收尾前还可能有一条 `{"seen":id}`：接管的那句话同时也在库里，
+        不把游标推过去，它会再从那条接收通道里出来一次。 */
+    const readLine = (line: string): { d: string; seen: number } => {
+      const none = { d: '', seen: 0 };
+      if (!line.startsWith('data:')) return none;
       const p = line.slice(5).trim();
-      if (!p || p === '[DONE]') return '';
+      if (!p || p === '[DONE]') return none;
       try {
-        const j = JSON.parse(p) as { d?: unknown };
-        return typeof j.d === 'string' ? j.d : '';
+        const j = JSON.parse(p) as { d?: unknown; seen?: unknown };
+        return {
+          d: typeof j.d === 'string' ? j.d : '',
+          seen: Number(j.seen) || 0,
+        };
       } catch {
-        return '';
+        return none;
       }
     };
 
@@ -199,6 +315,8 @@ import { MSG_MAX, OPENING } from '../data/chat';
       if (!text) return;
 
       busy = true;
+      // 那条挂着的接收通道要让位：不掐掉它，这一轮的人工回复会出两次（见 listenAc 的注释）
+      listenAc?.abort();
       input.value = '';
       input.disabled = true;
       // 等回答期间把发送键也灰掉：`busy` 已经挡住了重复提交，这一下是让它看得出来
@@ -241,7 +359,12 @@ import { MSG_MAX, OPENING } from '../data/chat';
           const lines = buf.split('\n');
           // 最后一段可能是半行，留到下一轮
           buf = lines.pop() ?? '';
-          for (const line of lines) raw += delta(line);
+          for (const line of lines) {
+            const got = readLine(line);
+            raw += got.d;
+            // 接管的那句话在库里也有一行，把游标推过去，免得它再出来一次
+            if (got.seen > seen) remember(got.seen);
+          }
           const now = shown(raw);
           if (now) out.textContent = now;
           log.scrollTop = log.scrollHeight;
@@ -258,6 +381,8 @@ import { MSG_MAX, OPENING } from '../data/chat';
         send.disabled = false;
         log.scrollTop = log.scrollHeight;
         if (!panel.hidden) input.focus();
+        // 刚聊过一句 —— 接收通道要是空转停了，这一下把它叫回来
+        wake();
       }
     });
   }

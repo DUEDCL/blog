@@ -20,6 +20,9 @@
  * 加一个面板要在 markup、脚本、样式三处来回跳 —— 五个面板之后那样没法维护。
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { Image } from 'astro:assets';
+import { SITE_TITLE } from '../consts';
+import avatar from '../assets/avatar.jpg';
 /* 样式整份提出来当普通 CSS（不是 scoped `<style>`）—— 这一页几乎每个节点都是脚本造的，
    而 scoped CSS 靠 `data-astro-cid-*` 属性生效，动态节点吃不到。理由写在那个文件顶部。
    它只被这一页 import，所以只进 /admin 的产物。 */
@@ -42,7 +45,39 @@ const TABS = [
 ] as const;
 ---
 
-<BaseLayout title="后台" description="站点后台" width="wide">
+<BaseLayout title="后台" description="站点后台" width="wide" siteHeader={false}>
+  {/* ---- 顶栏 = 后台的功能栏（R43）------------------------------------------
+      他要「把后台的顶栏直接替换为后台的功能栏」：这一页原来顶上那条是站点导航
+      （文章／随笔／作品／音乐／图库／名片），对着后台干活时那六项一个都用不上，
+      而后台自己的五个分区反倒挤在它下面一层。所以 `siteHeader={false}`，
+      这条 bar 直接坐在顶栏的位置上。
+
+      它**在三个视图之外**（加载中／登录框／控制台都在它下面），所以未登录时也在 ——
+      那时只剩品牌位。品牌位是后台唯一的回站入口：全站顶栏没了，
+      没有它这一页就是个出不去的房间。
+
+      灯上那个时间是**最后一次真的拉到数据**的时刻，不是定时器的心跳 ——
+      接口挂了的时候它会停住，那本身就是信息。 */}
+  <header class="bar glass">
+    <a class="bar__brand" href="/home" aria-label={`回 ${SITE_TITLE} 首页`}>
+      <Image src={avatar} alt="" width={72} height={72} loading="eager" class="bar__face" />
+      <span class="bar__name">{SITE_TITLE}</span>
+      <span class="bar__where">后台</span>
+    </a>
+    <nav class="bar__tabs" aria-label="后台分区" data-tabs hidden>
+      {TABS.map((t) => (
+        <button class="tab" type="button" data-tab={t.id}>
+          {t.label}
+          {'badge' in t && <span class="tab__badge" data-badge={t.badge} hidden></span>}
+        </button>
+      ))}
+    </nav>
+    <span class="bar__live" title="最后一次拉到数据的时刻" data-livedot hidden>
+      <span class="dot" aria-hidden="true"></span><span data-beat>—</span>
+    </span>
+    <button class="key key--quiet" type="button" data-logout hidden>退出</button>
+  </header>
+
   <p class="dim" data-view="load">正在看你有没有登录…</p>
 
   <form class="glass box" data-view="login" hidden>
@@ -74,24 +109,6 @@ const TABS = [
   </form>
 
   <div data-view="panel" hidden>
-    {/* ---- 顶部状态栏 ---------------------------------------------------
-        五项 + 一盏「实时」灯。灯上那个时间是**最后一次真的拉到数据**的时刻，
-        不是定时器的心跳 —— 接口挂了的时候它会停住，那本身就是信息。 */}
-    <header class="bar glass">
-      <span class="bar__brand">后台</span>
-      <nav class="bar__tabs" aria-label="后台分区">
-        {TABS.map((t) => (
-          <button class="tab" type="button" data-tab={t.id}>
-            {t.label}
-            {'badge' in t && <span class="tab__badge" data-badge={t.badge} hidden></span>}
-          </button>
-        ))}
-      </nav>
-      <span class="bar__live" title="最后一次拉到数据的时刻">
-        <span class="dot" aria-hidden="true"></span><span data-beat>—</span>
-      </span>
-      <button class="key key--quiet" type="button" data-logout>退出</button>
-    </header>
     <p class="dim sum" data-sum></p>
     {/* ---- 模型 ----------------------------------------------------------
         线路块（端点／协议／密钥／模型／国内标记 + 四颗按钮）由脚本按线路条数造，
@@ -171,10 +188,15 @@ const TABS = [
         离开超过 90 秒之后访客不会再白等，直接交给模型。
       </p>
       <p class="dim">
+        <strong>你也可以主动开口</strong>（R43）：访客只要开着对话框，就有一条连接挂在服务端 ——
+        你按发送他立刻收到，不必等他先问。对话框关着、或者开着但十几分钟没动的时候，
+        这句话会存下来，他一打开或一发问就看到。发送键旁边写着「发给窗口 xxxxxx」，
+        那就是这次发给谁。
+      </p>
+      <p class="dim">
         <strong>一条会话＝一个 IP</strong>（R42）。同一个 IP 后面可能有好几个人
         —— 学校、公司、运营商 NAT，手机的 CGNAT 更是常态，所以每条消息都标了「窗口」。
-        喂给模型的上下文按窗口分开，你回的那句话也只发给<strong>最近在等的那个窗口</strong>；
-        另一个人等到 25 秒超时后由模型接手。
+        喂给模型的上下文按窗口分开；你发的话也按窗口投递，不会串到隔壁那个人那儿。
       </p>
       <div class="row">
         <span class="dim">左边那列，「有人在等」的排最前。</span>

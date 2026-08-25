@@ -26,6 +26,14 @@ import { markPicked, msgNode, sesButton, type Msg, type Ses } from './chat';
 let all: Ses[] = [];
 let picked: Ses | null = null;
 let cursor = 0;
+/**
+ * 这条会话里最近出现过的窗口号（R43）。发人工消息时要指定发给谁 ——
+ * 会话是按 IP 合并的，一条会话下可能有好几个窗口，「发给谁」不该靠服务端猜。
+ *
+ * 取「最近一条**访客**消息的窗口」而不是「最近一条消息」：他自己刚发的那条也带窗口号，
+ * 用它会在连发几句之后仍然指向对的人，但访客那一条才是「谁在跟我说话」的真凭据。
+ */
+let lastTab = '';
 
 const list = () => q('[data-live-list]');
 const flow = () => q('[data-live-flow]');
@@ -55,6 +63,7 @@ function draw() {
 async function pick(s: Ses) {
   picked = s;
   cursor = 0;
+  lastTab = '';
   flow().textContent = '';
   markPicked(list(), s.id);
   toggle().checked = s.takeover;
@@ -72,7 +81,11 @@ async function pump(): Promise<void> {
   const items = (data.items ?? []) as Msg[];
   const box = flow();
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  for (const m of items) box.appendChild(msgNode(m));
+  for (const m of items) {
+    box.appendChild(msgNode(m));
+    // 记住「谁在跟我说话」—— 发人工消息时要指定发给哪个窗口
+    if (m.role === 'user' && m.tab) lastTab = m.tab;
+  }
   cursor = Number(data.last) || cursor;
   if (items.length && atBottom) box.scrollTop = box.scrollHeight;
   if (items.length) idle = 0;
@@ -83,6 +96,7 @@ async function pump(): Promise<void> {
     ' · ' +
     box.querySelectorAll('.msg').length +
     ' 条' +
+    (lastTab ? ' · 发给窗口 ' + lastTab.slice(0, 6) : '') +
     (now?.wait ? ' · 有人正在等你回话' : '');
   head().classList.toggle('is-hot', !!now?.wait);
 }
@@ -101,16 +115,27 @@ async function send() {
   if (!picked) return;
   const text = input().value.trim();
   if (!text) return;
+  if (!lastTab) {
+    return say('这条会话还没有任何窗口在线 —— 等对方先说一句，我才知道该发给谁。');
+  }
+
+  /* 输入框与按钮**一起**灰掉。原来只灰了输入框，按钮还能按 ——
+     他实测连点两次就发出了两条一模一样的话（22:09:17 那两条「有点意思」） */
+  const btn = q<HTMLButtonElement>('[data-live-send]');
   input().disabled = true;
-  const { ok, data } = await api('reply', { session: picked.id, text });
+  btn.disabled = true;
+  const { ok, data } = await api('reply', { session: picked.id, text, tab: lastTab });
   input().disabled = false;
+  btn.disabled = false;
   if (!ok) return say('没发出去：' + String(data.error ?? ''));
+
   input().value = '';
   input().focus();
   say(
     Number(data.waiting) > 0
-      ? '发出去了，访客那边正在收字'
-      : '存下了 —— 但此刻没人在等，访客下一次发问时会先看到这句'
+      ? '发出去了，窗口 ' + lastTab.slice(0, 6) + ' 正在收字'
+      : '存下了 —— 窗口 ' + lastTab.slice(0, 6) + ' 此刻没连着（对话框关了，或者开着但很久没动）。' +
+          '他一打开对话框或者发一句话就会看到这条。'
   );
   await pump();
 }

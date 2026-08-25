@@ -177,26 +177,72 @@
   border-top: 1px solid var(--rule);
 }
 
-/* ---- 顶部状态栏 ----------------------------------------------------------
-   他要的那条「顶部的状态栏」。它 sticky 在顶栏下面 —— 页面往下滚的时候
-   五个分区与那盏实时灯要一直在。偏移量取全站顶栏的高度变量，不写死数字。 */
+/* ---- 顶栏 = 后台的功能栏（R43 起替换掉全站顶栏）--------------------------
+   `admin.astro` 传了 `siteHeader={false}`，所以这条 bar 直接坐在顶栏的位置上：
+   sticky top 取的是 Header 那边 `padding-block: var(--sp-4)` 的同一个值，
+   高度也照它的 3.5rem 给 —— 换掉一条顶栏不该让页面顶部的节奏跟着变。 */
 
 .bar {
   position: sticky;
-  top: calc(var(--header-h, 4.5rem) + var(--sp-2));
-  z-index: 20;
+  top: var(--sp-4);
+  z-index: 50;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-5);
+  min-height: 3.5rem;
+  margin-top: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-full);
 }
 
+/* 品牌位：头像 + 站名 + 「后台」。它是后台唯一的回站入口 ——
+   全站顶栏被换掉了，没有它这一页就是个出不去的房间 */
 .bar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-right: var(--sp-2);
+  text-decoration: none;
+  min-width: 0;
+}
+
+.bar__face {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--r-full);
+  object-fit: cover;
+  flex-shrink: 0;
+  /* 与 Header 那枚一致：纯黑底的头像不加受光描边就像画面上的一个洞 */
+  border: 1px solid var(--glass-border-lit);
+  box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.6);
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.bar__brand:hover .bar__face {
+  transform: scale(1.06) rotate(-4deg);
+  box-shadow: 0 4px 18px -4px var(--seal);
+}
+
+.bar__name {
   font-family: var(--font-display);
   font-size: var(--text-lg);
+  font-weight: 600;
+  font-variation-settings: 'opsz' 14, 'SOFT' 0, 'WONK' 0;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
   color: var(--ink);
+}
+
+/* 「后台」两个字压一档：它是位置标签，不是标题 */
+.bar__where {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--rule);
+  white-space: nowrap;
 }
 
 .bar__tabs {
@@ -204,6 +250,15 @@
   flex-wrap: wrap;
   gap: var(--sp-1);
   flex: 1 1 auto;
+}
+
+/* ⚠ 这两条不能省。`hidden` 属性的 UA 样式是 `[hidden] { display: none }`，
+   特异性与 `.bar__tabs` 相同（都是 0,1,0），而**作者样式优先于 UA 样式** ——
+   所以上面那句 `display: flex` 会把 `hidden` 整个盖掉，未登录时五项与那盏灯照样露着。
+   ChatDock 的 `.ai__panel[hidden]` 记过同一个坑，这是第二次踩。 */
+.bar__tabs[hidden],
+.bar__live[hidden] {
+  display: none;
 }
 
 .tab {

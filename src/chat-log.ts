@@ -114,8 +114,22 @@ export class ChatLog {
    *
    * R42 起每个等待者还带自己的**窗口号**：会话按 IP 合并之后，同一条会话下可能有
    * 两个不同的人同时在等，而沉麟打的那句话只该发给其中一个（见 `/reply`）。
+   *
+   * R43 起等待者有**两种**，都躺在这一个 Set 里（靠 `kind` 分）：
+   * - `wait` —— 访客问了一句、正等人工回复（接管那条路）；
+   * - `listen` —— 访客只是开着对话框，等沉麟**主动**说点什么。
+   *   这一条是 R43 补的：在它出现之前，没人正在等的时候沉麟打的字只是往库里写一行，
+   *   访客那边没有任何通道能收到它 —— 那些行的 `tab` 还是空的，成了永远送不出去的死信。
+   *
+   * **同一个窗口的这两种不能同时挂着**：那会让一句话被送出去两次（一次从对话的 SSE，
+   * 一次从接收通道）—— 本地实测过，气泡真的出现了两条一样的。
+   * 所以 `/wait` 挂起前会把同窗口的 `listen` 全部踢掉（见那一段）。
    */
-  #waiters = new Set<{ tab: string; done: (text: string) => void }>();
+  #waiters = new Set<{
+    tab: string;
+    kind: 'wait' | 'listen';
+    done: (m: { id: number; text: string }) => void;
+  }>();
 
   constructor(state: { storage: { sql: Sql } }) {
     this.#sql = state.storage.sql;
@@ -261,20 +275,31 @@ export class ChatLog {
          * 沉麟本人的回复（R41②「聊天实时接管」）。做两件事，顺序要紧：
          * 先落库（这样即使没有人在等，这句话也不会丢），再放走正在等的那条访客请求。
          *
-         * **只放走一个窗口**（R42）：会话按 IP 合并之后，同一条会话下可能有两个不同的人
-         * 同时挂着等。把同一句话发给所有人是错的，所以取**最近一个开始等的窗口** ——
-         * 那正是后台上「有人正在等你回话」指的那个人。另一个人等到 25 秒超时后走模型，
-         * 是这种情形下最不坏的行为。
+         * **发给哪个窗口，由调用方指定**（R43）。原来是「取最近一个开始等的窗口」，
+         * 那在「访客正问着」的场合是对的，但它有两个洞：
+         * ① 没人在等时取不到窗口号，落库的 `tab` 是空串 —— 那一行永远匹配不上任何窗口的
+         *    查询，成了送不出去的死信（他实测到的「主动发消息没反应」就是这个）；
+         * ② R43 起访客只要开着对话框就有一条 `/listen` 挂着，「最近一个」于是变成
+         *    「谁最后重连的」—— 一个没有意义的顺序。
+         *
+         * 所以后台现在把窗口号一起传上来（它看得到每条消息属于哪个窗口）。
+         * 三级兜底：调用方指定 → 最近一个等待者 → **最后一条访客消息的窗口**。
+         * 最后那一级保证了「库里那一行一定属于某个真实窗口」，不会再有死信。
          */
         case '/reply': {
-          const b = (await req.json()) as { text?: string };
+          const b = (await req.json()) as { text?: string; tab?: string };
           const text = String(b.text ?? '').slice(0, TEXT_MAX);
           if (!text) return Response.json({ ok: false, error: 'empty' }, { status: 400 });
 
           /* 复制成数组：回调里会把自己从 Set 里删掉，边遍历边删是未定义行为。
              Set 保持插入顺序，所以最后一个就是最近开始等的那个窗口。 */
           const list = [...this.#waiters];
-          const target = list.length ? list[list.length - 1].tab : '';
+          const asked = String(b.tab ?? '').slice(0, 64);
+          const lastUser = this.#sql
+            .exec("SELECT tab FROM msg WHERE role = 'user' ORDER BY id DESC LIMIT 1")
+            .toArray();
+          const target =
+            asked || (list.length ? list[list.length - 1].tab : '') || String(lastUser[0]?.tab ?? '');
 
           this.#sql.exec(
             "INSERT INTO msg (role, text, ip, model, who, tab, ts) VALUES ('ai', ?, '', '', 'human', ?, ?)",
@@ -282,14 +307,15 @@ export class ChatLog {
             target,
             Date.now()
           );
+          const id = Number(this.#sql.exec('SELECT last_insert_rowid() AS v').toArray()[0]?.v ?? 0);
 
           let waiting = 0;
           for (const w of list) {
             if (w.tab !== target) continue;
             waiting++;
-            w.done(text);
+            w.done({ id, text });
           }
-          return Response.json({ ok: true, waiting });
+          return Response.json({ ok: true, waiting, tab: target, id });
         }
 
         /**
@@ -312,7 +338,7 @@ export class ChatLog {
           const had = tab
             ? this.#sql
                 .exec(
-                  `SELECT text FROM msg
+                  `SELECT id, text FROM msg
                      WHERE who = 'human' AND tab = ?
                        AND id > COALESCE(
                          (SELECT MAX(id) FROM msg WHERE role = 'user' AND tab = ?), 0)
@@ -323,26 +349,107 @@ export class ChatLog {
                 .toArray()
             : this.#sql
                 .exec(
-                  `SELECT text FROM msg
+                  `SELECT id, text FROM msg
                      WHERE who = 'human'
                        AND id > COALESCE((SELECT MAX(id) FROM msg WHERE role = 'user'), 0)
                      ORDER BY id ASC LIMIT 1`
                 )
                 .toArray();
-          if (had.length) return Response.json({ text: String(had[0].text ?? '') });
+          if (had.length)
+            return Response.json({ id: Number(had[0].id), text: String(had[0].text ?? '') });
 
-          const text = await new Promise<string>((resolve) => {
+          /* **先把同窗口的接收通道踢掉**（R43）。访客正在问一句，那条 `listen` 就该让位 ——
+             两个都挂着的话，`/reply` 会把同一句话同时交给它们，访客那边出两条一样的气泡
+             （本地实测过，就是这么发现的）。踢的方式是用空值 resolve，前端拿到空的会重挂。 */
+          for (const w of [...this.#waiters]) {
+            if (w.kind === 'listen' && w.tab === tab) w.done({ id: 0, text: '' });
+          }
+
+          const got = await new Promise<{ id: number; text: string }>((resolve) => {
             const entry = {
               tab,
-              done: (t: string) => {
+              kind: 'wait' as const,
+              done: (m: { id: number; text: string }) => {
                 this.#waiters.delete(entry);
-                resolve(t);
+                resolve(m);
               },
             };
             this.#waiters.add(entry);
-            setTimeout(() => entry.done(''), ms);
+            setTimeout(() => entry.done({ id: 0, text: '' }), ms);
           });
-          return Response.json({ text });
+          return Response.json(got);
+        }
+
+        /**
+         * 访客侧的**主动接收**通道（R43）—— 他报的「接管后不能主动发送消息」就是缺这一条。
+         *
+         * R41／R42 的接管是**应答式**的：访客问一句 → 请求挂起 → 沉麟回一句 → 放走。
+         * 访客那边除此之外没有任何常驻通道，所以他在「访客没发问」的时候打的字
+         * 没地方送 —— 只在库里留下一行，而且那一行的 `tab` 还是空的，成了死信。
+         *
+         * 这一条把「访客开着对话框」本身变成一条挂着的连接（长轮询）：
+         * 前端一进来先用 `after=-1` 拿一次游标（只要 id、不回放历史），然后反复打这一条；
+         * 沉麟一按发送，`/reply` 就地把它放走 —— **零延迟，不是定时轮询**。
+         *
+         * 为什么不做成每几秒一次的定时轮询：那样一个开着对话框的访客每分钟要打十几次接口，
+         * 而长轮询是每 25 秒一次。DO 的免费额度是 10 万请求/天，这个差别是一个量级。
+         *
+         * 代价与它的上限：挂着的请求会让这个 DO 实例一直活着（duration 计费，
+         * 免费档 13,000 GB-s/天 ≈ 单人连续挂 27 小时）。所以**前端有硬上限** ——
+         * 连续空转 40 轮（约 17 分钟没动静）就停下，访客再动一下才重新开始。
+         */
+        case '/listen': {
+          const ms = clampNum(url.searchParams.get('ms'), 1000, 55000, WAIT_MAX_MS);
+          const tab = String(url.searchParams.get('tab') ?? '').slice(0, 64);
+          if (!tab) return Response.json({ id: 0, text: '' });
+
+          const after = Math.trunc(Number(url.searchParams.get('after')));
+
+          /* `after < 0`（或没传）＝**只要游标**：回这个窗口当前的最大 id，不回内容。
+             第一次打开对话框走这一档 —— 那时页面上一个气泡都没有，
+             把历史里的人工消息单方面回放出来只会让人看不懂（自己问的那些不在）。 */
+          if (!Number.isFinite(after) || after < 0) {
+            const max = this.#sql
+              .exec('SELECT COALESCE(MAX(id), 0) AS v FROM msg WHERE tab = ?', tab)
+              .toArray();
+            return Response.json({ id: Number(max[0]?.v ?? 0), text: '' });
+          }
+
+          const had = this.#sql
+            .exec(
+              `SELECT id, text FROM msg
+                 WHERE who = 'human' AND tab = ? AND id > ?
+                 ORDER BY id ASC LIMIT 1`,
+              tab,
+              after
+            )
+            .toArray();
+          if (had.length)
+            return Response.json({ id: Number(had[0].id), text: String(had[0].text ?? '') });
+
+          /* 同窗口正有一条 `/wait` 挂着（访客刚问了一句，在等人工回复）——
+             那这条接收通道立刻让位，不挂。否则 `/reply` 会把同一句话交给两个通道，
+             访客那边出两条一样的气泡。前端拿到空的会歇一下再挂。
+             `/wait` 那一侧也会主动踢掉已经挂着的 listen —— 两边都堵一次，
+             因为两条请求「谁先到 DO」是不确定的。 */
+          if ([...this.#waiters].some((w) => w.kind === 'wait' && w.tab === tab)) {
+            return Response.json({ id: after, text: '' });
+          }
+
+          const got = await new Promise<{ id: number; text: string }>((resolve) => {
+            const entry = {
+              tab,
+              kind: 'listen' as const,
+              done: (m: { id: number; text: string }) => {
+                this.#waiters.delete(entry);
+                resolve(m);
+              },
+            };
+            this.#waiters.add(entry);
+            // 超时回原游标：前端拿它接着挂下一轮，不会因为超时把游标丢了
+            setTimeout(() => entry.done({ id: after, text: '' }), ms);
+          });
+          return Response.json(got);
         }
 
         /** 这个会话眼下有没有人在等人工回复。后台的「有人在等」灯靠它 */

@@ -710,15 +710,50 @@ async function noteSeen(env: Env): Promise<void> {
  * 这样一来沉麟提前打好的回复也不会让访客白等（那条已经在库里，DO 立刻返回）。
  * 等待期间不烧 CPU（Workers 免费档限的是 10 ms **CPU** 时间，等 I/O 不计）。
  */
-async function waitHuman(env: Env, session: string, tab: string): Promise<string> {
+async function waitHuman(env: Env, session: string, tab: string): Promise<{ id: number; text: string }> {
   try {
     const res = await stubOf(env, session).fetch(
       new Request('https://chat.do/wait?tab=' + encodeURIComponent(tab))
     );
-    if (!res.ok) return '';
-    return String(((await res.json()) as { text?: unknown }).text ?? '');
+    if (!res.ok) return { id: 0, text: '' };
+    const d = (await res.json()) as { id?: unknown; text?: unknown };
+    return { id: Number(d.id) || 0, text: String(d.text ?? '') };
   } catch {
-    return '';
+    return { id: 0, text: '' };
+  }
+}
+
+/**
+ * `GET /api/chat?tab=&after=` —— 访客侧的**主动接收**通道（R43）。
+ *
+ * 他报的是「接管后不能主动发送消息」。原因在架构里：R41／R42 的接管是应答式的
+ * （访客问一句才有一条请求挂着），访客那边没有任何常驻通道，所以「没人发问时」
+ * 沉麟打的字没地方送。这一条把「开着对话框」本身变成一条挂着的连接。
+ *
+ * 挂在 `GET /api/chat` 上而不是新开一条 `/api/chat/listen`：`wrangler.toml` 的
+ * `run_worker_first` 列的是**精确路径** `"/api/chat"`，新路径不在里面就压根不进 Worker
+ * （会被当静态资源，直接 404）。同一个路径换个方法，配置一行都不用动。
+ */
+async function listen(req: Request, env: Env): Promise<Response> {
+  const p = new URL(req.url).searchParams;
+  const tab = p.get('tab') ?? '';
+  if (!TAB_RE.test(tab)) return fail(400, '窗口号不对');
+
+  const ip = req.headers.get('cf-connecting-ip') ?? '';
+  const session = ip ? await sessionOf(ip) : tab;
+
+  const after = p.get('after') ?? '-1';
+  try {
+    const res = await stubOf(env, session).fetch(
+      new Request(
+        'https://chat.do/listen?tab=' + encodeURIComponent(tab) + '&after=' + encodeURIComponent(after)
+      )
+    );
+    const d = (await res.json()) as { id?: unknown; text?: unknown };
+    return json({ id: Number(d.id) || 0, text: String(d.text ?? '') }, CACHE.none);
+  } catch {
+    // 挂不上就回一个空的，前端会隔一会儿再试 —— 这条链路坏掉不该让对话框报错
+    return json({ id: 0, text: '' }, CACHE.none);
   }
 }
 
@@ -1208,8 +1243,12 @@ async function askBinding(env: Env, system: string, turns: Turn[]): Promise<Read
  * 切成小块逐段发而不是一次吐完：前端那套渲染是按增量追加的，一次一大块会「啪」地
  * 整段出现，和模型回答时的逐字长得不一样 —— 访客不该从节奏上看出这一句是人打的。
  * 24 个字符一块、每块间隔 40 ms，一句两百字的话大约 0.35 秒出完。
+ *
+ * 收尾多发一条 `data: {"seen":<id>}`（R43）：这一句同时也躺在库里，而访客侧现在还有一条
+ * `/listen` 长轮询在收人工消息 —— 不把游标推过去，同一句话会**再从 listen 里出来一次**。
+ * 前端拿到 `seen` 就把游标推到这条的 id。
  */
-function textStream(text: string): ReadableStream {
+function textStream(text: string, seen = 0): ReadableStream {
   const enc = new TextEncoder();
   const chars = [...text];
   let i = 0;
@@ -1217,6 +1256,7 @@ function textStream(text: string): ReadableStream {
   return new ReadableStream({
     async pull(ctrl) {
       if (i >= chars.length) {
+        if (seen) ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ seen })}\n\n`));
         ctrl.enqueue(enc.encode('data: [DONE]\n\n'));
         ctrl.close();
         return;
@@ -1307,7 +1347,8 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
     await touchSession(env, session, ip, '', 0, 0);
 
     // 那句话在 DO 的 `/reply` 里已经落库了，这儿只负责送出去，不重复写一遍
-    if (human) return new Response(textStream(human), { headers: STREAM_HEADERS });
+    if (human.text)
+      return new Response(textStream(human.text, human.id), { headers: STREAM_HEADERS });
     /* 他没接上 —— 往下走模型那条路。访客这句已经在库里了，下面靠 `dup` 认出来，
        不会把同一句话问两遍 */
   }
@@ -2062,9 +2103,13 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
   /**
    * 沉麟本人回一句（R41②）。写进会话 DO，并放走正在挂着等的那条访客请求。
    *
+   * **`tab`（窗口号）现在由后台指定**（R43）：会话是按 IP 合并的，一条会话下可能有
+   * 好几个窗口，而「发给谁」不该靠猜。后台看得到每条消息属于哪个窗口，
+   * 默认取最近一条访客消息的那个。不传也能工作（DO 那边有三级兜底），但那是退路。
+   *
    * `waiting` 回给前端看：它是「这一句放走了几个人」——
-   * 0 表示没人在等（访客还没发问、或者已经等超时走了模型那条路），
-   * 那这句话仍然进了记录，访客**下一次发问时**会被 DO 立刻取出来当回答。
+   * 0 表示那个窗口此刻没有挂着的连接（对话框关了、或者空转到了上限），
+   * 那这句话仍然进了记录，访客**下次打开对话框或发问时**会收到。
    */
   if (path === 'reply') {
     const id = str(b.session);
@@ -2078,13 +2123,16 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
         new Request('https://chat.do/reply', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, tab: str(b.tab) }),
         })
       );
-      const d = (await res.json()) as { waiting?: number };
+      const d = (await res.json()) as { waiting?: number; tab?: string };
       // 索引里的条数要跟上，否则会话列表上的「N 条」与记录里的行数对不上
       await touchSession(env, id, '', '沉麟本人', 1, 0);
-      return json({ ok: true, waiting: Number(d.waiting) || 0 }, CACHE.none);
+      return json(
+        { ok: true, waiting: Number(d.waiting) || 0, tab: String(d.tab ?? '') },
+        CACHE.none
+      );
     } catch {
       return fail(502, '没发出去，再试一次');
     }
@@ -2246,6 +2294,10 @@ export default {
       const from = request.headers.get('sec-fetch-site');
       if (from && from !== 'same-origin') return fail(403, '只服务本站页面');
       try {
+        /* GET = 访客侧的主动接收通道（R43，长轮询）；POST = 发一句话。
+           同一个路径两种方法，是为了不动 `wrangler.toml` 里 `run_worker_first`
+           那条精确路径 —— 详见 `listen()` 的注释。 */
+        if (request.method === 'GET') return await listen(request, env);
         return await chat(request, env, ctx);
       } catch {
         // chat() 里每一步都有兜底，走到这儿说明是没想到的情况 —— 也不能让它变成裸 500

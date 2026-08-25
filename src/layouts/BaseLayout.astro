@@ -27,9 +27,17 @@ interface Props {
    * （栏目页那句原来是页头卡里的大字介绍，按需求搬到了这儿 —— 见 consts.ts 的 SECTIONS 注释）。
    */
   footerNote?: string;
+  /**
+   * 要不要全站顶栏（R43）。只有 `/admin` 传 false ——
+   * 他要「把后台的顶栏直接替换为后台的功能栏」：那一页顶上那条本来是站点导航
+   * （文章／随笔／作品／音乐／图库／名片），对着后台干活时那六项一个都用不上，
+   * 而后台自己的五个分区反倒挤在它下面一层。换掉之后顶上那条就是功能栏，
+   * **回站的入口由功能栏左边的品牌位承担**（不然后台成了个出不去的房间）。
+   */
+  siteHeader?: boolean;
 }
 
-const { width = 'page', footerNote, ...head } = Astro.props;
+const { width = 'page', footerNote, siteHeader = true, ...head } = Astro.props;
 
 const wrapClass =
   width === 'prose' ? 'wrap wrap--prose' : width === 'wide' ? 'wrap wrap--wide' : 'wrap';
@@ -46,7 +54,7 @@ const wrapClass =
   </head>
   <body>
     <a href="#main" class="skip-link">跳到主内容</a>
-    <Header />
+    {siteHeader && <Header />}
     <main id="main" class={wrapClass}>
       <slot />
     </main>
