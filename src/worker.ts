@@ -461,10 +461,50 @@ const SESSION_RE = /^[0-9a-f-]{8,64}$/i;
  * 也不会与配置实例的名字 `'config'` 相撞（那里面有 n/g/i/o，十六进制里没有）。
  */
 async function sessionOf(ip: string): Promise<string> {
-  const bits = await crypto.subtle.digest('SHA-256', enc.encode('ip:' + ip));
+  const bits = await crypto.subtle.digest('SHA-256', enc.encode('ip:' + ip64(ip)));
   return [...new Uint8Array(bits).slice(0, 16)]
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+/**
+ * 把 IP 归并成「同一个终端网络」的标识（R43 加的一层）。
+ *
+ * **IPv6 只取前 64 位。** 起因是线上实测：同一台机器连着打 `/cdn-cgi/trace`，
+ * 一会儿报 IPv4（`colo=LAX`）、一会儿报 IPv6（`2409:8a20:…`，`colo=SEA`）——
+ * 而手机与家宽的 IPv6 走 SLAAC 隐私扩展，**后 64 位会定期换**。
+ * 不归并的话同一台手机过几小时就换一条会话，「同一 IP 相同会话」当场作废。
+ * 前 64 位是运营商分给这个终端网络的前缀，稳定得多。
+ *
+ * **IPv4 原样用**：它本来就是一个地址一个出口，再往前截（比如 /24）会把邻居并进来。
+ *
+ * 剩下一个从 IP 层解决不了的边界：**同一台机器在 IPv4 与 IPv6 之间切换仍然是两条会话**。
+ * 那是客户端选路（Happy Eyeballs）决定的，服务端看到的就是两个不同的地址族。
+ * 真实访客在一次访问里通常固定用一族（连接复用），所以影响小；
+ * 但这条不能当成不存在 —— 台账 R43 里记着。
+ */
+function ip64(ip: string): string {
+  // IPv4，或者 IPv4 映射地址（`::ffff:1.2.3.4`）：原样用，别去截段
+  if (!ip.includes(':') || ip.includes('.')) return ip;
+
+  let segs: string[];
+  if (ip.includes('::')) {
+    // 压缩写法：把 `::` 补齐成 8 段再截，否则 `2409::1` 会被截成错的前缀
+    const [head, tail] = ip.split('::');
+    const h = head ? head.split(':') : [];
+    const t = tail ? tail.split(':') : [];
+    segs = [...h, ...(Array(Math.max(0, 8 - h.length - t.length)).fill('0') as string[]), ...t];
+  } else {
+    segs = ip.split(':');
+  }
+
+  return (
+    segs
+      .slice(0, 4)
+      // 去前导零 + 小写：`2409:08A20` 与 `2409:8a20` 必须算同一个
+      .map((s) => (s || '0').toLowerCase().replace(/^0+(?=.)/, ''))
+      .join(':') + '::'
+  );
 }
 
 /**
