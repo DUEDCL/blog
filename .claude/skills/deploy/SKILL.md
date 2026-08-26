@@ -39,7 +39,7 @@ git status -sb && git log --oneline -1 && git fetch --dry-run 2>&1 | tail -3
 npm run build
 ```
 
-判据：**`24 page(s) built`**（R32 删掉 /now 与两组占位相册、R35 加了 /admin 之后是 16；2026-08-26 补齐作品集与四篇技术文章，多出 4 个 `/posts/*` 与 4 个 `/projects/*`，之后是这个数）。页数变了先弄清为什么（本轮是否真的增删了页面），别往下走。
+判据：**`70 page(s) built`**（R32 删掉 /now 与两组占位相册、R35 加了 /admin 之后是 16；2026-08-26 补齐作品集与四篇技术文章之后 24；**R46 扩到三种语言之后是这个数** —— 22 个页面 × 3 种语言 ＋ /admin ＋ /start 跳转页 ＋ 根 404 ＋ 3 份 RSS）。页数变了先弄清为什么（本轮是否真的增删了页面、或增删了语言），别往下走。
 
 **R41 起 `npm run build` 不只是 `astro build`**：它先跑 `scripts/gen-content.mjs`，
 把 `src/content/` 打成 `src/data/content.generated.ts`（后台读仓库内容用的，`.gitignore` 里）。
@@ -55,7 +55,7 @@ npx astro check
 `about.astro:19 ts(2352)`，是「联系名片填真实账号」那一轮把它修掉的 —— 看到那一条也算过；
 多出别的先修掉再提交。）
 
-上面这两个数（16 页、错误数）是**会过期的判据**：本轮如果有意增删了页面、或修掉／引入了错误，
+上面这两个数（70 页、错误数）是**会过期的判据**：本轮如果有意增删了页面、或修掉／引入了错误，
 报告里要说清，并**顺手把这份技能里的数字改掉** —— 判据留着旧值就等于没有判据。
 （`astro check` 眼下固定还剩 **2 个 hint**：`content.config.ts` 里两处 `z.string().url()`
 的弃用提示，zod 那边的事，看到这两条也算过。）
@@ -94,6 +94,11 @@ npx wrangler deploy
 - 成功输出里要确认三样：`Uploaded N files`、**三个自定义域名**的触发器
   （duchenlin.top / www.duchenlin.top / duchenlin.eu.cc）、`Current Version ID`。
 - Version ID 要写进收尾报告，也要写进 `docs/部署运维.md` 的实测记录。
+- **这一轮新增了大批页面（几十个新资源）时，第一次 deploy 之后可能整批 404** ——
+  输出会完全正常（文件数对得上、三个触发器都在），但线上新路径全是 404 而旧路径正常。
+  资源清单没在边缘切过去。**原样再跑一次 `npx wrangler deploy` 即好**（R46 实测：
+  第二次 15 秒后全部 200）。别回滚、别改代码、也别去 purge —— 排查过的排除项列在
+  `docs/部署运维.md` 的 R46 那节，不用重走。
 
 ## ④ 线上验证
 
@@ -125,6 +130,19 @@ const g=async(p,o={})=>{const r=await fetch(B+p,o);return{s:r.status,cc:r.header
 判据：五条接口的 `cache-control` 与代码里 `CACHE` 那张表对得上；素材字节数与本地一致；
 删掉的素材必须 404；`/api/music/*` 的错误分支返回自己写的中文，不外泄上游文本。
 **页面结构类的判据按本轮改了什么临场加**（本轮改了门就验门上的旗与那层光的 CSS 变量）。
+
+**站上有三种语言（R46 起），所以每次上线都要顺带验两件事**，一整套判据抄在
+`docs/部署运维.md` 的 R46 那节：
+
+1. **中文那 18 个旧地址全部 200** —— 这是回归，改了路由或 `_headers` 尤其要跑；
+2. **`/en/…` 与 `/ja/…` 同一页也 200，且 `<html lang>` 是对的**。只验中文会漏掉
+   「新页面忘了带 `getStaticPaths` 的三条 locale」这类错，那时英日版就是 404。
+
+改动碰到 `src/i18n/`、`_headers`、或任何 `getStaticPaths` 时，还要验 hreflang 四条、
+三份 RSS 的 `<language>`、sitemap 的 `xhtml:link`、以及语言切换那三条链接上的
+`data-astro-reload`（少了它切语言会留下半个页面的旧语言）。
+排版层面另有一条本机断言：`PORT=8788 node scripts/i18n-check.mjs`（三语 × 三档视口，
+非零退出码 = 没过），它要 `wrangler dev` 起着。
 
 两条趁手的工具（R42 那轮加的）：
 
