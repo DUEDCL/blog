@@ -3,6 +3,16 @@ title: 给多个 agent 做路由：五维打分、能力当门、以及为什么
 description: 一个任务该交给哪个 agent。打分容易，难的是让「没试过」和「每次都失败」区分开，以及让一个坏掉的后端不再靠过期统计持续赢。
 pubDate: 2026-08-24
 tags: ['Agent', '架构', 'Python']
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "Routing across several agents: five scored axes, capability as a gate, and why no data means 0.5"
+    description: "Which agent should take a task. Scoring is the easy part; the hard part is telling “never tried” apart from “fails every time”, and stopping a broken backend from winning on stale statistics."
+  ja:
+    title: "複数のエージェントへのルーティング：五つの採点軸、能力はゲート、観測ゼロを 0.5 にする理由"
+    description: "あるタスクをどのエージェントに渡すか。採点は簡単で、難しいのは「試していない」と「毎回失敗する」を分けること、そして壊れたバックエンドが古い統計で勝ち続けないようにすることだ。"
 ---
 
 平台后面挂着几个编程 agent，一个任务来了要决定交给谁。这层叫路由。

@@ -13,24 +13,26 @@
  * 和**栏宽差异**（左栏 2.1fr、右栏 1fr）承担，不由卡片边框承担。
  */
 import { Image } from 'astro:assets';
-import BaseLayout from '../layouts/BaseLayout.astro';
-import FormattedDate from '../components/FormattedDate.astro';
-import { getPublished, getAllEntries } from '../utils/content';
-import {
-  SITE_TITLE,
-  SITE_DESCRIPTION,
-  BIO,
-  SOCIAL,
-  SECTIONS,
-  PORTALS,
-  EDITIONS,
-} from '../consts';
-import avatar from '../assets/avatar.jpg';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FormattedDate from '../../components/FormattedDate.astro';
+import { getAllEntries, getListItems } from '../../utils/content';
+import { SITE_TITLE, SOCIAL, PORTALS, EDITIONS } from '../../consts';
+import { LOCALE_PARAMS, localePath, t, toLocale } from '../../i18n';
+import avatar from '../../assets/avatar.jpg';
 
-const posts = await getPublished('posts');
-const notes = await getPublished('notes');
-const projects = (await getPublished('projects')).filter((p) => p.data.featured);
-const all = await getAllEntries();
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+
+const posts = await getListItems('posts', locale);
+const notes = await getListItems('notes', locale);
+const projects = (await getListItems('projects', locale)).filter(
+  (p) => p.data.featured
+);
+const all = await getAllEntries(locale);
 
 /* 头条 = 最新那篇文章，其余排成小条目。posts 为空时 lead 是 undefined，整块不渲染 */
 const [lead, ...more] = posts;
@@ -48,12 +50,12 @@ const latest = all[0]?.pubDate;
 
 const socialLinks = [
   { label: 'GitHub', href: SOCIAL.github },
-  { label: '邮箱', href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
-  { label: 'RSS', href: SOCIAL.rss },
+  { label: strings.common.email, href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
+  { label: 'RSS', href: SOCIAL.rss ? localePath(locale, SOCIAL.rss) : '' },
 ].filter((l) => l.href);
 ---
 
-<BaseLayout description={SITE_DESCRIPTION} width="broad">
+<BaseLayout description={strings.siteDescription} width="broad">
   {/* ---------- 刊头 ---------- */}
   <header class="mast rise rise-1">
     <div class="mast__row">
@@ -62,14 +64,14 @@ const socialLinks = [
       <div class="mast__verse">
         <Image
           src={avatar}
-          alt={`${SITE_TITLE}的头像`}
+          alt={strings.common.avatarAlt(SITE_TITLE)}
           width={120}
           height={120}
           loading="eager"
           class="mast__face"
         />
         <div>
-          {BIO.map((line, i) => (
+          {strings.bio.map((line, i) => (
             <p class={i === 0 ? 'mast__lead' : 'mast__sub'}>{line}</p>
           ))}
         </div>
@@ -82,7 +84,7 @@ const socialLinks = [
         没有一行 JS —— 静态产物里四个名字都在，由 html[data-theme] 决定露哪一个 */}
     <div class="mast__line">
       <p class="meta mast__meta">
-        <span>第 {issue} 号</span>
+        <span>{strings.home.issue(issue)}</span>
         {latest && (
           <>
             <span class="dot" aria-hidden="true">·</span>
@@ -91,7 +93,7 @@ const socialLinks = [
         )}
         <span class="dot" aria-hidden="true">·</span>
         <span class="edname">
-          {EDITIONS.map((e) => <span data-for={e.id}>{e.name}</span>)}
+          {EDITIONS.map((e) => <span data-for={e.id}>{strings.editions[e.id].name}</span>)}
         </span>
       </p>
 
@@ -113,9 +115,11 @@ const socialLinks = [
   <div class="front rise rise-2">
     <section class="front__main">
       <div class="colhead">
-        <span class="vlabel">文章</span>
-        <h2 class="colhead__title">{SECTIONS.posts.title}</h2>
-        <a href="/posts" class="colhead__more">全部 {posts.length} 篇 →</a>
+        <span class="vlabel">{strings.sections.posts.label}</span>
+        <h2 class="colhead__title">{strings.sections.posts.title}</h2>
+        <a href={localePath(locale, '/posts')} class="colhead__more">
+          {strings.home.allCount(posts.length)}
+        </a>
       </div>
 
       {lead ? (
@@ -123,12 +127,12 @@ const socialLinks = [
           {/* 头条：整个版面唯一一处出现摘要的地方 —— 其余条目只有标题与日期。
               「哪一条是头条」因此不需要标签，字号自己说了 */}
           <article class="lead">
-            <a href={`/posts/${lead.id}`} class="lead__link">
-              <h3 class="lead__title">{lead.data.title}</h3>
-              <p class="lead__dek">{lead.data.description}</p>
+            <a href={lead.href} class="lead__link">
+              <h3 class="lead__title">{lead.title}</h3>
+              <p class="lead__dek">{lead.description}</p>
             </a>
             <p class="meta lead__date">
-              <FormattedDate date={lead.data.pubDate} />
+              <FormattedDate date={lead.pubDate} />
             </p>
           </article>
 
@@ -136,10 +140,10 @@ const socialLinks = [
             <ul class="briefs">
               {rest.map((p) => (
                 <li class="brief">
-                  <a href={`/posts/${p.id}`}>
-                    <span class="brief__title">{p.data.title}</span>
+                  <a href={p.href}>
+                    <span class="brief__title">{p.title}</span>
                     <span class="meta brief__date">
-                      <FormattedDate date={p.data.pubDate} />
+                      <FormattedDate date={p.pubDate} />
                     </span>
                   </a>
                 </li>
@@ -148,32 +152,34 @@ const socialLinks = [
           )}
         </>
       ) : (
-        <p class="empty">{SECTIONS.posts.empty}</p>
+        <p class="empty">{strings.sections.posts.empty}</p>
       )}
     </section>
 
     <section class="front__side">
       <div class="colhead">
-        <span class="vlabel">随笔</span>
-        <h2 class="colhead__title">{SECTIONS.notes.title}</h2>
-        <a href="/notes" class="colhead__more">全部 →</a>
+        <span class="vlabel">{strings.sections.notes.label}</span>
+        <h2 class="colhead__title">{strings.sections.notes.title}</h2>
+        <a href={localePath(locale, '/notes')} class="colhead__more">
+          {strings.home.all}
+        </a>
       </div>
 
       {asides.length > 0 ? (
         <ul class="briefs briefs--stack">
           {asides.map((n) => (
             <li class="brief">
-              <a href={`/notes/${n.id}`}>
-                <span class="brief__title">{n.data.title}</span>
+              <a href={n.href}>
+                <span class="brief__title">{n.title}</span>
                 <span class="meta brief__date">
-                  <FormattedDate date={n.data.pubDate} />
+                  <FormattedDate date={n.pubDate} />
                 </span>
               </a>
             </li>
           ))}
         </ul>
       ) : (
-        <p class="empty">{SECTIONS.notes.empty}</p>
+        <p class="empty">{strings.sections.notes.empty}</p>
       )}
     </section>
   </div>
@@ -184,17 +190,19 @@ const socialLinks = [
       <div class="hairline"></div>
 
       <div class="colhead">
-        <span class="vlabel">作品</span>
-        <h2 class="colhead__title">{SECTIONS.projects.title}</h2>
-        <a href="/projects" class="colhead__more">全部 →</a>
+        <span class="vlabel">{strings.sections.projects.label}</span>
+        <h2 class="colhead__title">{strings.sections.projects.title}</h2>
+        <a href={localePath(locale, '/projects')} class="colhead__more">
+          {strings.home.all}
+        </a>
       </div>
 
       <ul class="works__grid">
         {works.map((pr) => (
           <li class="work">
-            <a href={`/projects/${pr.id}`}>
-              <h3 class="work__title">{pr.data.title}</h3>
-              <p class="work__desc">{pr.data.description}</p>
+            <a href={pr.href}>
+              <h3 class="work__title">{pr.title}</h3>
+              <p class="work__desc">{pr.description}</p>
             </a>
           </li>
         ))}
@@ -206,14 +214,14 @@ const socialLinks = [
       上一版这里是四张玻璃卡（`.portal`，hover 时整卡上浮 —— 宪法第 4 条把
       「hover 时整卡上浮」列为反例）。改成报纸的目录条：一行文字链，竖线分隔。
       四个入口本来就只是四个地址，不需要四个盒子。 */}
-  <nav class="toc rise rise-4" aria-label="别处">
+  <nav class="toc rise rise-4" aria-label={strings.home.elsewhere}>
     <div class="hairline"></div>
     <ul class="toc__list">
       {PORTALS.map((p) => (
         <li class="toc__item">
-          <a href={p.href}>
-            <span class="toc__label">{p.label}</span>
-            <span class="toc__desc">{p.description}</span>
+          <a href={localePath(locale, p.href)}>
+            <span class="toc__label">{strings.portals[p.key].label}</span>
+            <span class="toc__desc">{strings.portals[p.key].description}</span>
           </a>
         </li>
       ))}

@@ -36,8 +36,14 @@ const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '
 const SRC = join(ROOT, 'src', 'content');
 const OUT = join(ROOT, 'src', 'data', 'content.generated.ts');
 
-/** 只收这五个集合 —— 与 `src/content.config.ts` 里 `collections` 的键一致 */
-const COLLECTIONS = ['posts', 'notes', 'projects', 'photos', 'kb'];
+/**
+ * 只收这几个集合 —— 与 `src/content.config.ts` 里 `collections` 的键一致。
+ * `i18n` 是正文译文那一堆（R46，集合名 `translations`，目录名 `i18n`）：
+ * 后台的「文章编辑」也该能改译文，所以它跟原文一起进这份索引。
+ * 它的 `coll` 因此是 `i18n` 而不是 `translations` —— 这一列存的是**目录名**，
+ * 后台照原样显示仓库里的真实路径。
+ */
+const COLLECTIONS = ['posts', 'notes', 'projects', 'photos', 'kb', 'i18n'];
 
 /** 递归列出一个目录下的 Markdown。子目录也算（glob 的 pattern 是 `**\/*.md`） */
 async function walk(dir) {
@@ -111,7 +117,7 @@ const head = `/**
 
 /** 一个内容文件的原样快照。\`front\` 是 frontmatter 原文，没有被解析过 */
 export interface ContentFile {
-  coll: 'posts' | 'notes' | 'projects' | 'photos' | 'kb';
+  coll: 'posts' | 'notes' | 'projects' | 'photos' | 'kb' | 'i18n';
   slug: string;
   path: string;
   title: string;

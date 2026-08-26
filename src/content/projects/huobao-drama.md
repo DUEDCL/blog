@@ -4,6 +4,16 @@ description: 不是我的项目。在一个一万四千星的开源 AI 短剧平
 pubDate: 2026-07-18
 tags: ['TypeScript', 'FFmpeg', '二次开发']
 status: 'archived'
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "Huobao Drama · extending someone else’s project"
+    description: "Not my project. I added a video-generation adapter to a 14k-star open-source AI short-drama platform, and made single-shot compositing able to skip TTS. Never produced a finished film."
+  ja:
+    title: "火宝短劇 · 二次開発"
+    description: "私のプロジェクトではない。1.4 万スターのオープンソース AI 短編ドラマ基盤に動画生成の adapter を足し、単カット合成で TTS を飛ばせるようにした。完成作は作っていない。"
 ---
 
 先说清楚：**这不是我写的项目。** 它是 [chatfire-AI/huobao-drama](https://github.com/chatfire-AI/huobao-drama)，一个一万四千星的开源 AI 短剧生成平台。我在本地跑了一份，改了两处自己用得上的地方。

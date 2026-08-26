@@ -1,0 +1,141 @@
+---
+/**
+ * 语言切换器（R46）—— 顶栏右端、版次键左边那一枚。
+ *
+ * ---- 为什么是链接不是按钮 ----
+ * 三个选项都是 `<a href>`，指向**当前这一页的另一种语言版本**。做成按钮 + JS 跳转
+ * 会丢掉两样东西：搜索引擎顺着这三条链接发现另外两种语言（`<head>` 里的 hreflang
+ * 只是声明，能被爬的链接才是路），以及「在新标签页打开」。
+ *
+ * ---- 每一条都带 data-astro-reload ----
+ * 全站走 SPA 导航，而状态栏（MiniPlayer）与对话框（ChatDock）是 `transition:persist`
+ * 的 —— swap 时它们**不重新渲染**。SPA 切语言的结果是：正文换了语言，播放器上还写着
+ * 「上一首」、对话框还写着「问沉麟的分身」。`data-astro-reload` 让这三条走整页导航，
+ * 代价是音乐会断一次 —— 换语言是低频动作，而「半个页面是另一种语言」是每次都错。
+ *
+ * ---- 键上是 ISO 码，菜单里是自称 ----
+ * 键上显示 `ZH` / `EN` / `JA`：等宽字体下三者同宽，与旁边那枚「版次」键对得齐，
+ * 而且不需要翻译（`locale.toUpperCase()` 就是它）。菜单里显示的是每种语言的**自称**
+ * （简体中文 / English / 日本語），所以只读日语的人在中文页面上也认得出哪一项是日语。
+ *
+ * 长相与版次键共用 global.css 的 `.topdrop` / `.topkey` / `.topmenu` / `.topopt`。
+ */
+import { LOCALES, localeOf, switchPath, t } from '../i18n';
+
+const path = Astro.url.pathname;
+const locale = localeOf(path);
+const strings = t(locale);
+---
+
+<div class="topdrop">
+  <button
+    type="button"
+    class="topkey"
+    id="lang-key"
+    aria-expanded="false"
+    aria-haspopup="true"
+    aria-controls="lang-menu"
+    aria-label={strings.common.langKey}
+  >
+    <span aria-hidden="true">◍</span>
+    <span>{locale.toUpperCase()}</span>
+  </button>
+
+  <div
+    class="topmenu glass"
+    id="lang-menu"
+    aria-label={strings.common.langMenu}
+    hidden
+  >
+    {
+      LOCALES.map((l) => (
+        <a
+          class="topopt"
+          href={switchPath(path, l)}
+          hreflang={l}
+          lang={l}
+          aria-current={l === locale ? 'true' : undefined}
+          data-astro-reload
+        >
+          <span class="lang__code" aria-hidden="true">{l.toUpperCase()}</span>
+          <span class="topopt__text">
+            <span class="topopt__name">{strings.common.langNames[l]}</span>
+          </span>
+        </a>
+      ))
+    }
+  </div>
+</div>
+
+<style>
+  /**
+   * 这一枚的菜单**比版次那一枚窄**。
+   *
+   * global.css 的 `.topmenu` 给的是 `min-width: 15rem` —— 那是版次菜单的需求，
+   * 它每项要放下「深夜印厂刚下机的那一版」这样一句参照物。语言菜单每项只有一个
+   * ISO 码 + 一个语言自称，最宽的一行（`简体中文`）实测 138px，15rem(240px)
+   * 有一百来 px 是空的。
+   *
+   * 而那一百来 px 是会出事的：菜单 `right: 0` 对齐的是**这枚键**，而这枚键在
+   * 版次键左边。320px 视口下语言键的右边缘在 x≈209，240px 的菜单于是从 -31 开始 ——
+   * 左边整整 31px 被切在视口外（本轮渲染实测，zh 与 ja 两档都中）。
+   * 收到 10rem(160px) 之后 zh 那档从 49 开始、ja 从 62 开始，两头都在视口内。
+   */
+  .topmenu {
+    min-width: 10rem;
+  }
+
+  /* 菜单里每项左边那个码。等宽 + 定宽，让三行的语言名左边缘对齐 ——
+     版次菜单同一列上是色卡方块，两个菜单的第一列因此宽度一致 */
+  .lang__code {
+    flex-shrink: 0;
+    width: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+  }
+</style>
+
+<script>
+  /* 与版次键同一套做法：**全部走 document 上的事件委托**。
+     SPA 导航后顶栏是新节点，挂在按钮上会一次导航累积一层（Header.astro 那段
+     scroll 监听的注释记过这个坑）。这里不需要 `astro:page-load` 重绑。
+
+     菜单只有「开 / 关」两件事 —— 选中哪一项在服务端就知道了（`aria-current`），
+     不像版次那样要在运行期补状态。 */
+  function close() {
+    const key = document.getElementById('lang-key');
+    const menu = document.getElementById('lang-menu') as HTMLElement | null;
+    if (!key || !menu) return;
+    key.setAttribute('aria-expanded', 'false');
+    menu.hidden = true;
+  }
+
+  document.addEventListener('click', (ev) => {
+    const target = ev.target as Element | null;
+    if (!target) return;
+
+    const key = target.closest('#lang-key');
+    if (key) {
+      const menu = document.getElementById('lang-menu') as HTMLElement | null;
+      if (!menu) return;
+      const opening = menu.hidden;
+      menu.hidden = !opening;
+      key.setAttribute('aria-expanded', String(opening));
+      return;
+    }
+
+    /* 点在菜单里：那是三条真链接，让它自己跳，只把菜单收起来。
+       点在别处：收起来 */
+    if (!target.closest('#lang-menu')) close();
+  });
+
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    const menu = document.getElementById('lang-menu') as HTMLElement | null;
+    if (!menu || menu.hidden) return;
+    close();
+    document.getElementById('lang-key')?.focus();
+  });
+</script>

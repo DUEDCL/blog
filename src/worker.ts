@@ -31,10 +31,12 @@ import {
 } from './data/jukebox';
 import {
   buildSystem,
+  CHAT_ERR,
   FALLBACK_MODEL,
   MAX_TOKENS,
   MSG_MAX,
   TEMPERATURE,
+  toChatLang,
   type KbItem,
 } from './data/chat';
 import { SHAPES, onceUrl, type Proto, type Shape, type Turn } from './data/proto';
@@ -1327,26 +1329,34 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
 
   const cfg = await loadCfg(env);
 
-  // 保险丝（R32：护栏先不设，但要有关停开关）。后台那个开关也走这一条
-  if (cfg.off) return fail(503, '今天先不聊了，回头再来');
-
-  let body: { session?: unknown; tab?: unknown; message?: unknown };
+  let body: { session?: unknown; tab?: unknown; message?: unknown; lang?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return fail(400, '请求体不是 JSON');
   }
 
+  /* 访客所在那一版的语言（R46）。前端从 `<html lang>` 取，白名单在 `toChatLang` 里 ——
+     它决定两件事：**模型用哪种语言作答**（提示词里那条指令）与下面几句错误人话。
+     知识库仍然只有中文：分身读中文原文、用这种语言回答。 */
+  const lang = toChatLang(body.lang);
+  const errs = CHAT_ERR[lang];
+
+  /* 保险丝（R32：护栏先不设，但要有关停开关）。后台那个开关也走这一条。
+     **这一条排在读 body 之后**（R46）：那句话要按访客那一版的语言送出去，
+     而语言就在 body 里。多解析一次 JSON 的代价换一句看得懂的话。 */
+  if (cfg.off) return fail(503, errs.off);
+
   const message = (typeof body.message === 'string' ? body.message : '').trim();
-  if (!message) return fail(400, '说点什么');
+  if (!message) return fail(400, errs.empty);
   // 码点数而不是 .length：一个 emoji 是两个 UTF-16 单元，不该算两个字
-  if ([...message].length > MSG_MAX) return fail(400, `一次最多 ${MSG_MAX} 个字`);
+  if ([...message].length > MSG_MAX) return fail(400, errs.tooLong(MSG_MAX));
 
   let kb: KbItem[];
   try {
     kb = await loadKb(env, req.url);
   } catch {
-    return fail(503, '知识库这会儿读不出来，等一下再问');
+    return fail(503, errs.kb);
   }
 
   // R32 他定了要存 IP。这是 Cloudflare 注入的头，访客改不了
@@ -1408,7 +1418,7 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
      真要再省，方向是**把条目本身写短**（现在平均四百多字），不是随机抽几条 ——
      那是他的内容，得他自己动手。`pickKb` 留在 `data/chat.ts` 里没删，
      等哪天条目多到装不下（六十条以上）再启用，那时漏检的代价才小于装不下的代价。 */
-  const system = buildSystem(kb);
+  const system = buildSystem(kb, lang);
   const past: Turn[] = history.map((h) => ({
     role: (h.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
     content: h.text,
@@ -1502,7 +1512,7 @@ async function chat(req: Request, env: Env, ctx: Ctx): Promise<Response> {
     ctx.waitUntil(noteWhy(env, '全部线路都没通 ｜ ' + why.join(' ｜ ')));
     // 这一轮虽然没答上来，访客那句话已经落库了，索引也要跟上（不然后台看不到这次来访）
     ctx.waitUntil(touchSession(env, session, ip, '', dup ? 0 : 1));
-    return fail(502, '我这会儿答不上来，等一下再问');
+    return fail(502, errs.down);
   }
 
   if (why.length) {

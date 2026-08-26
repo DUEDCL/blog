@@ -12,27 +12,33 @@
  */
 import BaseLayout from './BaseLayout.astro';
 import EntryCard from '../components/EntryCard.astro';
-import type { CollectionEntry } from 'astro:content';
+import { localeOf, t } from '../i18n';
 
 interface Props {
   title: string;
   /**
-   * 竖排栏目标识用的短名（SECTIONS.*.label）。**必须是两个字** ——
+   * 竖排栏目标识用的短名（`i18n` 的 sections.*.label）。**中文必须是两个字** ——
    * 竖排标识的高度等于字数×字号，「技术文章」四个字竖起来比标题本身还高
    * （渲染实测 72px vs 标题 44px），读起来是标题旁边多了一条杆。
+   * 西文那一档是整词侧躺（global.css 里 `html[lang='en'] .vlabel` 那段），
+   * 高度等于词宽，所以英文的 label 也要短。
    * 缺省回落到 title，是为了让调用方漏传时不至于没有标识。
    */
   label?: string;
   description: string;
-  /** 页脚版权行右边那句小字（见 consts.ts 的 SECTIONS 注释） */
+  /** 页脚版权行右边那句小字（见 `i18n/zh.ts` 里 sections 的注释） */
   note: string;
   empty: string;
-  /** 路由前缀，如 /posts */
-  base: string;
-  items: CollectionEntry<'posts' | 'notes'>[];
+  /**
+   * 索引条目。**地址与标题由调用方给全**（`utils/content.ts` 的 `getListItems()`）——
+   * 这一层不再自己拼 `${base}/${id}`，因为那样它就得知道当前是哪种语言。
+   */
+  items: { href: string; title: string; pubDate: Date }[];
 }
 
-const { title, label, description, note, empty, base, items } = Astro.props;
+const { title, label, description, note, empty, items } = Astro.props;
+
+const strings = t(localeOf(Astro.url.pathname));
 ---
 
 <BaseLayout title={title} description={description} footerNote={note} width="broad">
@@ -40,7 +46,7 @@ const { title, label, description, note, empty, base, items } = Astro.props;
     <div class="head__row">
       <span class="vlabel">{label ?? title}</span>
       <h1 class="head__title">{title}</h1>
-      <p class="meta head__count">共 {items.length} 篇</p>
+      <p class="meta head__count">{strings.list.count(items.length)}</p>
     </div>
     <div class="pressrule"></div>
   </header>
@@ -48,11 +54,7 @@ const { title, label, description, note, empty, base, items } = Astro.props;
   {items.length > 0 ? (
     <ul class="briefs rise rise-2">
       {items.map((item) => (
-        <EntryCard
-          href={`${base}/${item.id}`}
-          title={item.data.title}
-          pubDate={item.data.pubDate}
-        />
+        <EntryCard href={item.href} title={item.title} pubDate={item.pubDate} />
       ))}
     </ul>
   ) : (

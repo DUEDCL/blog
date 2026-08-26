@@ -23,15 +23,28 @@
  * 状态一律不存这里：队列、当前曲、播放方式、歌词全在 scripts/jukebox.ts 的
  * 单例闭包里。这个组件只是它的一个视图，负责把状态画成 DOM。
  *
+ * **客户端那几条文案也从这里进去**（R46）：根节点上的 `data-jk-t` 是当前语言那一份
+ * 投影（`i18n/index.ts` 的 `clientStrings()`），`scripts/jukebox.ts` 的 `T()` 读它。
+ * 为什么是这个组件：它在**每一页**都渲染（包括那道门），所以任何页面上的播放器脚本
+ * 都读得到；`/music` 的唱盘台也读这一份，不另挂第二份 JSON。
+ *
  * 样式**由这个组件自己 import**（R22 从 BaseLayout 搬来的一行）：起始页不走 BaseLayout，
  * 而 R22④ 要它也显示状态栏 —— 让样式跟着唯一的必需视图走，凡渲染状态栏的页面就一定有它，
  * 顺带消灭「某一页忘了 import」这个故障模式。`/music` 舞台的样式也在这份文件里，
  * 而舞台走 BaseLayout → 一定渲染状态栏 → 一定拿到样式。
  */
 import '../styles/player.css';
+import { clientStrings, localeOf, t } from '../i18n';
+
+const locale = localeOf(Astro.url.pathname);
+const strings = t(locale).player;
+
+/* 序列化时把 `<` 转义掉：这串会作为 HTML 属性值输出，词条里万一出现 `</script>`
+   之类不该让它闭合外层标签（约定与 photos 详情页那份灯箱 JSON 一致） */
+const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c');
 ---
 
-<div class="jk-mini" data-mini hidden transition:persist="jk">
+<div class="jk-mini" data-mini data-jk-t={jkStrings} hidden transition:persist="jk">
   {/* preload="none"：这东西每一页都挂着，不该为一个可能没人点开的播放器去抓
       metadata；时长本来也来自 data/music.ts 的配置值，不指望 metadata 给。
       没有 controls —— 控制键是下面那几个 */}
@@ -48,7 +61,7 @@ import '../styles/player.css';
         type="button"
         data-fold
         aria-expanded="true"
-        aria-label="收起播放器"
+        aria-label={strings.collapse}
       >
         <span class="jk-mini__disc" aria-hidden="true">
           <img class="jk-mini__cover" data-cover alt="" hidden />
@@ -73,7 +86,7 @@ import '../styles/player.css';
         <span class="jk-mini__s" data-sub></span>
       </p>
 
-      <a class="jk-key jk-key--sm" data-open href="/music" aria-label="打开唱片机">
+      <a class="jk-key jk-key--sm" data-open href="/music" aria-label={strings.openDeck}>
         <svg viewBox="0 0 24 24" aria-hidden="true"
           ><path d="M5 5h6v2H7v10h10v-4h2v6H5z"></path><path
             d="M13 4h7v7h-2V7.41l-7.3 7.3-1.41-1.41L18.59 6H13z"></path></svg
@@ -107,7 +120,7 @@ import '../styles/player.css';
         max="0"
         step="0.05"
         value="0"
-        aria-label="播放进度"
+        aria-label={strings.progress}
       />
       <span class="jk-mini__time" data-dur>0:00</span>
     </div>
@@ -115,7 +128,7 @@ import '../styles/player.css';
     {/* 音量紧跟在进度条下面（R36 他要的顺序：进度 → 音量 → 那排键）。
         原来它排在最后，两条同样长的滑轨被一排圆键隔开，看着像两个不相干的东西 */}
     <div class="jk-mini__vol">
-      <span class="jk-mini__time">音量</span>
+      <span class="jk-mini__time">{strings.volume}</span>
       <input
         class="jk-rng jk-rng--mini"
         type="range"
@@ -124,12 +137,12 @@ import '../styles/player.css';
         max="1"
         step="0.01"
         value="0.8"
-        aria-label="音量"
+        aria-label={strings.volume}
       />
     </div>
 
     <div class="jk-mini__keys">
-      <button class="jk-key jk-key--sm" type="button" data-prev aria-label="上一首">
+      <button class="jk-key jk-key--sm" type="button" data-prev aria-label={strings.prev}>
         <svg viewBox="0 0 24 24" aria-hidden="true"
           ><path d="M7 6h2.1v12H7zM19 6.6v10.8L10.6 12z"></path></svg
         >
@@ -139,7 +152,7 @@ import '../styles/player.css';
         class="jk-key jk-key--sm jk-key--play"
         type="button"
         data-play
-        aria-label="播放"
+        aria-label={strings.play}
         aria-pressed="false"
       >
         <svg class="jk-key__i jk-key__i--play" viewBox="0 0 24 24" aria-hidden="true"
@@ -150,7 +163,7 @@ import '../styles/player.css';
         >
       </button>
 
-      <button class="jk-key jk-key--sm" type="button" data-next aria-label="下一首">
+      <button class="jk-key jk-key--sm" type="button" data-next aria-label={strings.next}>
         <svg viewBox="0 0 24 24" aria-hidden="true"
           ><path d="M14.9 6h2.1v12h-2.1zM5 6.6v10.8L13.4 12z"></path></svg
         >
@@ -184,8 +197,9 @@ import '../styles/player.css';
 <script>
   import { formatTime } from '../data/music';
   import {
-    MODES,
+    T,
     WordRun,
+    fill1,
     attach,
     coverOf,
     cycleMode,
@@ -488,7 +502,7 @@ import '../styles/player.css';
         // 图标规则与转盘的 animation-play-state 就都吃到了
         root.classList.toggle('is-playing', on);
         play.setAttribute('aria-pressed', String(on));
-        play.setAttribute('aria-label', on ? '暂停' : '播放');
+        play.setAttribute('aria-label', on ? T().pause : T().play);
         const d = dur();
         seek.max = String(d || 0);
         durEl.textContent = formatTime(d);
@@ -497,7 +511,13 @@ import '../styles/player.css';
         vol.value = String(getVol());
         vol.style.setProperty('--p', String(getVol()));
         modeKey.dataset.m = String(getMode());
-        modeKey.setAttribute('aria-label', '播放方式：' + MODES[getMode()]);
+        /* 文案与 /music 那台唱盘台走同一份投影（`T()` 读的是这个组件根节点上的
+           `data-jk-t`），所以两处显示的必然是同一档、同一种语言 */
+        const tt = T();
+        modeKey.setAttribute(
+          'aria-label',
+          fill1(tt.modeLabel, 'mode', tt.modes[getMode()] ?? ''),
+        );
         show();
       },
 
@@ -682,7 +702,7 @@ import '../styles/player.css';
       const pill = root.classList.contains('is-fold');
       const dock = root.classList.contains('is-dock');
       fold.setAttribute('aria-expanded', String(!pill && !dock));
-      fold.setAttribute('aria-label', pill || dock ? '展开播放器' : '收起播放器');
+      fold.setAttribute('aria-label', pill || dock ? T().expand : T().collapse);
     };
 
     /** 前两态：全展开（歌词/歌名/音量/上下首）↔ 药丸（歌词/歌名/上下首/播放） */

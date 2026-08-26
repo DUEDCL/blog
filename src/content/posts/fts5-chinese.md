@@ -3,6 +3,16 @@ title: SQLite FTS5 搜不到中文，我是先测出来才动手写的
 description: unicode61 把整段汉字当成一个 token。绕开它的办法不是换分词器，是索引派生 token —— 顺带说清为什么查询侧必须把单字丢掉。
 pubDate: 2026-08-06
 tags: ['SQLite', '全文检索', 'Python']
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "SQLite FTS5 cannot find Chinese — I measured that before writing a line"
+    description: "unicode61 treats a whole run of Han characters as one token. The way around it is not a different tokeniser but indexing derived tokens — and here is why the query side has to drop single characters."
+  ja:
+    title: "SQLite FTS5 で中国語が引けない。書く前に測って分かった"
+    description: "unicode61 は漢字のひと続きを一つのトークンとして扱う。回避策は分詞器の差し替えではなく、派生トークンを索引に入れることだ —— ついでに、検索側で一文字を捨てなければならない理由も書いた。"
 ---
 
 给语音平台做记忆层，选的是 SQLite 加 FTS5：单文件、无服务、进程内，跟「本地优先」那条红线正好合。

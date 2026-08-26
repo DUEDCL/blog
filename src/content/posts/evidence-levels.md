@@ -3,6 +3,16 @@ title: 代码是 AI 写的，所以我给证据分了七级
 description: 编程 agent 报「已完成」的成本几乎为零。于是我把验证等级写进项目宪法：不得把低等级证据当高等级用，实现者不得批准自己的实现。
 pubDate: 2026-08-13
 tags: ['方法论', '测试', 'Agent']
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "The code is written by AI, so I graded evidence into seven levels"
+    description: "It costs a coding agent almost nothing to report “done”. So the verification levels went into the project constitution: low-grade evidence may not be passed off as high-grade, and no implementer approves their own implementation."
+  ja:
+    title: "コードは AI が書く。だから証拠を七段に分けた"
+    description: "コーディングエージェントが「完了」と報告するコストはほぼゼロだ。だから検証等級をプロジェクト憲章に書いた：低い等級の証拠を高い等級として使ってはならない、実装者は自分の実装を承認してはならない。"
 ---
 
 我的项目里代码大部分是编程 agent 写的，架构、契约、取舍和验收口径由我定。这套分工最花心思的地方不是功能，是**怎么不让「已完成」这三个字通胀**。

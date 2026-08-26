@@ -1,27 +1,50 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
-import { NAV } from '../consts';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { NAV } from '../../consts';
+import { LOCALE_PARAMS, localePath, t, toLocale } from '../../i18n';
+
+/**
+ * 三种语言各一张：`/404.html`、`/en/404.html`、`/ja/404.html`。
+ *
+ * 平台侧真正用得上的是**根路径那一张** —— Cloudflare 的静态资源在找不到文件时
+ * 送 `dist/404.html`，它不会按访客的 `Accept-Language` 去挑 `/en/404.html`。
+ * 那两张仍然生成：直接被访问时（比如站内某处链错了）它们至少是对的语言。
+ */
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+const s = strings.notFound;
+
+/* 七个出口。这一页把首页那项也列出来（顶栏滤掉它是因为站名承担了回首页，
+   而这一页没有可点的站名以外的入口线索） */
+const ways = NAV.map((item) => ({
+  href: localePath(locale, item.href),
+  label: strings.nav[item.key],
+}));
 ---
 
-<BaseLayout title="页面不存在" description="没有找到这个页面。" width="broad">
+<BaseLayout title={s.title} description={s.description} width="broad">
   {/* R44：报纸的**更正栏**。上一版是一张居中的圆角玻璃卡，与站上其他页的
       卡片长得一样 —— 一个「什么都没找到」的页面和一个列表页视觉重量相同。
       「更正」是报刊里勘误那一栏的名字，用在这儿正好，不用另造一个词。 */}
   <section class="void rise rise-1">
     <div class="void__row">
-      <span class="vlabel">更正</span>
-      <h1 class="title">这里没有东西</h1>
+      <span class="vlabel">{s.label}</span>
+      <h1 class="title">{s.heading}</h1>
       <p class="meta code">404</p>
     </div>
 
     <div class="pressrule"></div>
 
-    <p class="hint">地址可能拼错了，或者这篇内容已经被我删掉了。</p>
+    <p class="hint">{s.hint}</p>
 
-    <p class="meta ways__label">回哪儿去</p>
+    <p class="meta ways__label">{s.ways}</p>
     <ul class="ways">
       {
-        NAV.map((item) => (
+        ways.map((item) => (
           <li>
             <a href={item.href}>{item.label}</a>
           </li>

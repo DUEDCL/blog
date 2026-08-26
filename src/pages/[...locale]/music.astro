@@ -26,9 +26,18 @@
  * 反光那层**不能跟着盘一起转** —— 真唱片转起来时高光是钉在光源方向不动的，
  * 一起转就变成风车了。所以沟槽在 .vinyl__disc（转），反光在 .vinyl__sheen（不转）。
  */
-import BaseLayout from '../layouts/BaseLayout.astro';
-import { TRACKS, parseLrc, formatTime } from '../data/music';
-import { CHARTS, SEARCH_MAX_Q } from '../data/jukebox';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { TRACKS, parseLrc, formatTime } from '../../data/music';
+import { CHARTS, SEARCH_MAX_Q } from '../../data/jukebox';
+import { LOCALE_PARAMS, t, toLocale } from '../../i18n';
+
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+const s = strings.music;
 
 /**
  * 构建期只渲染「第一首 + 原始队列」的静态形态，意义只有一个：从首屏（以及 SPA 落地）
@@ -40,21 +49,24 @@ import { CHARTS, SEARCH_MAX_Q } from '../data/jukebox';
  * 而当前曲要等接线才知道；那些行只留给下面的无 JS 降级用。
  */
 const first = TRACKS[0];
+
+/*
+ * 这一页**不另挂一份客户端文案**（R46）：唱盘台与点歌台的运行期文字与状态栏用的是
+ * 同一份投影，挂在 MiniPlayer 根节点的 `data-jk-t` 上（`scripts/jukebox.ts` 的
+ * `T()` 读它）。这一页一定渲染状态栏（走 BaseLayout），所以那一份一定在。
+ * 两处各挂一份 JSON 的下一步，就是其中一份忘了加新词条。
+ */
 ---
 
-<BaseLayout
-  title="唱片机"
-  description="在听什么 —— 一台自己写的播放器，随片文字跟着走。"
-  footerNote="听一点音乐吧，让时间慢下来。"
->
+<BaseLayout title={s.title} description={s.description} footerNote={s.note}>
   {/* 这一页没有页头卡 —— 唱盘台自己就是标题，再压一张「在听什么／唱片机」的卡
       只是把转盘往下推。那句「听一点音乐吧」搬去了页脚（footerNote）。
       但 h1 不能跟着没：一页无 h1 会让读屏器与大纲失去落点，所以留一个视觉隐藏的 */}
-  <h1 class="visually-hidden">唱片机</h1>
+  <h1 class="visually-hidden">{s.heading}</h1>
 
   {/* ---------- 有 JS：整台唱片机 ---------- */}
   <div class="deck-only">
-    <section class="jk-deck glass rise rise-1" data-deck aria-label="播放器">
+    <section class="jk-deck glass rise rise-1" data-deck aria-label={s.deck}>
       <div class="jk-vinyl" data-vinyl>
         <div class="jk-vinyl__disc">
           {/* 唱片中心那个圆标签。里面两层，同一时刻只露一层（R22①）：
@@ -85,7 +97,7 @@ const first = TRACKS[0];
         </p>
 
         <div class="jk-ctl__keys">
-          <button class="jk-key" type="button" data-prev aria-label="上一首">
+          <button class="jk-key" type="button" data-prev aria-label={s.prev}>
             <svg viewBox="0 0 24 24" aria-hidden="true"
               ><path d="M7 6h2.1v12H7zM19 6.6v10.8L10.6 12z"></path></svg
             >
@@ -95,7 +107,7 @@ const first = TRACKS[0];
             class="jk-key jk-key--play"
             type="button"
             data-play
-            aria-label="播放"
+            aria-label={s.play}
             aria-pressed="false"
           >
             <svg class="jk-key__i jk-key__i--play" viewBox="0 0 24 24" aria-hidden="true"
@@ -106,7 +118,7 @@ const first = TRACKS[0];
             >
           </button>
 
-          <button class="jk-key" type="button" data-next aria-label="下一首">
+          <button class="jk-key" type="button" data-next aria-label={s.next}>
             <svg viewBox="0 0 24 24" aria-hidden="true"
               ><path d="M14.9 6h2.1v12h-2.1zM5 6.6v10.8L13.4 12z"></path></svg
             >
@@ -153,13 +165,13 @@ const first = TRACKS[0];
             max={first.duration}
             step="0.05"
             value="0"
-            aria-label="播放进度"
+            aria-label={s.progress}
           />
           <span class="jk-ctl__time meta" data-dur>{formatTime(first.duration)}</span>
         </div>
 
         <div class="jk-ctl__vol">
-          <span class="meta">音量</span>
+          <span class="meta">{s.volume}</span>
           <input
             class="jk-rng jk-rng--vol"
             type="range"
@@ -168,7 +180,7 @@ const first = TRACKS[0];
             max="1"
             step="0.01"
             value="0.8"
-            aria-label="音量"
+            aria-label={s.volume}
           />
         </div>
       </div>
@@ -179,7 +191,7 @@ const first = TRACKS[0];
     </section>
 
     <div class="jk-cols">
-      <section class="jk-lyr glass rise rise-2" aria-label="随片文字">
+      <section class="jk-lyr glass rise rise-2" aria-label={s.lyrics}>
         {/* 一张空词表，行由视图按**当前曲**铺（歌词在单例的状态里，不在这儿）。
             以前是每首一张 <ol> 全渲染进 DOM、靠 hidden 切 —— 队列能被点歌加长到
             任意长度，那个做法从点歌台上线起就已经只能覆盖本地那几首了 */}
@@ -188,7 +200,7 @@ const first = TRACKS[0];
         </div>
       </section>
 
-      <section class="jk-list glass rise rise-2" aria-label="曲目">
+      <section class="jk-list glass rise rise-2" aria-label={s.tracklist}>
         <ol class="jk-list__ol">
           {TRACKS.map((t, i) => (
             <li>
@@ -212,12 +224,9 @@ const first = TRACKS[0];
     </div>
 
     {/* ---------- 点歌台。整块在 .deck-only 里，所以天生只在有 JS 时出现 ---------- */}
-    <section class="jk-juke glass rise rise-2" aria-label="点歌">
-      <h2 class="jk-juke__h">点歌</h2>
-      <p class="jk-juke__note">
-        挑个歌单，或者搜歌名、歌手。点一首就加到上面的曲目里，接着往下放；
-        「全部播放」把整批都加进队列，从第一首开始。
-      </p>
+    <section class="jk-juke glass rise rise-2" aria-label={s.juke.heading}>
+      <h2 class="jk-juke__h">{s.juke.heading}</h2>
+      <p class="jk-juke__note">{s.juke.lead}</p>
 
       {/* 不用 role="tablist"：那套要自己接方向键与 aria-selected，
           这里只是「按一下换一批结果」，aria-pressed 的按钮组更贴事实 */}
@@ -229,7 +238,7 @@ const first = TRACKS[0];
             data-chart={c.id}
             aria-pressed="false"
           >
-            {c.name}
+            {s.juke.charts[c.key]}
           </button>
         ))}
       </div>
@@ -240,26 +249,26 @@ const first = TRACKS[0];
           type="search"
           data-q
           name="q"
-          placeholder="搜歌名或歌手"
+          placeholder={s.juke.searchPlaceholder}
           maxlength={SEARCH_MAX_Q}
           autocomplete="off"
-          aria-label="搜索歌曲"
+          aria-label={s.juke.searchLabel}
         />
-        <button class="jk-juke__go" type="submit">搜</button>
+        <button class="jk-juke__go" type="submit">{s.juke.searchGo}</button>
       </form>
 
       {/* 状态只有一处，出错、结果条数、正在取都走这里；
           「全部播放」跟它同一行 —— 有结果时才可按，所以挨着条数最好懂 */}
       <div class="jk-juke__bar">
-        <p class="jk-juke__msg meta" data-msg aria-live="polite">挑个歌单，或者搜一下。</p>
+        <p class="jk-juke__msg meta" data-msg aria-live="polite">{s.juke.idle}</p>
         <button
           class="jk-juke__all"
           type="button"
           data-all
           disabled
-          aria-label="全部加入队列并播放"
+          aria-label={s.juke.playAllLabel}
         >
-          全部播放
+          {s.juke.playAll}
         </button>
       </div>
 
@@ -291,11 +300,12 @@ const first = TRACKS[0];
 </BaseLayout>
 
 <script>
-  import { formatTime } from '../data/music';
-  import { SEARCH_MAX_N } from '../data/jukebox';
+  import { formatTime } from '../../data/music';
+  import { SEARCH_MAX_N } from '../../data/jukebox';
   import {
-    MODES,
+    T,
     WordRun,
+    fill1,
     add,
     addAll,
     ask,
@@ -320,7 +330,7 @@ const first = TRACKS[0];
     time,
     toggle,
     type View,
-  } from '../scripts/jukebox';
+  } from '../../scripts/jukebox';
 
   /**
    * 这一页是 scripts/jukebox.ts 那个单例的**一个视图** —— 大屏歌词舞台。
@@ -500,7 +510,9 @@ const first = TRACKS[0];
       } else {
         // 点歌进来的歌词是异步取的：还没落地就说「正在取」，取过一次了才是「没有」
         const wait = !!t.ref && !t.lyricDone;
-        sheet.append(mkLine(0, wait ? '（正在取歌词…）' : '（这首没有歌词）', true));
+        sheet.append(
+          mkLine(0, wait ? T().lyricsLoading : T().lyricsNone, true),
+        );
       }
 
       // 换歌回到词首，并把上一首留下的静默期一起清掉 —— 换首歌就该重新跟随了
@@ -597,10 +609,12 @@ const first = TRACKS[0];
         const on = playing();
         deck.classList.toggle('is-playing', on);
         btnPlay.setAttribute('aria-pressed', String(on));
-        btnPlay.setAttribute('aria-label', on ? '暂停' : '播放');
+        btnPlay.setAttribute('aria-label', on ? T().pause : T().play);
 
         btnMode.dataset.m = String(getMode());
-        const label = '播放方式：' + MODES[getMode()];
+        /* 与状态栏那枚键读的是同一份投影，所以两处永远同一档、同一种语言 */
+        const tt = T();
+        const label = fill1(tt.modeLabel, 'mode', tt.modes[getMode()] ?? '');
         btnMode.setAttribute('aria-label', label);
         btnMode.title = label;
 
@@ -698,7 +712,9 @@ const first = TRACKS[0];
       c.addEventListener('click', () => {
         chips.forEach((o) => o.setAttribute('aria-pressed', String(o === c)));
         elQ.value = '';
-        void ask(c.textContent?.trim() || '歌单', 'list', { id: c.dataset.chart ?? '' });
+        void ask(c.textContent?.trim() || T().juke.chartFallback, 'list', {
+          id: c.dataset.chart ?? '',
+        });
       });
     });
 
@@ -707,11 +723,14 @@ const first = TRACKS[0];
       const kw = elQ.value.trim();
       if (!kw) {
         // 这句只关这一个表单，不进单例的状态：换页回来不该还挂着「要搜什么」
-        elMsg.textContent = '要搜什么';
+        elMsg.textContent = T().juke.needKeyword;
         return;
       }
       chips.forEach((o) => o.setAttribute('aria-pressed', 'false'));
-      void ask('「' + kw + '」', 'search', { q: kw, n: String(SEARCH_MAX_N) });
+      void ask(fill1(T().juke.quoted, 'kw', kw), 'search', {
+        q: kw,
+        n: String(SEARCH_MAX_N),
+      });
     });
 
     seek.addEventListener('pointerdown', () => {

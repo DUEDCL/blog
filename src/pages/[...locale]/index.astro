@@ -85,36 +85,54 @@
  */
 import { Image } from 'astro:assets';
 import { ClientRouter } from 'astro:transitions';
-import MiniPlayer from '../components/MiniPlayer.astro';
-import ThemeBoot from '../components/ThemeBoot.astro';
-import avatar from '../assets/avatar.jpg';
-import { SITE_TITLE } from '../consts';
+import MiniPlayer from '../../components/MiniPlayer.astro';
+import ThemeBoot from '../../components/ThemeBoot.astro';
+import avatar from '../../assets/avatar.jpg';
+import { SITE_TITLE, SITE_URL } from '../../consts';
+import {
+  alternates,
+  HTML_LANG,
+  LOCALE_PARAMS,
+  localePath,
+  t,
+  toLocale,
+} from '../../i18n';
+
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
 
 /**
  * 点或滑之后去哪。整页只有这一个去处，所以不再需要一张链接表。
  * 写进 data-enter 给脚本读 —— bundled script 拿不到 frontmatter 变量。
  * R14 阶段⑥ 之后这里是 /home：这一页自己占了根路径，正站首页搬去了 /home。
+ * R46 起带语言前缀：从 `/en/` 这道门进去要落在 `/en/home`。
  */
-const ENTER = '/home';
+const ENTER = localePath(locale, '/home');
+
+/* 这一页不走 BaseHead，`<head>` 里的每一条都得自己写 —— canonical 与三条 hreflang
+   也一样。三种语言的门各是一张真页面（`/`、`/en/`、`/ja/`），所以它们必须互指。 */
+const canonical = new URL(Astro.url.pathname, SITE_URL);
+const alts = alternates(Astro.url.pathname);
 ---
 
 <!doctype html>
-<html lang="zh-Hans">
+<html lang={HTML_LANG[locale]}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     {/* R14 阶段⑥ 之后这是根路径的标题，也就是搜到本站时排在最前的那一行。
         「· 入口」留着是如实描述 —— 这一页是门，不是正站首页；正站首页在 /home，
         标题只有「沉麟」两个字（BaseHead 的规则：首页不重复站名）。 */}
-    <title>沉麟 · 入口</title>
+    <title>{strings.portal.title(SITE_TITLE)}</title>
     {/* description 是 <head> 元数据、不显示在页面上，所以「不要出现任何别的词」
         不管它 —— 搜索结果里这一页总得有一句话，否则抓到的就只有一个标题。
         阶段⑥ 之后这一条更要紧：根路径的正文只剩头像、两个字和一句题词，
         这句话是搜索引擎能从 / 读到的唯一一段完整介绍。 */}
-    <meta
-      name="description"
-      content="对细节挑剔，对「差不多」没耐心。这里存放做过的东西，和把它们做对的过程。"
-    />
+    <meta name="description" content={strings.portal.description} />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#050505" />
     {/* 国内几个 App 内置浏览器会把页面送去「转码/省流」再返回，排版会被彻底重排
@@ -124,9 +142,10 @@ const ENTER = '/home';
     <meta http-equiv="Cache-Control" content="no-transform" />
     <meta name="applicable-device" content="pc,mobile" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    {/* 这一页不走 BaseHead，canonical 只能自己写死。阶段⑥ 之后是根路径，
-        不再是 /start（那个地址现在是一张跳到这儿的 meta-refresh 页）。 */}
-    <link rel="canonical" href="https://duchenlin.top/" />
+    <link rel="canonical" href={canonical} />
+    {alts.map((a) => (
+      <link rel="alternate" hreflang={a.hreflang} href={new URL(a.path, SITE_URL)} />
+    ))}
 
     {/* 全站 SPA 导航。按页注入 —— 这一页没有它，点进正站就是整页刷新，音乐会断 */}
     <ClientRouter />
@@ -200,8 +219,12 @@ const ENTER = '/home';
               「再在启动页中加一句话『沉舟莫断鹏程路，金鳞岂为池中物』，这句话用合适的
               特殊字体颜色表现出来」，是沉麟自己改的主意，照新的做。
               两个半句各包一个 <span>：窄到装不下时只许折在中间那个逗号后面，
-              不许折在半句当中（对句折行本来就该折在句读上）。 */}
-          <p class="verse">
+              不许折在半句当中（对句折行本来就该折在句读上）。
+
+              **三种语言下都是这一句中文，`lang` 写死 zh-Hans**（R46）：它是一副
+              对句，译过去就不是那句诗了 —— 与刊名同一条理由。标注 lang 是为了让
+              英文/日文页面上的读屏器用中文音库念它，而不是按英文拼读。 */}
+          <p class="verse" lang="zh-Hans">
             <span>沉舟莫断鹏程路，</span><span>金鳞岂为池中物</span>
           </p>
         </div>
@@ -214,7 +237,7 @@ const ENTER = '/home';
           class="go"
           id="go"
           type="button"
-          aria-label={`进入 ${SITE_TITLE} 的站内`}
+          aria-label={strings.portal.enter(SITE_TITLE)}
         >
           <i></i>
         </button>
@@ -250,14 +273,17 @@ const ENTER = '/home';
        * 意思都不是「进站」，也不是「起播」。
        */
       import { navigate } from 'astro:transitions/client';
-      import { everPlayed, playing, toggle } from '../scripts/jukebox';
+      import { everPlayed, playing, toggle } from '../../scripts/jukebox';
 
       /** 当前页的舞台。不在门上时是 null，下面那几个手势监听随之空转 */
       let stage: HTMLElement | null = null;
       /** 已经绑过 click 的那个节点，防止同一个 stage 被绑第二次 */
       let bound: HTMLElement | null = null;
       /* 兜底跟着 ENTER 走。阶段⑥ 之后不能再写 '/' —— 那就是这一页自己，
-         属性万一丢了，点一下会变成「原地刷新」，看起来像门坏了 */
+         属性万一丢了，点一下会变成「原地刷新」，看起来像门坏了。
+         R46：兜底仍是中文那道首页。`data-enter` 上带的才是**当前这道门**对应的语言
+         （`/home` / `/en/home` / `/ja/home`），属性正常时永远用它 ——
+         这里写不出语言，因为 bundled script 拿不到 frontmatter。 */
       let to = '/home';
 
       let leaving = false;

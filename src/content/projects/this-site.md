@@ -7,6 +7,16 @@ link: 'https://duchenlin.top'
 repo: 'https://github.com/DUEDCL/blog'
 status: 'active'
 featured: true
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "duchenlin.top"
+    description: "This site itself. A static Astro site, written in Markdown, deployed with one command, with no dependency on any CDN outside China; it also carries a double of me that answers from my own knowledge base."
+  ja:
+    title: "duchenlin.top"
+    description: "このサイトそのもの。Astro の静的サイト、Markdown で書き、コマンド一つで配備、国外 CDN に一切依存しない。私の知識ベースから答える分身も載っている。"
 ---
 
 我的个人站点，也是第一个上线的东西。

@@ -1,23 +1,25 @@
 ---
 import { Image } from 'astro:assets';
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import FormattedDate from '../../components/FormattedDate.astro';
-import { getPublished } from '../../utils/content';
-import { SECTIONS } from '../../consts';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import FormattedDate from '../../../components/FormattedDate.astro';
+import { getListItems, tagName } from '../../../utils/content';
+import { LOCALE_PARAMS, t, toLocale } from '../../../i18n';
 
-const projects = await getPublished('projects');
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
 
-const STATUS_LABEL = {
-  active: '在用',
-  wip: '进行中',
-  archived: '已归档',
-} as const;
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+const s = strings.sections.projects;
+
+const projects = await getListItems('projects', locale);
 ---
 
 <BaseLayout
-  title={SECTIONS.projects.title}
-  description={SECTIONS.projects.description}
-  footerNote={SECTIONS.projects.note}
+  title={s.title}
+  description={s.description}
+  footerNote={s.note}
   width="broad"
 >
   {/* R44 从「玻璃卡片网格」改成一栏索引。判据是内容本身：五个作品**一个都没有封面图**
@@ -27,9 +29,9 @@ const STATUS_LABEL = {
       封面支持没有删：填了 cover 的作品会在左侧多一张方图。 */}
   <header class="head rise rise-1">
     <div class="head__row">
-      <span class="vlabel">{SECTIONS.projects.label}</span>
-      <h1 class="head__title">{SECTIONS.projects.title}</h1>
-      <p class="meta head__count">共 {projects.length} 个</p>
+      <span class="vlabel">{s.label}</span>
+      <h1 class="head__title">{s.title}</h1>
+      <p class="meta head__count">{strings.projects.count(projects.length)}</p>
     </div>
     <div class="pressrule"></div>
   </header>
@@ -38,7 +40,7 @@ const STATUS_LABEL = {
     <ul class="works rise rise-2">
       {projects.map((p) => (
         <li class="work">
-          <a href={`/projects/${p.id}`} class="work__main">
+          <a href={p.href} class="work__main">
             {p.data.cover && (
               <div class="work__shot">
                 <Image
@@ -52,25 +54,25 @@ const STATUS_LABEL = {
 
             <div class="work__body">
               <div class="work__top">
-                <h2 class="work__title">{p.data.title}</h2>
+                <h2 class="work__title">{p.title}</h2>
                 <span class:list={['badge', `badge--${p.data.status}`]}>
-                  {STATUS_LABEL[p.data.status]}
+                  {strings.projects.status[p.data.status as 'active' | 'wip' | 'archived']}
                 </span>
               </div>
 
-              <p class="work__desc">{p.data.description}</p>
+              <p class="work__desc">{p.description}</p>
             </div>
           </a>
 
           <div class="work__foot">
             <p class="meta work__date">
-              <FormattedDate date={p.data.pubDate} />
+              <FormattedDate date={p.pubDate} />
             </p>
 
             {p.data.tags.length > 0 && (
               <p class="meta work__tags">
-                {p.data.tags.slice(0, 4).map((t) => (
-                  <span class="work__tag">{t}</span>
+                {p.data.tags.slice(0, 4).map((tag: string) => (
+                  <span class="work__tag">{tagName(tag, locale)}</span>
                 ))}
               </p>
             )}
@@ -79,10 +81,14 @@ const STATUS_LABEL = {
             {(p.data.link || p.data.repo) && (
               <p class="work__links">
                 {p.data.link && (
-                  <a href={p.data.link} target="_blank" rel="noopener">线上 ↗</a>
+                  <a href={p.data.link} target="_blank" rel="noopener">
+                    {strings.projects.live}
+                  </a>
                 )}
                 {p.data.repo && (
-                  <a href={p.data.repo} target="_blank" rel="noopener">源码 ↗</a>
+                  <a href={p.data.repo} target="_blank" rel="noopener">
+                    {strings.projects.repo}
+                  </a>
                 )}
               </p>
             )}
@@ -91,7 +97,7 @@ const STATUS_LABEL = {
       ))}
     </ul>
   ) : (
-    <p class="empty">{SECTIONS.projects.empty}</p>
+    <p class="empty">{s.empty}</p>
   )}
 </BaseLayout>
 

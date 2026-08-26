@@ -1,31 +1,35 @@
 ---
 // 归档：把四个栏目的内容合成一条按年分组的时间线。
 // 全自动 —— 新增任何内容都会自己出现在这里，不需要维护。
-import BaseLayout from '../layouts/BaseLayout.astro';
-import FormattedDate from '../components/FormattedDate.astro';
-import { getEntriesByYear } from '../utils/content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FormattedDate from '../../components/FormattedDate.astro';
+import { getEntriesByYear } from '../../utils/content';
+import { LOCALE_PARAMS, t, toLocale } from '../../i18n';
 
-const years = await getEntriesByYear();
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const s = t(locale).archive;
+
+const years = await getEntriesByYear(locale);
 const total = years.reduce((sum, y) => sum + y.entries.length, 0);
 ---
 
-<BaseLayout
-  title="归档"
-  description="沉麟站内全部内容的时间线，按年份分组。"
-  width="broad"
->
+<BaseLayout title={s.title} description={s.description} width="broad">
   <header class="head rise rise-1">
     {/* 与栏目列表页同一套页头（竖排标识 + 标题 + 计数 + 朱红报头线）——
         R44 之前这里是「ARCHIVE + 标题 + 一段描述」，三个索引页三种页头 */}
     <div class="head__row">
-      <span class="vlabel">归档</span>
-      <h1 class="head__title">归档</h1>
-      <p class="meta head__count">共 {total} 篇</p>
+      <span class="vlabel">{s.title}</span>
+      <h1 class="head__title">{s.title}</h1>
+      <p class="meta head__count">{s.count(total)}</p>
     </div>
 
     <div class="pressrule"></div>
 
-    <p class="head__desc">文章、随笔与作品合成一条时间线。</p>
+    <p class="head__desc">{s.lead}</p>
 
     {total > 0 && (
       /* 搜索只过滤下面已经渲染出来的 DOM，不内联 JSON、不建索引 —— 全站条目
@@ -35,11 +39,21 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
           type="search"
           id="find"
           class="find__input"
-          placeholder="搜标题"
+          placeholder={s.searchPlaceholder}
           autocomplete="off"
           aria-describedby="find-count"
         />
-        <p class="meta find__count" id="find-count" role="status" aria-live="polite"></p>
+        {/* 两条状态文案**以模板串的形式挂在这儿**（R46）：下面那段脚本是 bundled
+            module，import 不到当前页面的语言。占位符由脚本 replace 掉 ——
+            词条因此仍然只有 `i18n/*.ts` 一个来源。 */}
+        <p
+          class="meta find__count"
+          id="find-count"
+          role="status"
+          aria-live="polite"
+          data-t-hit={s.hit('{n}', '{total}')}
+          data-t-miss={s.miss('{q}')}
+        ></p>
       </div>
     )}
   </header>
@@ -67,7 +81,7 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
       ))}
     </div>
   ) : (
-    <p class="empty">还没有内容。</p>
+    <p class="empty">{s.empty}</p>
   )}
 </BaseLayout>
 
@@ -82,6 +96,11 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     const input = document.getElementById('find') as HTMLInputElement | null;
     const count = document.getElementById('find-count');
     if (!input || !count) return;
+
+    /* 两条文案由服务端渲染成模板串挂在 `#find-count` 上（见上面那段注释）。
+       这个模块 import 不到当前页面的语言，DOM 是唯一能拿到它的地方。 */
+    const tHit = count.dataset.tHit ?? '';
+    const tMiss = count.dataset.tMiss ?? '';
 
     const years = [...document.querySelectorAll<HTMLElement>('.year')].map((year) => ({
       el: year,
@@ -111,7 +130,11 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
       }
 
       count.textContent =
-        q === '' ? '' : hits === 0 ? `没有匹配「${input.value.trim()}」的标题` : `命中 ${hits} / ${total}`;
+        q === ''
+          ? ''
+          : hits === 0
+            ? tMiss.replace('{q}', input.value.trim())
+            : tHit.replace('{n}', String(hits)).replace('{total}', String(total));
     };
 
     input.addEventListener('input', apply);

@@ -6,6 +6,16 @@ tags: ['Python', '语音', 'Agent', 'Tauri']
 repo: 'https://github.com/DUEDCL/vox-'
 status: 'wip'
 featured: true
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "Vox"
+    description: "A local-first wake-word agent platform. Chinese wake word → voiceprint check → local recognition → dispatch to an external agent → local speech synthesis. No audio ever leaves the machine."
+  ja:
+    title: "Vox"
+    description: "ローカル優先のウェイクワード・エージェント基盤。中国語のウェイクワード → 声紋の確認 → ローカル認識 → 外部エージェントへ振り分け → ローカル合成で読み上げ。音声は一度も外に出ない。"
 ---
 
 Windows 上的语音唤醒对话平台，我现在花时间最多的东西。

@@ -11,7 +11,8 @@ import 'katex/dist/katex.min.css'; /* 自托管，不走 CDN */
 import { Image } from 'astro:assets';
 import BaseLayout from './BaseLayout.astro';
 import FormattedDate from '../components/FormattedDate.astro';
-import { tagHref } from '../utils/content';
+import { tagHref, tagName } from '../utils/content';
+import { localeOf, t } from '../i18n';
 import type { ImageMetadata } from 'astro';
 
 interface Props {
@@ -22,8 +23,13 @@ interface Props {
   tags?: string[];
   cover?: ImageMetadata;
   coverAlt?: string;
-  /** 面包屑用：所属栏目 */
+  /** 面包屑用：所属栏目。`href` 要带语言前缀 */
   section: { href: string; label: string };
+  /**
+   * 正文是中文原文、当前页面却是别的语言时传 true（R46）。
+   * 那时署名行下面多一条提示 —— **不假装有译文**，也不因为没译就让这一页 404。
+   */
+  onlyOriginal?: boolean;
 }
 
 const {
@@ -35,7 +41,26 @@ const {
   cover,
   coverAlt,
   section,
+  onlyOriginal = false,
 } = Astro.props;
+
+const locale = localeOf(Astro.url.pathname);
+const strings = t(locale);
+
+/**
+ * 「更新于 X」这一句**不能拼**：中文是「更新于 2026.08.16」，日文是
+ * 「2026.08.16 更新」—— 前缀与后缀的位置随语言变。所以先把日期格式化成字符串，
+ * 整句交给词条去拼（`i18n` 的 `article.updated`），这里只负责给它一个日期。
+ * 也因此这一处不走 `FormattedDate` 组件：那个组件输出的是 `<time>` 节点，
+ * 拼不进一句话里。
+ */
+const upd = updatedDate
+  ? strings.date.short(
+      updatedDate.getFullYear(),
+      updatedDate.getMonth() + 1,
+      updatedDate.getDate()
+    )
+  : '';
 ---
 
 <BaseLayout
@@ -64,16 +89,18 @@ const {
           {updatedDate && (
             <>
               <span class="sep" aria-hidden="true">/</span>
-              <span>更新于 <FormattedDate date={updatedDate} /></span>
+              <time datetime={updatedDate.toISOString()}>
+                {strings.article.updated(upd)}
+              </time>
             </>
           )}
         </div>
 
         {tags.length > 0 && (
           <ul class="tags">
-            {tags.map((t) => (
+            {tags.map((tag) => (
               <li>
-                <a class="tag" href={tagHref(t)}>{t}</a>
+                <a class="tag" href={tagHref(tag, locale)}>{tagName(tag, locale)}</a>
               </li>
             ))}
           </ul>
@@ -81,6 +108,10 @@ const {
       </div>
 
       <div class="hairline"></div>
+
+      {/* 正文没译时的实话（R46）。位置在细线**下面**、正文上面 ——
+          它说明的是「下面这段是什么语言」，属于正文而不属于署名行 */}
+      {onlyOriginal && <p class="original meta">{strings.article.onlyInChinese}</p>}
     </header>
 
     {cover && (
@@ -95,7 +126,7 @@ const {
   </article>
 
   <nav class="back">
-    <a href={section.href}>← 回到{section.label}</a>
+    <a href={section.href}>{strings.article.backTo(section.label)}</a>
   </nav>
 </BaseLayout>
 

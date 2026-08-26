@@ -1,0 +1,48 @@
+---
+import { getCollection, render } from 'astro:content';
+import ArticleLayout from '../../../layouts/ArticleLayout.astro';
+import { localized, translationOf } from '../../../utils/content';
+import { DEFAULT_LOCALE, LOCALE_PARAMS, localePath, t, toLocale } from '../../../i18n';
+
+/**
+ * 三种语言 × 每篇文章。**中文那一份的地址一个字都没变**（`/posts/foo`）——
+ * `[...locale]` 取 undefined 时就落在无前缀路径上。
+ */
+export async function getStaticPaths() {
+  const posts = await getCollection('posts', ({ data }) =>
+    import.meta.env.DEV ? true : data.draft !== true
+  );
+
+  return LOCALE_PARAMS.flatMap(({ locale }) =>
+    posts.map((post) => ({
+      params: { locale, slug: post.id },
+      props: { post },
+    }))
+  );
+}
+
+const { post } = Astro.props;
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+
+/* 有译文就渲染译文的正文；没有就渲染中文原文，并让布局挂一条「这篇只有中文原文」。
+   元数据（标题、摘要）无论有没有译文都按语言回落 —— 那两样通常已经写在原文的
+   `i18n:` 段里了。 */
+const translation = await translationOf('posts', post.id, locale);
+const meta = localized(post.data, locale, translation);
+const { Content } = await render(translation ?? post);
+---
+
+<ArticleLayout
+  title={meta.title}
+  description={meta.description ?? ''}
+  pubDate={post.data.pubDate}
+  updatedDate={post.data.updatedDate}
+  tags={post.data.tags}
+  cover={post.data.cover}
+  coverAlt={post.data.coverAlt}
+  section={{ href: localePath(locale, '/posts'), label: strings.sections.posts.title }}
+  onlyOriginal={locale !== DEFAULT_LOCALE && !translation}
+>
+  <Content />
+</ArticleLayout>

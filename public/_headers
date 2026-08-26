@@ -69,6 +69,23 @@
 /start/*
   Cache-Control: public, max-age=60, stale-while-revalidate=604800
 
+# --- 英文版与日文版（R46）------------------------------------------------------
+# 三种语言的页面走同一套短鲜期 + 7 天 SWR。**一条 `/en/*` 就够覆盖 en 下的全部 HTML**：
+# splat 吃空串（`/en/` 也命中，实测记录见文件开头那段），而 `/en/` 下面除了 HTML
+# 与 rss.xml 没有别的东西 —— 带哈希的构建产物都在 `/_astro/`，不在语言前缀下。
+# 不带尾斜杠的 `/en` 另给一条，与 `/admin` 那一对同一个理由（splat 不匹配零段）。
+/en
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/en/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/ja
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
+/ja/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+
 /rss.xml
   Cache-Control: public, max-age=60, stale-while-revalidate=604800
 

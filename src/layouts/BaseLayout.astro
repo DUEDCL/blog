@@ -17,6 +17,7 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import MiniPlayer from '../components/MiniPlayer.astro';
 import ChatDock from '../components/ChatDock.astro';
+import { HTML_LANG, localeOf, t } from '../i18n';
 
 interface Props {
   title?: string;
@@ -43,6 +44,11 @@ interface Props {
 
 const { width = 'page', footerNote, siteHeader = true, ...head } = Astro.props;
 
+/* 语言从地址认（同 BaseHead）。这一处只用它写 `<html lang>` 与那条跳转链接的字，
+   页头、页脚、播放器、对话框各自再认一遍 —— 它们都是独立组件，不从这里透传。 */
+const locale = localeOf(Astro.url.pathname);
+const strings = t(locale);
+
 const wrapClass =
   width === 'prose'
     ? 'wrap wrap--prose'
@@ -54,7 +60,7 @@ const wrapClass =
 ---
 
 <!doctype html>
-<html lang="zh-CN">
+<html lang={HTML_LANG[locale]}>
   <head>
     <BaseHead {...head} />
     {/* 全站 SPA 导航。它在这里的唯一理由是让音乐跨页面不断 ——
@@ -63,7 +69,7 @@ const wrapClass =
     <ClientRouter />
   </head>
   <body>
-    <a href="#main" class="skip-link">跳到主内容</a>
+    <a href="#main" class="skip-link">{strings.common.skipToMain}</a>
     {siteHeader && <Header />}
     <main id="main" class={wrapClass}>
       <slot />

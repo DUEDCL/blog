@@ -1,5 +1,13 @@
 ---
-import { SITE_TITLE, SITE_DESCRIPTION, SITE_URL } from '../consts';
+import { SITE_TITLE, SITE_URL } from '../consts';
+import {
+  alternates,
+  localeOf,
+  localePath,
+  LOCALES,
+  OG_LOCALE,
+  t,
+} from '../i18n';
 import ThemeBoot from './ThemeBoot.astro';
 
 interface Props {
@@ -11,9 +19,14 @@ interface Props {
   publishedAt?: Date;
 }
 
+/* 语言从地址认，不从 props 传（同 FormattedDate 的理由）。
+   这一处认出来的语言同时决定 description 的缺省、og:locale、hreflang 与 RSS 的地址。 */
+const locale = localeOf(Astro.url.pathname);
+const strings = t(locale);
+
 const {
   title,
-  description = SITE_DESCRIPTION,
+  description = strings.siteDescription,
   image,
   type = 'website',
   publishedAt,
@@ -23,6 +36,10 @@ const {
 const fullTitle = title ? `${title} · ${SITE_TITLE}` : SITE_TITLE;
 const canonical = new URL(Astro.url.pathname, SITE_URL);
 const ogImage = image ? new URL(image, SITE_URL) : undefined;
+
+/* 三种语言互指 + x-default。**同一组链接在 sitemap 里也要有**（astro.config.mjs
+   的 sitemap i18n 段），Google 的文档要求两处一致，缺一边就当没声明。 */
+const alts = alternates(Astro.url.pathname);
 ---
 
 <meta charset="utf-8" />
@@ -41,19 +58,29 @@ const ogImage = image ? new URL(image, SITE_URL) : undefined;
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="icon" href="/favicon.ico" sizes="32x32" />
 <link rel="sitemap" href="/sitemap-index.xml" />
+{/* 订阅源按语言分开：英文读者订阅 /en/rss.xml 拿到的是译过的标题与摘要 */}
 <link
   rel="alternate"
   type="application/rss+xml"
   title={SITE_TITLE}
-  href={new URL('rss.xml', SITE_URL)}
+  href={new URL(localePath(locale, '/rss.xml'), SITE_URL)}
 />
+
+{/* 三种语言的同一页互指。x-default 指中文那份 —— 它是原文，
+    也是唯一保证有正文的一份（译文是一篇篇填的，见 content.config.ts） */}
+{alts.map((a) => (
+  <link rel="alternate" hreflang={a.hreflang} href={new URL(a.path, SITE_URL)} />
+))}
 
 <meta property="og:type" content={type} />
 <meta property="og:title" content={fullTitle} />
 <meta property="og:description" content={description} />
 <meta property="og:url" content={canonical} />
 <meta property="og:site_name" content={SITE_TITLE} />
-<meta property="og:locale" content="zh_CN" />
+<meta property="og:locale" content={OG_LOCALE[locale]} />
+{LOCALES.filter((l) => l !== locale).map((l) => (
+  <meta property="og:locale:alternate" content={OG_LOCALE[l]} />
+))}
 {ogImage && <meta property="og:image" content={ogImage} />}
 {publishedAt && (
   <meta property="article:published_time" content={publishedAt.toISOString()} />

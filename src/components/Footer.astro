@@ -1,5 +1,6 @@
 ---
 import { SITE_TITLE, SOCIAL } from '../consts';
+import { localeOf, localePath, t } from '../i18n';
 
 interface Props {
   /**
@@ -7,7 +8,7 @@ interface Props {
    * 「听一点音乐吧，让时间慢下来。」原来是页面顶部的一张页头卡，
    * 但那一页的标题本来就是转盘自己，卡片只是把转盘往下推，于是这句话搬到了这儿。
    * R19 起文章／随笔／作品／摄影四页也各有一句，同样是从页头卡搬下来的
-   * （四句写在 consts.ts 的 SECTIONS.note 里，五句合起来是一组）。
+   * （四句写在 `i18n/*.ts` 的 sections.*.note 里，五句合起来是一组）。
    */
   note?: string;
 }
@@ -16,23 +17,32 @@ const { note } = Astro.props;
 
 const year = new Date().getFullYear();
 
+const locale = localeOf(Astro.url.pathname);
+const strings = t(locale);
+
 // 归档与标签不进顶栏（顶栏放栏目 + 音乐），入口在首页与这里。
 // 启动页也挂在这里 —— 页脚每页都有，是「进站后还能回去再看一眼」最直接的解法（R12）。
 // R14 阶段⑥ 起它的地址是 '/'：那一页搬去了根路径，正站首页搬到了 /home。
+// 三条都过 localePath：英文页的页脚点「Archive」不该掉回中文归档（R46）。
 const indexLinks = [
-  { label: '归档', href: '/archive' },
-  { label: '标签', href: '/tags' },
-  { label: '启动页', href: '/' },
+  { label: strings.common.footArchive, href: localePath(locale, '/archive') },
+  { label: strings.common.footTags, href: localePath(locale, '/tags') },
+  { label: strings.common.footPortal, href: localePath(locale, '/') },
 ];
 
-// 只渲染填了值的社交链接
+// 只渲染填了值的社交链接。这些都是站外地址（RSS 除外），不加语言前缀
 const links = [
   { key: 'github', label: 'GitHub', href: SOCIAL.github },
-  { key: 'email', label: '邮箱', href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '' },
+  {
+    key: 'email',
+    label: strings.common.email,
+    href: SOCIAL.email ? `mailto:${SOCIAL.email}` : '',
+  },
   { key: 'x', label: 'X', href: SOCIAL.x },
-  { key: 'weibo', label: '微博', href: SOCIAL.weibo },
-  { key: 'zhihu', label: '知乎', href: SOCIAL.zhihu },
-  { key: 'rss', label: 'RSS', href: SOCIAL.rss },
+  { key: 'weibo', label: strings.common.weibo, href: SOCIAL.weibo },
+  { key: 'zhihu', label: strings.common.zhihu, href: SOCIAL.zhihu },
+  /* 订阅源按语言分开：英文页的 RSS 指 /en/rss.xml，拿到的是译过的标题与摘要 */
+  { key: 'rss', label: 'RSS', href: SOCIAL.rss ? localePath(locale, SOCIAL.rss) : '' },
 ].filter((l) => l.href);
 ---
 

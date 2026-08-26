@@ -1,15 +1,24 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE_TITLE, SOCIAL, CONTACT } from '../consts';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { SITE_TITLE, SOCIAL, CONTACT } from '../../consts';
+import { LOCALE_PARAMS, localePath, t, toLocale } from '../../i18n';
+
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+const s = strings.about;
 
 /* 邮箱在名片里已经有一张卡（可点可复制），这里滤掉，同一页不出现两次。
    页脚与首页那排小链接不受影响 —— 那两处没有名片。 */
 const links = [
   { label: 'GitHub', href: SOCIAL.github },
   { label: 'X', href: SOCIAL.x },
-  { label: '微博', href: SOCIAL.weibo },
-  { label: '知乎', href: SOCIAL.zhihu },
-  { label: 'RSS', href: SOCIAL.rss },
+  { label: strings.common.weibo, href: SOCIAL.weibo },
+  { label: strings.common.zhihu, href: SOCIAL.zhihu },
+  { label: 'RSS', href: SOCIAL.rss ? localePath(locale, SOCIAL.rss) : '' },
 ].filter((l) => l.href);
 
 type Card = {
@@ -49,19 +58,25 @@ type Card = {
  *
  * 排序按「访客最可能用哪个」：微信、QQ 在前（国内），Telegram、Discord 在后（境外），
  * 邮箱压轴 —— 它最慢，但不依赖任何 APP，是永远兜底的那条。
+ *
+ * **每张卡的字全部取自 `i18n` 的 about.contacts**（R46）。那六条 note 里写着
+ * 「这个平台能做到什么」，与按钮文案是一组 —— 译文改口气就会许下做不到的承诺，
+ * 所以三份词条里那一组注释也跟着搬过去了。
  */
 const cards = [
   CONTACT.wechatQr && {
     key: 'wechat',
-    label: '微信',
+    label: s.contacts.wechat.label,
     qr: CONTACT.wechatQr,
     /* 给的是昵称不是微信号，所以按钮写「复制昵称」，文案里也说清搜昵称不一定搜得到 */
-    copy: CONTACT.wechat ? { value: CONTACT.wechat, text: '复制昵称' } : undefined,
-    note: '微信没有加好友链接，扫码是唯一稳的办法。点二维码放大，手机扫屏幕上这张就行。',
+    copy: CONTACT.wechat
+      ? { value: CONTACT.wechat, text: s.contacts.wechat.copy! }
+      : undefined,
+    note: s.contacts.wechat.note,
   },
   CONTACT.qq && {
     key: 'qq',
-    label: 'QQ',
+    label: s.contacts.qq.label,
     /**
      * R41④：原来这里是 `wpa.qq.com/msgrd?v=3&uin=…`（网页版临时会话）。
      * **腾讯已经把它关了** —— 沉麟点开看到的是那条链接 302 到
@@ -83,58 +98,63 @@ const cards = [
     action: {
       href: `tencent://AddContact/?fromId=45&fromSubId=1&subcmd=all&uin=${CONTACT.qq}`,
       app: `mqqapi://card/show_pslcard?src_type=internal&version=1&uin=${CONTACT.qq}`,
-      text: '在 QQ 里打开',
+      text: s.contacts.qq.action!,
     },
     qr: CONTACT.qqQr || undefined,
-    copy: { value: CONTACT.qq, text: '复制号码' },
-    note: '腾讯已经不让网页发起临时会话了，只能加好友。复制号码去 QQ 里搜最稳；装了 QQ 的话上一颗键能直接跳过去。',
+    copy: { value: CONTACT.qq, text: s.contacts.qq.copy! },
+    note: s.contacts.qq.note,
   },
   CONTACT.douyinQr && {
     key: 'douyin',
-    label: '抖音',
+    label: s.contacts.douyin.label,
     /* 主页链接他没给，所以不出「打开主页」按钮 —— 只有码和抖音号 */
-    action: CONTACT.douyin ? { href: CONTACT.douyin, text: '打开主页' } : undefined,
+    action: CONTACT.douyin
+      ? { href: CONTACT.douyin, text: s.contacts.douyin.action! }
+      : undefined,
     qr: CONTACT.douyinQr,
     paper: true, // 实测必须加白底才扫得出，圆形码不吃反相（见 Card.paper）
     copy: CONTACT.douyinId
-      ? { value: CONTACT.douyinId, text: '复制抖音号' }
+      ? { value: CONTACT.douyinId, text: s.contacts.douyin.copy! }
       : undefined,
-    note: '抖音没有加好友链接：点开二维码用 APP 扫，或复制抖音号去搜。',
+    note: s.contacts.douyin.note,
   },
   CONTACT.telegram && {
     key: 'telegram',
-    label: 'Telegram',
-    action: { href: `https://t.me/${CONTACT.telegram}`, text: '打开对话' },
+    label: s.contacts.telegram.label,
+    action: {
+      href: `https://t.me/${CONTACT.telegram}`,
+      text: s.contacts.telegram.action!,
+    },
     qr: CONTACT.telegramQr || undefined,
-    copy: { value: `@${CONTACT.telegram}`, text: '复制用户名' },
-    note: '点开就是对话框，不用先加好友。也可以扫码或复制用户名去搜。',
+    copy: { value: `@${CONTACT.telegram}`, text: s.contacts.telegram.copy! },
+    note: s.contacts.telegram.note,
   },
   CONTACT.discord && {
     key: 'discord',
-    label: 'Discord',
+    label: s.contacts.discord.label,
     /* discord.com/users/<id> 要纯数字 ID，用户名拼不出链接，所以这张卡只能复制 */
-    copy: { value: CONTACT.discord, text: '复制用户名' },
-    note: '只能在客户端里搜用户名添加，没有可点的链接。',
+    copy: { value: CONTACT.discord, text: s.contacts.discord.copy! },
+    note: s.contacts.discord.note,
   },
   CONTACT.email && {
     key: 'email',
-    label: '邮箱',
-    action: { href: `mailto:${CONTACT.email}`, text: '写邮件' },
-    copy: { value: CONTACT.email, text: '复制地址' },
-    note: '最慢也最稳的一条，不依赖任何 APP，我都会看。',
+    label: s.contacts.email.label,
+    action: { href: `mailto:${CONTACT.email}`, text: s.contacts.email.action! },
+    copy: { value: CONTACT.email, text: s.contacts.email.copy! },
+    note: s.contacts.email.note,
   },
 ].filter(Boolean) as Card[];
 ---
 
-<BaseLayout title="名片" description={`联系 ${SITE_TITLE}`} width="prose">
+<BaseLayout title={s.title} description={s.description(SITE_TITLE)} width="prose">
   {/* R29：这一页原先是「关于」—— 一张页头卡 + 一句「还没想好怎么介绍自己」+ 一段
       「这个站怎么搭的」。站主圈掉了那三样（原话「将图示圈起来的地方全部删掉，添加『名片』栏」），
       于是这一页只剩名片与「别处」，页面本身就是名片：名片那一节因此从 h2 升成 h1
       （一页只能有一个 h1，而页头卡已经没了），顶栏也多了一项「名片」指到这儿。 */}
   <div class="prose rise rise-1">
     <div class="head__row">
-      <span class="vlabel">名片</span>
-      <h1 class="title">名片</h1>
+      <span class="vlabel">{s.label}</span>
+      <h1 class="title">{s.title}</h1>
     </div>
     <div class="pressrule"></div>
     {cards.length > 0 ? (
@@ -154,17 +174,17 @@ const cards = [
                 data-lb-copy={c.copy?.value ?? ''}
                 data-lb-copy-text={c.copy?.text ?? ''}
                 data-lb-paper={c.paper ? '1' : ''}
-                aria-label={`放大${c.label}二维码`}
+                aria-label={s.zoomQrOf(c.label)}
               >
                 <span class={c.paper ? 'card__qrbox card__qrbox--paper' : 'card__qrbox'}>
                   <span
                     class="card__qr"
                     role="img"
-                    aria-label={`${c.label}二维码`}
+                    aria-label={s.qrOf(c.label)}
                     style={`--qr: url('${c.qr}')`}
                   />
                 </span>
-                <span class="card__zoom" aria-hidden="true">点开放大</span>
+                <span class="card__zoom" aria-hidden="true">{s.zoom}</span>
               </button>
             )}
 
@@ -195,12 +215,12 @@ const cards = [
         ))}
       </ul>
     ) : (
-      <p>联系方式还没整理好。</p>
+      <p>{s.empty}</p>
     )}
 
     {links.length > 0 && (
       <>
-        <h2>别处</h2>
+        <h2>{s.elsewhere}</h2>
         <ul>
           {links.map((l) => (
             <li>
@@ -222,7 +242,14 @@ const cards = [
       用原生 <dialog>：Esc 关闭、焦点圈住、置顶层（top layer）三件事浏览器自己做，
       不必跟 Header(z-index 50)、播放器(60)、BaseLayout(100) 抢层级。 */}
   {cards.some((c) => c.qr) && (
-    <dialog class="lb" id="qr-lightbox" aria-labelledby="qr-lightbox-label">
+    <dialog
+      class="lb"
+      id="qr-lightbox"
+      aria-labelledby="qr-lightbox-label"
+      data-t-copied={s.copied}
+      data-t-copy={s.copyFallback}
+      data-t-qr={s.qrOf('{label}')}
+    >
       <figure class="lb__figure">
         <span class="lb__stage"><span class="lb__code" role="img" aria-label=""></span></span>
         <figcaption class="lb__cap">
@@ -231,7 +258,9 @@ const cards = [
             {/* data-copy 空着也要留住这个属性：复制那段脚本按 [data-copy] 选元素，
                 值是点击时才读的，灯箱打开时现填 */}
             <button class="card__btn lb__copy" type="button" data-copy=""></button>
-            <button class="card__btn" type="button" data-lb-close>关闭</button>
+            <button class="card__btn" type="button" data-lb-close>
+              {strings.common.close}
+            </button>
           </span>
         </figcaption>
       </figure>
@@ -263,6 +292,14 @@ const cards = [
     /* 「已复制」的回退计时器。按元素存，连点两次不会把「已复制」当原文案存回去 */
     const timers = new WeakMap<HTMLElement, number>();
 
+    /* 三条文案从灯箱那个 <dialog> 的 data-* 上读（R46）。这段是 bundled module，
+       import 不到当前页面的语言 —— DOM 是唯一能拿到它的地方。
+       灯箱不存在时（六张卡都没有二维码）这三个是空串，那时候也用不到它们。 */
+    const lbEl = document.querySelector<HTMLElement>('#qr-lightbox');
+    const T_COPIED = lbEl?.dataset.tCopied ?? '';
+    const T_COPY = lbEl?.dataset.tCopy ?? '';
+    const T_QR = lbEl?.dataset.tQr ?? '{label}';
+
     document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
       /* 各卡按钮文案不同（复制号码／用户名／抖音号／昵称／地址），恢复时不能写死一个词，
          所以把原文案存进 data-label；灯箱那颗是动态填的，填的时候会一起更新这个值 */
@@ -286,7 +323,7 @@ const cards = [
 
         try {
           await navigator.clipboard.writeText(value);
-          show('已复制');
+          show(T_COPIED);
         } catch {
           show(value);
         }
@@ -307,7 +344,7 @@ const cards = [
         /* 码是遮罩不是图：颜色由 CSS 的 --ink 给，这里只换遮罩路径。
            与缩略图同一个文件，已在缓存里，不会再下一次 */
         lbCode.style.setProperty('--qr', `url('${d.lbSrc ?? ''}')`);
-        lbCode.setAttribute('aria-label', `${d.lbLabel ?? ''}二维码`);
+        lbCode.setAttribute('aria-label', T_QR.replace('{label}', d.lbLabel ?? ''));
         lbLabel.textContent = d.lbLabel ?? '';
 
         /* 纸底跟着卡走，不给切换：抖音那张 data-lb-paper=1（实测非白底扫不出），
@@ -318,7 +355,7 @@ const cards = [
         const value = d.lbCopy ?? '';
         lbCopy.hidden = !value;
         lbCopy.dataset.copy = value;
-        lbCopy.dataset.label = d.lbCopyText || '复制';
+        lbCopy.dataset.label = d.lbCopyText || T_COPY;
 
         /* 上一张卡的「已复制」不能在这张卡上继续倒计时 */
         const pending = timers.get(lbCopy);

@@ -2,11 +2,25 @@
 import { Image } from 'astro:assets';
 import { SITE_TITLE, NAV } from '../consts';
 import ThemeSwitch from './ThemeSwitch.astro';
+import LangSwitch from './LangSwitch.astro';
+import { localeOf, localePath, t } from '../i18n';
 import avatar from '../assets/avatar.jpg';
 
 const path = Astro.url.pathname;
+const locale = localeOf(path);
+const strings = t(locale);
 
-/** 栏目页匹配前缀。首页那项（R14 阶段⑥ 起是 '/home'）被下面的 nav 滤掉，走不到这里 */
+/* 六项：地址加上当前语言的前缀，标签取当前语言那一份。首页那项（R14 阶段⑥ 起是
+   '/home'）在这里就滤掉了 —— 站名自己承担回首页。 */
+const items = NAV.filter((item) => item.key !== 'home').map((item) => ({
+  href: localePath(locale, item.href),
+  label: strings.nav[item.key],
+}));
+
+const homeHref = localePath(locale, '/home');
+const aboutHref = localePath(locale, '/about');
+
+/** 栏目页匹配前缀。比较的是**带语言前缀**的地址，所以英文页不会把中文那栏点亮 */
 function isCurrent(href: string) {
   return path === href || path.startsWith(`${href}/`);
 }
@@ -29,7 +43,7 @@ function isCurrent(href: string) {
           （下面那段 nav 把首页那项滤掉了）。
           R14 阶段⑥ 起首页是 /home（根路径让给了起始页），这里跟着改。 */}
       <div class="brand">
-        <a class="brand__face" href="/about" aria-label={`${SITE_TITLE} 的名片`}>
+        <a class="brand__face" href={aboutHref} aria-label={strings.common.brandCard(SITE_TITLE)}>
           <Image
             src={avatar}
             alt=""
@@ -39,14 +53,14 @@ function isCurrent(href: string) {
             class="brand__avatar"
           />
         </a>
-        <a class="brand__home" href="/home" aria-label={`${SITE_TITLE} 首页`}>
+        <a class="brand__home" href={homeHref} aria-label={strings.common.brandHome(SITE_TITLE)}>
           <span class="brand__name">{SITE_TITLE}</span>
         </a>
       </div>
 
-      <nav class="nav" aria-label="主导航">
+      <nav class="nav" aria-label={strings.common.mainNav}>
         {
-          NAV.filter((item) => item.href !== '/home').map((item) => (
+          items.map((item) => (
             <a
               href={item.href}
               class:list={['nav__link', { 'is-current': isCurrent(item.href) }]}
@@ -57,8 +71,10 @@ function isCurrent(href: string) {
           ))
         }
       </nav>
-      {/* R44 把切换键加了回来（R31 砍掉浅色时连它一起删了）。位置在导航右侧 ——
-          `.brand` 的 `margin-right: auto` 把导航推到右侧，这一枚跟在导航后面。 */}
+      {/* R44 把版次键加了回来（R31 砍掉浅色时连它一起删了）；R46 在它左边多了一枚
+          语言键。位置都在导航右侧 —— `.brand` 的 `margin-right: auto` 把导航推到
+          右侧，这两枚跟在导航后面。窄屏时它们与品牌同一行（导航折到下面整行）。 */}
+      <LangSwitch />
       <ThemeSwitch />
     </div>
   </div>
@@ -191,12 +207,17 @@ function isCurrent(href: string) {
     background: var(--press);
   }
 
-  /* 窄屏：导航换到品牌下方，五项折成两行（3 + 2）。
+  /* 窄屏：导航换到品牌下方，六项折成两行（3 + 3）。
      算过的账：320px 视口下 .nav 可用 238px（R10 真视口实测）／228px（本次同源 iframe 实测，
      少的 10px 是滚动条），而五项一行实测要 276px —— 两种量法都塞不下，四项时才刚好。
      所以 R12 加「图库」时必须折行。不走「一行 + 横向滚动」：没有蒙版提示的横滑等于隐藏交互，
-     而蒙版本身已被 R10 删掉（纯 CSS 判断不了溢出，它会无条件啃掉首末项）。折行让五项全部可见。
-     导航因此多占 44px，global.css 的窄屏 --header-offset 已同步重测为 12.25rem。 */
+     而蒙版本身已被 R10 删掉（纯 CSS 判断不了溢出，它会无条件啃掉首末项）。折行让六项全部可见。
+     导航因此多占 44px，global.css 的窄屏 --header-offset 已同步重测为 12.25rem。
+
+     R46 在第一行多了一枚语言键。第一行的账（375px，可用 343px）：
+     品牌 88 + 语言键 59 + 版次键 75/108（中文／英文那两个词的宽度差）+ 两道 12px 间隙
+     = 246px（中文）／279px（英文），320px 那一档也还在 288px 以内。
+     再往这一行加东西之前先重算这笔账。 */
   @media (max-width: 46rem) {
     .bar__inner {
       height: auto;

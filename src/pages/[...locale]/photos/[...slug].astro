@@ -1,23 +1,33 @@
 ---
 import { getCollection, render } from 'astro:content';
 import { Image, getImage } from 'astro:assets';
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import FormattedDate from '../../components/FormattedDate.astro';
-import { SECTIONS } from '../../consts';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import FormattedDate from '../../../components/FormattedDate.astro';
+import { localized, translationOf } from '../../../utils/content';
+import { DEFAULT_LOCALE, LOCALE_PARAMS, localePath, t, toLocale } from '../../../i18n';
 
 export async function getStaticPaths() {
   const albums = await getCollection('photos', ({ data }) =>
     import.meta.env.DEV ? true : data.draft !== true
   );
 
-  return albums.map((album) => ({
-    params: { slug: album.id },
-    props: { album },
-  }));
+  return LOCALE_PARAMS.flatMap(({ locale }) =>
+    albums.map((album) => ({
+      params: { locale, slug: album.id },
+      props: { album },
+    }))
+  );
 }
 
 const { album } = Astro.props;
-const { Content } = await render(album);
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+
+const translation = await translationOf('photos', album.id, locale);
+const meta = localized(album.data, locale, translation);
+const { Content } = await render(translation ?? album);
+
+const backHref = localePath(locale, '/photos');
 
 // 封面也进图组，作为第一张
 const shots = [
@@ -48,8 +58,8 @@ const lbJson = JSON.stringify(
 ---
 
 <BaseLayout
-  title={album.data.title}
-  description={album.data.description ?? album.data.title}
+  title={meta.title}
+  description={meta.description ?? meta.title}
   type="article"
   publishedAt={album.data.pubDate}
   image={album.data.cover.src}
@@ -57,10 +67,10 @@ const lbJson = JSON.stringify(
 >
   <header class="head rise rise-1">
     <p class="meta crumbs">
-      <a href="/photos">{SECTIONS.photos.title}</a>
+      <a href={backHref}>{strings.sections.photos.title}</a>
     </p>
 
-    <h1 class="title">{album.data.title}</h1>
+    <h1 class="title">{meta.title}</h1>
 
     <div class="stamps meta">
       {album.data.location && (
@@ -71,10 +81,14 @@ const lbJson = JSON.stringify(
       )}
       <FormattedDate date={album.data.pubDate} />
       <span class="sep" aria-hidden="true">/</span>
-      <span>{shots.length} 张</span>
+      <span>{strings.photos.shots(shots.length)}</span>
     </div>
 
-    {album.data.description && <p class="dek">{album.data.description}</p>}
+    {meta.description && <p class="dek">{meta.description}</p>}
+
+    {locale !== DEFAULT_LOCALE && !translation && (
+      <p class="original meta">{strings.article.onlyInChinese}</p>
+    )}
   </header>
 
   {/* 有正文时先显示文字 */}
@@ -95,7 +109,7 @@ const lbJson = JSON.stringify(
               widths={[640, 1024, 1600]}
               loading={i === 0 ? 'eager' : 'lazy'}
             />
-            <span class="plate__hint meta" aria-hidden="true">放大</span>
+            <span class="plate__hint meta" aria-hidden="true">{strings.photos.zoom}</span>
           </a>
           {shot.caption && <figcaption class="meta">{shot.caption}</figcaption>}
         </figure>
@@ -104,12 +118,17 @@ const lbJson = JSON.stringify(
   </ul>
 
   <nav class="back">
-    <a href="/photos">← 回到{SECTIONS.photos.title}</a>
+    <a href={backHref}>{strings.article.backTo(strings.sections.photos.title)}</a>
   </nav>
 
   {/* 灯箱。<dialog> 是原生的：Esc 关闭、焦点困住、top layer 都不用自己写 */}
-  <dialog class="lb" data-lb aria-label={`${album.data.title} 大图`}>
-    <button class="lb__key lb__key--x" type="button" data-lb-close aria-label="关闭">
+  <dialog class="lb" data-lb aria-label={strings.photos.lightbox(meta.title)}>
+    <button
+      class="lb__key lb__key--x"
+      type="button"
+      data-lb-close
+      aria-label={strings.common.close}
+    >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><path
           d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6z"
@@ -121,7 +140,7 @@ const lbJson = JSON.stringify(
       class="lb__key lb__key--prev"
       type="button"
       data-lb-prev
-      aria-label="上一张"
+      aria-label={strings.photos.prev}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><path d="M15.3 4.6 7.9 12l7.4 7.4 1.4-1.4L10.7 12l6-6z"></path></svg
@@ -140,7 +159,7 @@ const lbJson = JSON.stringify(
       class="lb__key lb__key--next"
       type="button"
       data-lb-next
-      aria-label="下一张"
+      aria-label={strings.photos.next}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><path d="M8.7 4.6 7.3 6l6 6-6 6 1.4 1.4L16.1 12z"></path></svg
@@ -283,6 +302,13 @@ const lbJson = JSON.stringify(
   .note {
     max-width: var(--measure-prose);
     margin-top: var(--sp-8);
+  }
+
+  /* 长相在 global.css 的 `.original`。这一页额外收一道窄栏宽度 ——
+     图库走的是宽幅版心（`width="wide"`），一句话铺满 1200px 没法读 */
+  .original {
+    max-width: var(--measure-prose);
+    margin-top: var(--sp-6);
   }
 
   /* 单列大图：摄影按「一张一版」呈现，不缩成缩略图 */

@@ -13,6 +13,16 @@ images:
     caption: 图说可以写下当时的情境，也可以留空
   - src: './street-03.jpg'
     alt: 占位图，请替换
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "Street corners"
+    description: "Things shot while walking. No theme — the light just happened to land there."
+  ja:
+    title: "街角"
+    description: "歩きながら撮ったもの。主題はない、ただ光がちょうどそこに落ちていた。"
 ---
 
 这组是占位内容。图片由脚本生成的抽象色块，用来让你看到相册的排版效果 —— 换成你自己的照片就行。

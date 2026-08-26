@@ -3,6 +3,16 @@ title: 二分查找的边界，我每次都要重推一遍
 description: 写了这么多年还是记不住 mid 该怎么取、循环条件用小于还是小于等于。索引不如理解不变量。
 pubDate: 2026-08-10
 tags: ['算法', '笔记']
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "The boundaries in binary search — I re-derive them every single time"
+    description: "After all these years I still cannot remember how to take mid, or whether the loop condition is < or <=. Memorising the template loses to holding on to one invariant."
+  ja:
+    title: "二分探索の境界、毎回いちから導き直している"
+    description: "何年書いても mid の取り方も、ループ条件が < か <= かも覚えられない。テンプレを覚えるより、不変条件をひとつ握るほうが効く。"
 ---
 
 每次写二分查找我都要停下来想几秒。不是不会，是记不住那几个边界该怎么取。后来发现问题在于我一直试图**背模板**，而模板有好几个版本，互相矛盾。

@@ -28,7 +28,26 @@ export default defineConfig({
     //
     // /admin 排除：那是后台（R35）。「藏起来」的一半是不进 sitemap、不进 llms.txt、
     // `_headers` 里给它配 noindex；另一半是登录。地址难猜不算保护，所以地址就用 /admin。
-    sitemap({ filter: (page) => !page.includes('/admin') }),
+    sitemap({
+      filter: (page) => !page.includes('/admin'),
+      /**
+       * 三种语言互指（R46）。这一段让 sitemap 里的每条 `<url>` 带上
+       * `<xhtml:link rel="alternate" hreflang="…">`，等于把 `<head>` 里那几条
+       * hreflang 再向搜索引擎声明一遍（两处都要有，Google 的文档要求同一组
+       * 互指链接在两边一致）。
+       *
+       * **`locales` 里必须有 `zh` 这一项**，尽管中文页面的地址上没有 `/zh/` 段：
+       * 集成的 `parseI18nUrl()` 对「第一段不是任何 locale」的地址一律按
+       * `defaultLocale` 归类（读的是本仓库装着的
+       * `node_modules/@astrojs/sitemap/dist/utils/parse-i18n-url.js`），
+       * 然后拿 `locales[locale]` 去取 hreflang 值 —— 少了这一项，
+       * 中文那条 alternate 的 `hreflang` 会是 undefined。
+       */
+      i18n: {
+        defaultLocale: 'zh',
+        locales: { zh: 'zh-CN', en: 'en', ja: 'ja' },
+      },
+    }),
   ],
 
   image: {

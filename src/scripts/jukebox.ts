@@ -63,8 +63,101 @@ interface Row {
  * 播放方式。0 顺序（播到队尾停下）／1 列表循环／2 单曲循环／3 随机。
  * 默认 1 —— 这一档就是 R14 之前的既有行为，所以默认档不改变任何人已习惯的观感。
  * 存的是数字而不是名字：它要直接当 `data-m` 用，CSS 靠它决定露哪个图标。
+ *
+ * **这里只有档位 id，没有档位名字**（R46）：名字随语言变，住在 `i18n/*.ts` 的
+ * `music.modes` 里，由视图从 `T().modes[…]` 取。这个数组留下来的用处是
+ * `MODES.length` —— 取模换档与读回 localStorage 都靠它，加一档只改这一处。
  */
-export const MODES = ['顺序播放', '列表循环', '单曲循环', '随机播放'] as const;
+export const MODES = ['order', 'all', 'one', 'shuffle'] as const;
+
+/* ==========================================================================
+   界面文案（R46）
+
+   这个模块跑在浏览器里，**拿不到当前页面的语言** —— 它是 bundled module，
+   `import` 进来的是三种语言共用的一份代码。所以文案走 DOM：服务端在
+   `MiniPlayer` 的根节点上挂一份 `data-jk-t`（JSON，只含运行期真用得到的那几条，
+   投影函数是 `i18n/index.ts` 的 `clientStrings()`），这里读一次、缓存住。
+
+   为什么注入点是 MiniPlayer：它在**每一页**都渲染，包括不走 BaseLayout 的那道门。
+   唱盘台（/music）因此也读这一份，不另挂第二份 JSON。
+
+   读不到时给一份英文兜底 —— 那只会发生在「MiniPlayer 没渲染」这种不该出现的情形，
+   兜底的用处是不让界面上出现 `undefined`，不是第二份词条表。
+   ========================================================================== */
+
+interface Strings {
+  play: string;
+  pause: string;
+  collapse: string;
+  expand: string;
+  modes: readonly string[];
+  modeLabel: string;
+  lyricsLoading: string;
+  lyricsNone: string;
+  juke: {
+    idle: string;
+    needKeyword: string;
+    loading: string;
+    none: string;
+    found: string;
+    offline: string;
+    unavailable: string;
+    partial: string;
+    fetching: string;
+    quoted: string;
+    chartFallback: string;
+    requested: string;
+    failed: string;
+  };
+}
+
+const FALLBACK: Strings = {
+  play: 'Play',
+  pause: 'Pause',
+  collapse: 'Collapse the player',
+  expand: 'Expand the player',
+  modes: ['In order', 'Repeat all', 'Repeat one', 'Shuffle'],
+  modeLabel: 'Playback mode: {mode}',
+  lyricsLoading: '(fetching the words…)',
+  lyricsNone: '(no words for this one)',
+  juke: {
+    idle: '',
+    needKeyword: 'Search for what?',
+    loading: 'Fetching {what}…',
+    none: '{what}: nothing came back.',
+    found: '{what}: {n} tracks. Tap one to queue it, or play them all.',
+    offline: 'No connection. Try again in a moment',
+    unavailable: 'This one is unavailable right now. Try another',
+    partial: 'Upstream only has a clip of this one',
+    fetching: 'Fetching “{title}”…',
+    quoted: '“{kw}”',
+    chartFallback: 'chart',
+    requested: 'requested',
+    failed: 'Nothing came back',
+  },
+};
+
+let strings: Strings | null = null;
+
+/** 当前语言那份文案。第一次调用时读 DOM，之后走缓存 */
+export function T(): Strings {
+  if (strings) return strings;
+  const raw = document.querySelector<HTMLElement>('[data-jk-t]')?.dataset.jkT;
+  if (raw) {
+    try {
+      strings = JSON.parse(raw) as Strings;
+      return strings;
+    } catch {
+      /* 挂上去的不是合法 JSON —— 不该发生，真发生了也不能让播放器崩 */
+    }
+  }
+  strings = FALLBACK;
+  return strings;
+}
+
+/** 一个模板串填一个坑。`T().juke.loading` 那几条带 `{xxx}` 的都走这里 */
+export const fill1 = (tpl: string, key: string, value: string) =>
+  tpl.replace(`{${key}}`, value);
 
 /**
  * 一个视图要实现的回调，**全部可选** —— 悬浮窗只关心前三个。
@@ -237,7 +330,9 @@ let want = 0;
 /** 当前展示的搜索／榜单结果。视图按钮上只放下标，对象留在这里 */
 let found: JukeTrack[] = [];
 /** 点歌台那一行状态字。存着是为了 /music 重新挂载时能回填 */
-let msg = '挑个歌单，或者搜一下。';
+/* 初值留空串：真正的那句「挑个歌单，或者搜一下」由服务端渲染进 `[data-msg]`
+   的文本里（三种语言各一份），这里空着就不会在接线那一刻把它覆盖掉。 */
+let msg = '';
 
 let raf = 0;
 /** 当前歌词行。-1 = 还在前奏；-2 是 relayout() 用来强制下一次广播算「换行」的哨兵 */
@@ -453,12 +548,12 @@ async function api(path: string, params: Record<string, string>) {
     // 命中与否从此只由边缘那 5 分钟决定，一处可控。
     res = await fetch(u, { headers: { accept: 'application/json' }, cache: 'no-store' });
   } catch {
-    throw new Error('网络没通，等会儿再试');
+    throw new Error(T().juke.offline);
   }
 
   const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!res.ok) throw new Error(txt(data?.error) || `没取到（${res.status}）`);
-  if (!data) throw new Error('返回的不是 JSON');
+  if (!res.ok) throw new Error(txt(data?.error) || `${T().juke.failed}（${res.status}）`);
+  if (!data) throw new Error(T().juke.failed);
   return data;
 }
 
@@ -470,7 +565,7 @@ async function resolve(my: number, i: number, play: boolean) {
   // 歌词、封面与直链一起要，三条互不等待
   void loadLyric(i);
   void loadPic(i);
-  say('正在取「' + tracks[i].title + '」…');
+  say(fill1(T().juke.fetching, 'title', tracks[i].title));
 
   try {
     const data = await api('url', {
@@ -487,17 +582,17 @@ async function resolve(my: number, i: number, play: boolean) {
 
     // Worker 已经拦过「签名错误！」了，这里再确认一次形状，别把一句话塞进 <audio>
     const link = txt(data.url);
-    if (!link.startsWith('https://')) throw new Error('这首现在拿不到，换一首');
+    if (!link.startsWith('https://')) throw new Error(T().juke.unavailable);
 
     tracks[i].src = link;
     au.setAttribute('src', link);
     // 候选里最长的也偏短时 Worker 会标 short。如实说一句，不假装是完整版；
     // 时长本身由 durationchange 回填，显示的是真实长度
-    say(data.short ? '上游这首只有片段，能播多少算多少' : '');
+    say(data.short ? T().juke.partial : '');
     if (play) void au.play().catch(() => {});
   } catch (e) {
     if (my !== want) return;
-    const why = e instanceof Error ? e.message : '这首现在拿不到，换一首';
+    const why = e instanceof Error ? e.message : T().juke.unavailable;
     for (const v of views) v.bad?.(i, why);
     say(why);
   }
@@ -572,7 +667,7 @@ function push(j: JukeTrack): number {
   tracks.push({
     id: 'juke-' + j.songId,
     title: j.title,
-    subtitle: [j.artist, j.album].filter(Boolean).join(' · ') || '点的歌',
+    subtitle: [j.artist, j.album].filter(Boolean).join(' · ') || T().juke.requested,
     src: '',
     cover: '',
     duration: 0,
@@ -633,20 +728,20 @@ export async function ask(
   path: 'list' | 'search',
   params: Record<string, string>,
 ) {
-  say('正在取' + what + '…');
+  say(fill1(T().juke.loading, 'what', what));
   try {
     const data = await api(path, params);
     found = Array.isArray(data.items) ? (data.items as JukeTrack[]) : [];
     for (const v of views) v.res?.();
     say(
       found.length
-        ? `${what}：${found.length} 首，点一首加到队列，或者全部播放。`
-        : what + '：一首都没有。',
+        ? fill1(fill1(T().juke.found, 'what', what), 'n', String(found.length))
+        : fill1(T().juke.none, 'what', what),
     );
   } catch (e) {
     found = [];
     for (const v of views) v.res?.();
-    say(e instanceof Error ? e.message : '没取到');
+    say(e instanceof Error ? e.message : T().juke.failed);
   }
 }
 

@@ -165,6 +165,34 @@
 }
 
 /* ==========================================================================
+   西文版与日文版的字体栈（R46）
+
+   上面那两条字体栈是**给中文排的**：`--font-body` 第一位是 `PingFang SC`。
+   中文字体里的弯引号、破折号、括号是**全角**字形，所以英文句子交给它渲染，
+   `“never tried”` 前后会各多出半个字宽的空隙（首页头条摘要那句渲染实测就是这样，
+   看起来像作者手打了两个空格）。日文那一版另有一层：`PingFang SC` 是简体中文字体，
+   用它渲染日文汉字会出现「直」「今」这类字形不对的字，那是排版错误不是审美偏好。
+
+   两条覆盖都只用**系统自带**的字体，一个字节都不下载 —— R17 删掉自托管 Manrope 的
+   理由（首屏少一个 woff2 请求）在这里同样成立。
+   `--font-display` 的第一位本来就是西文的 Fraunces，所以只需要换掉它后面那截 CJK 回落。
+   ========================================================================== */
+
+html[lang='en'] {
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    'PingFang SC', sans-serif;
+}
+
+html[lang='ja'] {
+  --font-display: 'Fraunces Variable', 'Hiragino Mincho ProN', 'Yu Mincho',
+    'Noto Serif JP', 'Songti SC', serif;
+  --font-body: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic',
+    'Noto Sans JP', Meiryo, 'PingFang SC', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas,
+    'Hiragino Sans', monospace;
+}
+
+/* ==========================================================================
    基础重置
    ========================================================================== */
 
@@ -472,6 +500,109 @@ hr {
   }
 }
 
+/* --- 顶栏右端那两枚下拉键 -----------------------------------------------
+   版次（ThemeSwitch）与语言（LangSwitch）用的是同一套长相：一枚等宽小字的胶囊键，
+   点开在正下方落一块玻璃菜单。**样式住在这里而不是各自组件里** —— 两个组件里各抄
+   一份的下一步就是其中一份的内边距悄悄漂走（这条纪律在 EntryCard 上已经吃过一次）。
+
+   两处的差别只有内容：版次那枚带色卡方块（`.topkey__chip` 由 ThemeSwitch 自己出），
+   语言那枚是纯文字。菜单项的「当前项」标记也各自实现：版次靠纯 CSS 选
+   （html[data-theme] 匹配），语言靠服务端渲染时就知道的 `aria-current`。 */
+.topkey {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: none;
+  border: var(--rule-w) solid var(--rule-strong);
+  border-radius: var(--r-full);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+
+.topkey:hover {
+  color: var(--ink);
+  border-color: var(--glass-border-lit);
+}
+
+/* 下拉的定位参照系。`flex-shrink: 0` 是不让顶栏挤扁这两枚键 */
+.topdrop {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.topmenu {
+  position: absolute;
+  top: calc(100% + var(--sp-3));
+  /* 朝左展开。窄屏实测：375px 下从 x≈105 到 345，正好在版心内；
+     改成 `left: 0` 会朝右溢出视口 —— 算过账的，别改回去 */
+  right: 0;
+  z-index: 60;
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-2);
+  min-width: 15rem;
+  border-radius: var(--r-md);
+}
+
+/* `hidden` 是属性，`display: grid` 是声明 —— **声明赢**，所以光写 hidden 关不掉
+   菜单（第一次渲染实测：菜单默认就是展开的，盖住了刊头右半边）。
+   特异性 (0,2,0) 压过上面那条 (0,1,0)，不需要 !important。 */
+.topmenu[hidden] {
+  display: none;
+}
+
+.topopt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.16s ease;
+}
+
+.topopt:hover {
+  background: var(--glass-bg-strong);
+}
+
+.topopt__text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.topopt__name {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.topopt__note {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--ink-faint);
+}
+
+/* 当前项：左边一道 2px 签名色。它是**游标**不是装饰色条 ——
+   只出现在一项上，且位置就是「你现在在哪一档」 */
+.topopt.is-on,
+.topopt[aria-current='true'] {
+  background: var(--glass-bg);
+  box-shadow: inset 2px 0 0 var(--press);
+}
+
 /* ==========================================================================
    对开大版的版面语汇（R44）
 
@@ -533,6 +664,19 @@ hr {
   color: var(--ink-faint);
   white-space: nowrap;
   user-select: none;
+}
+
+/* 西文没有「逐字正立」这回事（R46）。上面那条 `text-orientation: upright` 对
+   `Posts` 会把五个字母一个个正立着摞起来，再乘上 0.35em 的字距 —— 竖着排了一列
+   孤零零的大写字母，读起来要一个个拼。
+   西文竖排的印刷做法是**整词侧躺**（书脊上印书名就是这么印的），`sideways` 正是
+   这一档：整行顺时针转 90°，字母之间的关系不变。字距跟着收到 0.18em ——
+   侧躺之后字与字仍是横排关系，0.35em 在这时候又太散了。
+   日文不在此列：假名与汉字本来就能正立竖排，`ja` 走上面那条默认规则。 */
+html[lang='en'] .vlabel {
+  text-orientation: sideways;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 /* --- 栏目头：标识 + 标题 + 计数 + 全部 ---------------------------------- */
@@ -638,6 +782,23 @@ html:not([data-theme]) .edname > span[data-for='night'] {
   text-transform: uppercase;
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
+}
+
+/* 「这篇只有中文原文」那条编者注（R46）。三种详情页（文章／作品／相册）共用 ——
+   它们是同一份刊物的三种版式，同一条注不该长得不一样。
+   与它同时挂着的 `.meta` 给了等宽、字号与灰调；这里要把 `.meta` 的**标签排版**
+   撤回来：`text-transform: uppercase` + `0.12em` 字距是给「ARCHIVE」那种一两个词的
+   标签排的，一句十几个词的英文句子全大写又拉开字距，读起来要一个词一个词地拼
+   （渲染实测：`ONLY THE CHINESE ORIGINAL EXISTS FOR THIS ONE…`）。
+   左边一道规则线、不给底色不给图标不用签名色 —— 它是**编者注**不是警告，
+   这一页没有任何东西出错。 */
+.original {
+  margin-top: var(--sp-4);
+  padding-left: var(--sp-3);
+  border-left: var(--rule-w) solid var(--rule-strong);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  line-height: var(--leading-normal);
 }
 
 /* 竖排中文栏目标识 —— 杂志式极简下收掉了，样式一并移除 */

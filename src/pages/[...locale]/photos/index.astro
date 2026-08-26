@@ -1,24 +1,32 @@
 ---
 import { Image } from 'astro:assets';
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import FormattedDate from '../../components/FormattedDate.astro';
-import { getPublished } from '../../utils/content';
-import { SECTIONS } from '../../consts';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import FormattedDate from '../../../components/FormattedDate.astro';
+import { getListItems } from '../../../utils/content';
+import { LOCALE_PARAMS, t, toLocale } from '../../../i18n';
 
-const albums = await getPublished('photos');
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+const s = strings.sections.photos;
+
+const albums = await getListItems('photos', locale);
 ---
 
 <BaseLayout
-  title={SECTIONS.photos.title}
-  description={SECTIONS.photos.description}
-  footerNote={SECTIONS.photos.note}
+  title={s.title}
+  description={s.description}
+  footerNote={s.note}
   width="wide"
 >
   <header class="head rise rise-1">
     <div class="head__row">
-      <span class="vlabel">{SECTIONS.photos.label}</span>
-      <h1 class="head__title">{SECTIONS.photos.title}</h1>
-      <p class="meta head__count">共 {albums.length} 组</p>
+      <span class="vlabel">{s.label}</span>
+      <h1 class="head__title">{s.title}</h1>
+      <p class="meta head__count">{strings.photos.count(albums.length)}</p>
     </div>
     <div class="pressrule"></div>
   </header>
@@ -27,7 +35,7 @@ const albums = await getPublished('photos');
     <ul class="grid rise rise-2">
       {albums.map((album, i) => (
         <li class:list={['cell', { 'cell--tall': i % 5 === 0 }]}>
-          <a href={`/photos/${album.id}`} class="cell__link">
+          <a href={album.href} class="cell__link">
             <Image
               src={album.data.cover}
               alt={album.data.coverAlt}
@@ -36,12 +44,12 @@ const albums = await getPublished('photos');
             />
 
             <div class="cell__overlay">
-              <span class="cell__title">{album.data.title}</span>
+              <span class="cell__title">{album.title}</span>
               <span class="cell__meta meta">
                 {album.data.location && <span>{album.data.location}</span>}
-                <FormattedDate date={album.data.pubDate} />
+                <FormattedDate date={album.pubDate} />
                 {album.data.images.length > 0 && (
-                  <span>{album.data.images.length + 1} 张</span>
+                  <span>{strings.photos.shots(album.data.images.length + 1)}</span>
                 )}
               </span>
             </div>
@@ -50,7 +58,7 @@ const albums = await getPublished('photos');
       ))}
     </ul>
   ) : (
-    <p class="empty">{SECTIONS.photos.empty}</p>
+    <p class="empty">{s.empty}</p>
   )}
 </BaseLayout>
 

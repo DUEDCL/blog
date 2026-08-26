@@ -4,6 +4,16 @@ description: 隐去一部分事实算不算撒谎 —— 从利益、从信息�
 pubDate: 2026-08-25
 tags: ['随笔', '思考']
 draft: true
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "Is telling part of the truth a lie?"
+    description: "Does leaving out some of the facts count as lying — thought through from interest, from the information gap, and from whether being honest actually works."
+  ja:
+    title: "選んで述べることは欺きなのか"
+    description: "事実の一部を隠すのは嘘なのか —— 利害から、情報の差から、そして「誠実さは役に立つのか」から、順に考えてみた。"
 ---
 
 选择性地陈述是欺骗吗？

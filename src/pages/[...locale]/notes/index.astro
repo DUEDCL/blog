@@ -1,0 +1,22 @@
+---
+import ListLayout from '../../../layouts/ListLayout.astro';
+import { getListItems } from '../../../utils/content';
+import { LOCALE_PARAMS, t, toLocale } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const s = t(locale).sections.notes;
+const items = await getListItems('notes', locale);
+---
+
+<ListLayout
+  title={s.title}
+  label={s.label}
+  description={s.description}
+  note={s.note}
+  empty={s.empty}
+  items={items}
+/>

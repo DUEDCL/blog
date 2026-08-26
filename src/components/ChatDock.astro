@@ -6,7 +6,7 @@
  * 1. **全站浮动对话按钮**（他在四个选项里选的），不是单独一页、不是接在名片页下面；
  * 2. **打开对话时音乐药丸自动收成吸附态** —— 两个浮层不抢屏。靠派一个 `jk:dock`
  *    事件给 MiniPlayer 做，不去碰它的内部状态；
- * 3. **告知当成 AI 的开场白** —— 所以 `OPENING` 是日志里的第一条消息，
+ * 3. **告知当成 AI 的开场白** —— 所以开场白（`i18n` 的 `chat.opening`）是日志里的第一条消息，
  *    由前端直接渲染，不花 neurons，也不指望模型听话。
  *
  * 样式**刻意不挂 global.css 的 `.glass`**，玻璃那几行写在下面自己身上 ——
@@ -32,7 +32,7 @@
  *    答些什么。`localStorage` 记一次，看过就不再出。刻意不做成常驻提示：常驻的
  *    提示第二次访问就变成噪音，而它占的是视口左下角。
  * 3. **三个可点的开场问题**（`.ai__tips`）—— 措辞抄知识库原文（见 `data/chat.ts`
- *    的 `STARTERS`），发出第一句就整块 `remove()`。空对话时它承担「这个分身知道
+ *    的 `chat.starters`），发出第一句就整块 `remove()`。空对话时它承担「这个分身知道
  *    什么」，聊起来之后就该让位。
  *
  * 同一轮修掉的两处旧账（都在这枚键身上）：
@@ -49,20 +49,35 @@
  * 照抄门上那枚进站键的手法 —— `margin-bottom: var(--jk-room)`，药丸真贴底时才有值，
  * 被拖到别处或没在放音乐时自动退回 0。
  */
-import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
+import { MSG_MAX } from '../data/chat';
+import { localeOf, t } from '../i18n';
+
+/* 面板与那枚键上的字（R46）。开场白与起手三问也在词条里 —— 它们从前住在
+   `data/chat.ts`，那一份现在只留模型参数与提示词的组装。
+   语言从地址认（同 BaseHead / MiniPlayer），运行期那几条错误文案由下面
+   根节点上的 `data-t-*` 带给脚本。 */
+const locale = localeOf(Astro.url.pathname);
+const s = t(locale).chat;
 ---
 
-<div class="ai" data-ai transition:persist="ai">
+<div
+  class="ai"
+  data-ai
+  data-t-err={s.errGeneric}
+  data-t-empty={s.errEmpty}
+  data-t-net={s.errNetwork}
+  transition:persist="ai"
+>
   {/* 一次性引导纸条。`hidden` 由脚本按 localStorage 决定，服务端渲染时一律是收着的 ——
       首屏不该为一个「可能已经看过」的提示留位置。
       主体是个撑满的按钮（点了直接开对话，比让人再瞄一眼下面那枚键少一步），
       关闭键是它的同级而不是子元素：button 套 button 是无效 HTML。 */}
   <aside class="ai__hint" data-ai-hint hidden>
     <button class="ai__hint-go" type="button" data-ai-hint-go>
-      <span class="ai__hint-t">沉麟的分身</span>
-      <span class="ai__hint-d">关于我、这个站、我在做的东西，问它。</span>
+      <span class="ai__hint-t">{s.hintTitle}</span>
+      <span class="ai__hint-d">{s.hintDesc}</span>
     </button>
-    <button class="ai__hint-x" type="button" data-ai-hint-x aria-label="不看了">
+    <button class="ai__hint-x" type="button" data-ai-hint-x aria-label={s.hintClose}>
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><path
           d="M8 8l8 8M16 8l-8 8"
@@ -109,18 +124,18 @@ import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
     {/* 键上那行字。**不是 aria-label 的替代品而是它的来源** —— 从前只有 label，
         读屏念得出、眼睛看不见。打开态收掉（见 `.ai.is-open .ai__label`），
         那时可读名字在面板标题上。 */}
-    <span class="ai__label">问沉麟的分身</span>
-    <span class="ai__label ai__label--shut">收起</span>
+    <span class="ai__label">{s.key}</span>
+    <span class="ai__label ai__label--shut">{s.keyShut}</span>
   </button>
 
 
   <section class="ai__panel" id="ai-panel" data-ai-panel hidden aria-labelledby="ai-key">
     <header class="ai__head">
-      <p class="ai__who">沉麟的分身</p>
+      <p class="ai__who">{s.who}</p>
     </header>
 
     <div class="ai__log" data-ai-log role="log" aria-live="polite">
-      <p class="ai__msg ai__msg--ai">{OPENING}</p>
+      <p class="ai__msg ai__msg--ai">{s.opening}</p>
     </div>
 
     {/* 开场那三个可点的问题。点一下走 `form.requestSubmit()` —— 复用发送那一条路，
@@ -129,10 +144,10 @@ import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
         排版刻意用短横线而不是药丸胶囊 —— 后者在 `ANTI_SLOP.md` 第 1 节被禁，
         短横线列举也是这个分身自己答话的格式（见 `data/chat.ts` 的规则 7）。 */}
     <div class="ai__tips" data-ai-tips>
-      <p class="ai__tips-h">可以这样问</p>
+      <p class="ai__tips-h">{s.tipsHead}</p>
       <ul class="ai__tips-l">
         {
-          STARTERS.map((q) => (
+          s.starters.map((q) => (
             <li>
               <button class="ai__tip" type="button" data-ai-ask={q}>
                 {q}
@@ -151,13 +166,13 @@ import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
         autocomplete="off"
         enterkeyhint="send"
         maxlength={MSG_MAX}
-        placeholder="回车发送"
-        aria-label="想问什么"
+        placeholder={s.placeholder}
+        aria-label={s.inputLabel}
       />
       {/* 发送键（R38 改回来的：R36 那一轮他要过「改成缩小/展开」，用过之后又要发送键）。
           回车照样能发 —— 单输入框的 form 会隐式提交，手机键盘那颗键也是「发送」。
           收起对话框走左下那枚浮动键。 */}
-      <button class="ai__send" type="submit" data-ai-send aria-label="发送">
+      <button class="ai__send" type="submit" data-ai-send aria-label={s.send}>
         <svg viewBox="0 0 24 24" aria-hidden="true"
           ><path
             d="M12 19V6M6 12l6-6 6 6"
@@ -181,6 +196,15 @@ import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
      消息，而每条消息都花真钱（neurons）。 */
   if (root && !root.dataset.wired) {
     root.dataset.wired = '1';
+
+    /* 三条运行期错误文案与当前语言（R46）。都从这个根节点的 data-* 上读 ——
+       这段是 bundled module，`import` 不到当前页面的语言。
+       `lang` 会跟着每次提问发给 Worker：分身照访客所在的这一版用同一种语言作答
+       （知识库仍然只有中文，模型读中文、答外语 —— 见 `data/chat.ts` 的提示词）。 */
+    const T_ERR = root.dataset.tErr ?? '';
+    const T_EMPTY = root.dataset.tEmpty ?? '';
+    const T_NET = root.dataset.tNet ?? '';
+    const lang = (document.documentElement.lang || 'zh').slice(0, 2);
 
     const pick = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
     const key = pick('[data-ai-key]');
@@ -474,13 +498,13 @@ import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ tab, message: text }),
+          body: JSON.stringify({ tab, message: text, lang }),
         });
 
         if (!res.ok || !res.body) {
-          /* 错误一律是 JSON + 一句中文人话（worker.ts 的 fail()）。
+          /* 错误一律是 JSON + 一句人话（worker.ts 的 fail()，按 `lang` 给对应语言）。
              读不出来就用兜底的那句，绝不显示状态码给访客看 */
-          let msg = '我这会儿答不上来，等一下再问';
+          let msg = T_ERR;
           try {
             const j = (await res.json()) as { error?: unknown };
             if (typeof j.error === 'string' && j.error) msg = j.error;
@@ -515,9 +539,9 @@ import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
         }
 
         const final = shown(raw);
-        out.textContent = final || '这个我答不上来。';
+        out.textContent = final || T_EMPTY;
       } catch {
-        out.textContent = '网络断了，等一下再问';
+        out.textContent = T_NET;
         out.classList.add('is-bad');
       } finally {
         busy = false;
@@ -898,7 +922,7 @@ import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
     width: 100%;
     padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
     /* 短横线用 ::before 而不是写进文案：那三句要原样发给模型（措辞抄的是知识库
-       条目的 question，见 data/chat.ts 的 STARTERS），文案里多一个字符就多一个变量 */
+       条目的 question，见 `i18n/zh.ts` 的 chat.starters），文案里多一个字符就多一个变量 */
     position: relative;
     text-align: left;
     font-family: var(--font-body);

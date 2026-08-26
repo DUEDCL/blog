@@ -3,50 +3,65 @@
 // 刻意不做 /tags/[标签] 动态路由 —— 当前每个标签只有一两篇，拆开是一堆薄页面；
 // 而且 dist/ 里会出现 tags/算法/ 这类非 ASCII 目录名，多一层部署风险。
 // 内容量涨上来再拆。
-import BaseLayout from '../layouts/BaseLayout.astro';
-import FormattedDate from '../components/FormattedDate.astro';
-import { getAllTagCounts, getEntriesByTag, tagAnchor, tagHref } from '../utils/content';
+//
+// R46：**锚点用标签原文，三种语言下逐字相同**（理由在 tagAnchor 的注释里），
+// 显示名过译名表 —— 于是英文页上写着 `Architecture`，锚点仍然是 `tag-架构`，
+// 换语言时地址还指向同一段。
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FormattedDate from '../../components/FormattedDate.astro';
+import {
+  getAllTagCounts,
+  getEntriesByTag,
+  tagAnchor,
+  tagHref,
+} from '../../utils/content';
+import { LOCALE_PARAMS, t, toLocale } from '../../i18n';
 
-const tags = await getAllTagCounts();
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const s = t(locale).tags;
+
+const tags = await getAllTagCounts(locale);
 
 const groups = await Promise.all(
-  tags.map(async ({ tag, count }) => ({
+  tags.map(async ({ tag, count, name }) => ({
     tag,
+    /** 显示名。`getAllTagCounts` 已经查过译名表，同频次时也是按它排的序 */
+    name,
     count,
     // id 与 href 都由 utils 里那一对函数生成，保证两边永远对得上。
     // 同页跳转：路径相同、仅片段不同，浏览器不会重新加载
     anchor: tagAnchor(tag),
-    href: tagHref(tag),
-    entries: await getEntriesByTag(tag),
+    href: tagHref(tag, locale),
+    entries: await getEntriesByTag(tag, locale),
   }))
 );
 ---
 
-<BaseLayout
-  title="标签"
-  description="沉麟站内全部标签，以及每个标签下的内容。"
-  width="broad"
->
+<BaseLayout title={s.title} description={s.description} width="broad">
   <header class="head rise rise-1">
     <div class="head__row">
-      <span class="vlabel">标签</span>
-      <h1 class="head__title">标签</h1>
-      <p class="meta head__count">共 {tags.length} 个</p>
+      <span class="vlabel">{s.title}</span>
+      <h1 class="head__title">{s.title}</h1>
+      <p class="meta head__count">{s.count(tags.length)}</p>
     </div>
 
     <div class="pressrule"></div>
 
-    <p class="head__desc">文章、随笔与作品共用这一套标签。</p>
+    <p class="head__desc">{s.lead}</p>
   </header>
 
   {groups.length > 0 ? (
     <>
       {/* 标签胶囊：点一下跳到下面对应的一段。字号统一，不按频次加权 */}
       <ul class="cloud rise rise-2">
-        {groups.map(({ tag, count, href }) => (
+        {groups.map(({ name, count, href }) => (
           <li>
             <a class="chip" href={href}>
-              <span class="chip__name">{tag}</span>
+              <span class="chip__name">{name}</span>
               <span class="chip__count">{count}</span>
             </a>
           </li>
@@ -54,11 +69,11 @@ const groups = await Promise.all(
       </ul>
 
       <div class="groups">
-        {groups.map(({ tag, count, anchor, entries }) => (
+        {groups.map(({ name, count, anchor, entries }) => (
           <section class="group rise rise-3" id={anchor}>
             <h2 class="group__name">
-              <span class="group__hash" aria-hidden="true">#</span>{tag}
-              <span class="group__count meta">{count} 篇</span>
+              <span class="group__hash" aria-hidden="true">#</span>{name}
+              <span class="group__count meta">{s.entryCount(count)}</span>
             </h2>
 
             <ol class="line">
@@ -79,7 +94,7 @@ const groups = await Promise.all(
       </div>
     </>
   ) : (
-    <p class="empty">还没有标签。给文章的 frontmatter 加 tags 就会出现在这里。</p>
+    <p class="empty">{s.empty}</p>
   )}
 </BaseLayout>
 

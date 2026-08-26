@@ -9,7 +9,8 @@
  * 每个选项前面那枚方块是 `<span data-theme="paper">`，而 themes.css 的选择器写的是
  * `[data-theme='paper']` —— **没有限定 html**，所以它同样匹配这个 span：方块拿到的
  * `--paper` / `--press` 就是那套版次自己的值。色值因此只有一个来源，加一套版次
- * 只要在 themes.css 加一块、在 consts.ts 的 EDITIONS 加一项，这里不用动。
+ * 只要在 themes.css 加一块、在 consts.ts 的 EDITIONS 加一个 id、在三份 `i18n/*.ts`
+ * 的 `editions` 各加一条名字与参照物，这里不用动。
  *
  * ---- 当前项的勾选也不靠 JS ----
  * `html[data-theme='x'] [data-edition='x']` 一条 CSS 就能标出当前版次。JS 只补
@@ -19,37 +20,50 @@
  * SPA 导航后顶栏是新节点。若在 `astro:page-load` 里给按钮挂监听，十次导航会累积
  * 十层（Header.astro 的 scroll 监听那段注释记过同一个坑）。这里全部走 document 上的
  * 委托，判断 `closest()`，所以不需要重绑，也不会累积。
+ *
+ * ---- 长相住在 global.css ----
+ * `.topdrop` / `.topkey` / `.topmenu` / `.topopt` 那几个类与语言切换键共用
+ * （R46 提取）。这里只剩版次特有的那枚色卡，以及「当前是哪一版」那四条选择器。
  */
 import { EDITIONS } from '../consts';
+import { localeOf, t } from '../i18n';
+
+const strings = t(localeOf(Astro.url.pathname));
 ---
 
-<div class="ed">
+<div class="topdrop">
   <button
     type="button"
-    class="ed__key"
+    class="topkey"
     id="ed-key"
     aria-expanded="false"
     aria-haspopup="true"
     aria-controls="ed-menu"
   >
     <span class="ed__chip" aria-hidden="true"></span>
-    <span class="ed__label">版次</span>
+    <span>{strings.common.editionKey}</span>
   </button>
 
-  <div class="ed__menu glass" id="ed-menu" role="radiogroup" aria-label="选择版次" hidden>
+  <div
+    class="topmenu glass"
+    id="ed-menu"
+    role="radiogroup"
+    aria-label={strings.common.editionMenu}
+    hidden
+  >
     {
       EDITIONS.map((e) => (
         <button
           type="button"
-          class="ed__opt"
+          class="topopt"
           role="radio"
           aria-checked="false"
           data-edition={e.id}
         >
           <span class="ed__chip" data-theme={e.id} aria-hidden="true"></span>
-          <span class="ed__text">
-            <span class="ed__name">{e.name}</span>
-            <span class="ed__note">{e.note}</span>
+          <span class="topopt__text">
+            <span class="topopt__name">{strings.editions[e.id].name}</span>
+            <span class="topopt__note">{strings.editions[e.id].note}</span>
           </span>
         </button>
       ))
@@ -58,32 +72,6 @@ import { EDITIONS } from '../consts';
 </div>
 
 <style>
-  .ed {
-    position: relative;
-    flex-shrink: 0;
-  }
-
-  .ed__key {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-3);
-    background: none;
-    border: var(--rule-w) solid var(--rule-strong);
-    border-radius: var(--r-full);
-    color: var(--ink-soft);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.12em;
-    cursor: pointer;
-    transition: color 0.18s ease, border-color 0.18s ease;
-  }
-
-  .ed__key:hover {
-    color: var(--ink);
-    border-color: var(--glass-border-lit);
-  }
-
   /* 色卡：左下是纸，右上是签名色。45° 对角分割 —— 印刷厂的色标就是这么贴的，
      两半各占一半面积，比「一个圆点」更能同时说明纸与墨 */
   .ed__chip {
@@ -98,75 +86,18 @@ import { EDITIONS } from '../consts';
     box-shadow: inset 0 0 0 1px var(--rule-strong);
   }
 
-  .ed__menu {
-    position: absolute;
-    top: calc(100% + var(--sp-3));
-    right: 0;
-    z-index: 60;
-    display: grid;
-    gap: 2px;
-    padding: var(--sp-2);
-    min-width: 15rem;
-    border-radius: var(--r-md);
-  }
-
-  /* `hidden` 是属性，`display: grid` 是声明 —— **声明赢**，所以光写 hidden 关不掉
-     这个菜单（第一次渲染实测：菜单默认就是展开的，盖住了刊头右半边）。
-     特异性 (0,2,0) 压过上面那条 (0,1,0)，不需要 !important。 */
-  .ed__menu[hidden] {
-    display: none;
-  }
-
-  .ed__opt {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    padding: var(--sp-3);
-    background: none;
-    border: 0;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background-color 0.16s ease;
-  }
-
-  .ed__opt:hover {
-    background: var(--glass-bg-strong);
-  }
-
-  .ed__text {
-    display: grid;
-    gap: 1px;
-    min-width: 0;
-  }
-
-  .ed__name {
-    font-family: var(--font-display);
-    font-size: var(--text-base);
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .ed__note {
-    font-size: var(--text-xs);
-    line-height: 1.4;
-    color: var(--ink-faint);
-  }
-
-  /* 当前版次：纯 CSS 判定（见组件顶部注释）。左边那道 2px 签名色是**游标**，
-     不是装饰色条 —— 它只出现在一项上，且位置就是「当前读的是哪一版」 */
-  :global(html[data-theme='night']) .ed__opt[data-edition='night'],
-  :global(html[data-theme='paper']) .ed__opt[data-edition='paper'],
-  :global(html[data-theme='film']) .ed__opt[data-edition='film'],
-  :global(html[data-theme='neon']) .ed__opt[data-edition='neon'] {
+  /* 当前版次：纯 CSS 判定（见组件顶部注释）。`.topopt` 的公共样式在 global.css，
+     这四条只补「哪一项是当前」——scoped 之后特异性比全局那条高，所以会赢 */
+  :global(html[data-theme='night']) .topopt[data-edition='night'],
+  :global(html[data-theme='paper']) .topopt[data-edition='paper'],
+  :global(html[data-theme='film']) .topopt[data-edition='film'],
+  :global(html[data-theme='neon']) .topopt[data-edition='neon'] {
     background: var(--glass-bg);
     box-shadow: inset 2px 0 0 var(--press);
   }
 
-  /* 窄屏不改定位：顶栏折行后这枚键跟品牌同一行、贴在右端，`right: 0` 让菜单
-     朝左展开（375px 下从 x≈105 到 345，正好在版心内）。改成 `left: 0` 会朝右
-     展开 240px 直接溢出视口 —— 算过账的，别改回去。 */
+  /* 窄屏不改定位：顶栏折行后这两枚键跟品牌同一行、贴在右端，菜单朝左展开
+     （账算在 global.css 的 `.topmenu` 那一段）。 */
 </style>
 
 <script>

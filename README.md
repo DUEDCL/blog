@@ -6,6 +6,12 @@
 四条只读接口在 Worker 里跑（`src/worker.ts`）；全站换页走 SPA（`<ClientRouter />`），
 为的是「换页时音乐不断」。根路径 `/` 是起始页（一道门），正站首页在 `/home`。
 
+**三种语言**（R46）：中文在原地址（`/posts/…`，一个旧链接都没变），英文在 `/en/`，
+日文在 `/ja/`。界面文案三种语言各一份（`src/i18n/`），每篇内容的标题与摘要也三种语言
+（写在各自 frontmatter 的 `i18n:` 段里）；**正文目前多数只有中文原文** —— 那时详情页
+会在标题下如实挂一条「这篇只有中文原文」，译好一篇就把它放进
+`src/content/i18n/<语言>/<栏目>/`，那一页自动换成译文。
+
 线上：<https://duchenlin.top> · 备用 <https://duchenlin.eu.cc>（国内不可达，仅境外）
 
 ## 快速开始
@@ -22,6 +28,7 @@ npm run dev          # 本地预览 http://localhost:4321
 | `npm run preview` | 预览构建产物，最接近线上效果 |
 | `npm run build && npx wrangler dev` | 带 Worker 的本地预览 —— 要调点歌台或对话接口只能用这个。对话的三个 secret 从 `.dev.vars` 读（那个文件不进仓库） |
 | `npm run build && npx wrangler deploy` | 发布上线 |
+| `PORT=8788 node scripts/i18n-check.mjs` | 三语 × 三档视口的排版断言（顶栏溢出、竖排标识、语言菜单越界），非零退出码 = 有一项没过 |
 
 ## 文档
 

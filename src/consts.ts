@@ -1,26 +1,18 @@
 // 站点全局配置。
+//
+// **这里不再放面向访客的中文**（R46 多语言化）。栏目有哪些、地址是什么、账号填了没有
+// 留在这儿；标签、标题、介绍、空状态那些字搬去了 `src/i18n/{zh,en,ja}.ts`，
+// 三种语言各一份，漏译一条就是一个编译错误。
+// 唯一的例外是 `SITE_TITLE` —— 那两个字是刊名，是签名，三种语言下都不变。
 
 export const SITE_URL = 'https://duchenlin.top';
 
-export const SITE_TITLE = '沉麟';
-
-export const SITE_DESCRIPTION = '沉麟的个人站点 —— 技术文章、随笔、摄影与作品。';
-
 /**
- * 首页自我介绍。
- *
- * 第一句是**沉麟自己的话**（R32 那场采访的第一句回答），也是 `kb/who-am-i.md` 的开头 ——
- * 两处是同一句，改一处记得改另一处。原来这里是两句模板腔（「对细节挑剔，对『差不多』
- * 没耐心」），换掉的理由就是它不是他说的。
- *
- * 为什么放首页而不是名片页：R29 他亲手圈掉了名片页上的自我介绍块（原话「将图示圈起来的
- * 地方全部删掉，添加『名片』栏」），那一页现在的定位是「页面本身就是名片」。
- * 自述加回那儿会撞掉 R29，所以落在首页 —— 全站唯一还留着自我介绍位的地方。
+ * 刊名。**三种语言下都是这两个字**：首页那 120px 的大字是为两个汉字排的，
+ * 换成 `Chenlin` 会让刊头的字距、行高、与题词的对齐全部失效。
+ * 句子里提到他的时候用 `i18n` 的 `authorName`（英文那份是 `Chenlin`）。
  */
-export const BIO = [
-  '我就是一个在努力尝试和自己做朋友的人。',
-  '这里存放做过的东西，和把它们做对的过程。',
-];
+export const SITE_TITLE = '沉麟';
 
 export const AUTHOR = SITE_TITLE;
 
@@ -32,8 +24,6 @@ export const PAGE_SIZE = 10;
  *
  * R12 起不再是「只放栏目」：`/music` 是页面不是栏目，但它是站上唯一的常驻功能，
  * 需求原文要它「跟文章随笔作品并行」。
- * 标签用「音乐」「图库」而不是页面自己的 h1「唱片机」「摄影」—— 顶栏是导航不是标题，
- * 六项都是 2 字才等宽。
  *
  * **R29 加回第六项「名片」**（原话「添加『名片』栏」）：`/about` 那一页的自我介绍与
  * 建站说明都删掉了，剩下的就是名片，于是它值得一个顶栏入口 —— 头像仍然指向同一页，
@@ -45,15 +35,18 @@ export const PAGE_SIZE = 10;
  * R14 阶段⑥ 把首页那项从 '/' 改成 '/home'：根路径现在是起始页。
  * 这一项仍然被 Header.astro 滤掉，留着是因为它还有两个用户 ——
  * 语义上「首页在哪」这件事写在这里，以及首页项的 label 供别处引用。
+ *
+ * 标签在 `i18n/*.ts` 的 `nav` 里（六项两字等宽那条约束也记在那儿）。
+ * `href` 是**不带语言前缀**的站内路径，加前缀由 `i18n/index.ts` 的 `localePath()` 做。
  */
 export const NAV = [
-  { href: '/home', label: '首页' },
-  { href: '/posts', label: '文章' },
-  { href: '/notes', label: '随笔' },
-  { href: '/projects', label: '作品' },
-  { href: '/music', label: '音乐' },
-  { href: '/photos', label: '图库' },
-  { href: '/about', label: '名片' },
+  { key: 'home', href: '/home' },
+  { key: 'posts', href: '/posts' },
+  { key: 'notes', href: '/notes' },
+  { key: 'projects', href: '/projects' },
+  { key: 'music', href: '/music' },
+  { key: 'photos', href: '/photos' },
+  { key: 'about', href: '/about' },
 ] as const;
 
 /**
@@ -61,18 +54,16 @@ export const NAV = [
  *
  * `id` 必须与 `src/styles/themes.css` 里 `[data-theme='…']` 的名字逐字对应，
  * 也与 `components/ThemeBoot.astro` 那段 inline 脚本里的白名单对应（那份是运行期
- * 校验 localStorage 的，拿不到本模块的常量 —— 加一套版次要改的是这三处）。
- *
- * `note` 是那套版次的**物理参照物**一句话版，不是形容词。设计规则要求每套配色
- * 说得出参照的是什么真实存在的东西（themes.css 每一节顶部有完整推导）——
- * 「深夜印厂刚下机的那一版」是参照物，「酷炫深色」不是。
+ * 校验 localStorage 的，拿不到本模块的常量 —— 加一套版次要改的是这三处，
+ * 再加 `i18n/*.ts` 的 `editions` 三份文案）。
  */
 export const EDITIONS = [
-  { id: 'night', name: '夜刊', note: '深夜印厂刚下机的那一版' },
-  { id: 'paper', name: '晨版', note: '清早送到门口的新闻纸' },
-  { id: 'film', name: '胶片', note: '过期卷洗出来的暖褐' },
-  { id: 'neon', name: '霓虹', note: '荧光油墨印在黑纸上' },
+  { id: 'night' },
+  { id: 'paper' },
+  { id: 'film' },
+  { id: 'neon' },
 ] as const;
+
 
 /**
  * 从归档、标签等全站索引面里排除的栏目。
@@ -84,33 +75,18 @@ export const EDITIONS = [
 export const HIDDEN_SECTIONS = ['photos'] as const;
 
 /**
- * 首页底部的入口区。四张卡都是自动生成的页面，不需要维护。
- * 想加新入口就往这里加一项，首页会自动多一张卡片。
+ * 首页底部的入口区。四张都是自动生成的页面，不需要维护。
+ * 想加新入口就往这里加一项，首页会自动多一条 —— 同时要去三份 `i18n/*.ts` 的
+ * `portals` 里各加一条文案（漏了就是编译错误，不会静默出个 undefined）。
  * 图库同时在顶栏与这里 —— 归档、标签本来也是「页脚 + 首页」两处，不是新模式。
+ *
+ * 最后那一项的 `href` 是根路径：R14 阶段⑥ 之后那道门就在 `/`。
  */
 export const PORTALS = [
-  {
-    href: '/archive',
-    label: '归档',
-    description: '全站内容按年排成一条时间线。',
-  },
-  {
-    href: '/tags',
-    label: '标签',
-    description: '按主题横着翻，看写得最多的是什么。',
-  },
-  {
-    href: '/photos',
-    label: '图库',
-    description: '按组存放的照片，一组一页。',
-  },
-  {
-    // R14 阶段⑥ 之后这道门就是根路径。label 仍叫「启动页」而不是「首页」——
-    // 正站首页在 /home，两张卡都叫首页只会让人不知道该点哪张
-    href: '/',
-    label: '启动页',
-    description: '回到进站前那道门，随时可以再看一眼。',
-  },
+  { key: 'archive', href: '/archive' },
+  { key: 'tags', href: '/tags' },
+  { key: 'photos', href: '/photos' },
+  { key: 'portal', href: '/' },
 ] as const;
 
 /**
@@ -175,49 +151,8 @@ export const SOCIAL = {
   rss: '/rss.xml',
 } as const;
 
-/**
- * 各内容区的元信息，列表页标题与空状态文案都取自这里。
- *
- * `description` 与 `note` 是**两个不同用途**，R19 起分开：
- * - `description` 只进 `<meta name="description">` 与社交卡片，页面上不再渲染。
- *   R19 之前它同时是页头卡里那段大字介绍（`.head__desc`），需求逐字是
- *   「将文章、随笔、作品、图库这几个页面中的第一个介绍删掉」，于是那个 `<p>` 整块删了，
- *   但 meta 不能跟着删 —— 搜索结果里每一页总得有一句话。
- * - `note` 是页脚版权行右边那句小字，走 BaseLayout 的 footerNote。
- *   参照物是 `/music` 的「听一点音乐吧，让时间慢下来。」（那句仍写在 music.astro 自己身上，
- *   因为音乐不是内容集合、不在这张表里）。五句合起来是一组：都是十来个字的邀请式短句，
- *   不介绍栏目「是什么」，只说「怎么看它」。
- */
-export const SECTIONS = {
-  posts: {
-    label: '文章',
-    title: '技术文章',
-    description: '踩坑记录、实现笔记与一些想明白了的事。',
-    note: '慢慢读吧，想明白比读完重要。',
-    empty: '还没有文章。在 src/content/posts/ 下新建 .md 文件即可。',
-  },
-  notes: {
-    label: '随笔',
-    title: '随笔',
-    description: '不成体系的观察、读到的东西和一些私人的念头。',
-    note: '随便翻翻，不成体系也没关系。',
-    empty: '还没有随笔。在 src/content/notes/ 下新建 .md 文件即可。',
-  },
-  photos: {
-    label: '摄影',
-    title: '摄影',
-    description: '按组存放的照片。',
-    note: '慢慢看，光和影自己会说话。',
-    /* R32 起两组占位相册都标了 draft，这一页现在是真空的，所以这句会被访客看见 ——
-       其余四个栏目的 empty 仍是给开发者看的「在 src/content/xxx 下新建 .md」，
-       它们有内容、露不出来。这一条不能照那个写法。 */
-    empty: '照片还没整理好，等拍够一组再放上来。',
-  },
-  projects: {
-    label: '作品',
-    title: '作品',
-    description: '做过的一些东西。',
-    note: '都在这儿了，挑一个看看。',
-    empty: '还没有作品。在 src/content/projects/ 下新建 .md 文件即可。',
-  },
-} as const;
+/* 各内容区的元信息（标签、标题、介绍、页脚小字、空状态）搬去了 `src/i18n/*.ts`
+   的 `sections`，三种语言各一份 —— 那五句话全是给访客看的字。
+   `description` 与 `note` 的分工、以及摄影那条 empty 为什么和别的四条不一样，
+   都跟着搬到了 `i18n/zh.ts` 对应位置。 */
+

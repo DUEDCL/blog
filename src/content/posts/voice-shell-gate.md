@@ -3,6 +3,16 @@ title: 「说一句话就能在我电脑上执行命令」这道门，我写了�
 description: 语音助手接终端是全项目最大的风险面。默认关、形状硬拦、白名单按 token 比对、已验说话人、每次确认 —— 以及一个被测试抓出来的真值 bug。
 pubDate: 2026-08-19
 tags: ['安全', 'Python', '语音']
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "“Say a sentence and a command runs on my machine” — that gate has five layers"
+    description: "Wiring a voice assistant to a terminal is the largest risk surface in the project. Off by default, shape-checked, allowlist matched per token, verified speaker, confirmation every time — plus one truthiness bug the tests caught."
+  ja:
+    title: "「一言で自分の PC でコマンドが走る」という扉、五層にした"
+    description: "音声アシスタントを端末につなぐのは、このプロジェクト最大のリスク面だ。既定でオフ、形での門前払い、許可リストはトークン単位で照合、話者は検証済み、毎回の確認 —— それとテストが捕まえた真偽値のバグ一つ。"
 ---
 
 语音平台里最危险的一个功能是 `shell.run`：说一句话，命令就在本机跑起来。

@@ -1,0 +1,41 @@
+---
+import { getCollection, render } from 'astro:content';
+import ArticleLayout from '../../../layouts/ArticleLayout.astro';
+import { localized, translationOf } from '../../../utils/content';
+import { DEFAULT_LOCALE, LOCALE_PARAMS, localePath, t, toLocale } from '../../../i18n';
+
+export async function getStaticPaths() {
+  const notes = await getCollection('notes', ({ data }) =>
+    import.meta.env.DEV ? true : data.draft !== true
+  );
+
+  return LOCALE_PARAMS.flatMap(({ locale }) =>
+    notes.map((note) => ({
+      params: { locale, slug: note.id },
+      props: { note },
+    }))
+  );
+}
+
+const { note } = Astro.props;
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+
+const translation = await translationOf('notes', note.id, locale);
+const meta = localized(note.data, locale, translation);
+const { Content } = await render(translation ?? note);
+---
+
+<ArticleLayout
+  title={meta.title}
+  description={meta.description ?? ''}
+  pubDate={note.data.pubDate}
+  updatedDate={note.data.updatedDate}
+  tags={note.data.tags}
+  cover={note.data.cover}
+  coverAlt={note.data.coverAlt}
+  section={{ href: localePath(locale, '/notes'), label: strings.sections.notes.title }}
+  onlyOriginal={locale !== DEFAULT_LOCALE && !translation}
+>
+  <Content />
+</ArticleLayout>

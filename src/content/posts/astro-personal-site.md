@@ -3,6 +3,16 @@ title: 用 Astro 搭一个不吃灰的个人站
 description: 从零到上线的完整记录：为什么选静态站、内容怎么组织、以及在国内访问速度上做了哪些具体权衡。
 pubDate: 2026-08-16
 tags: ['Astro', '前端', '建站']
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "Building a personal site with Astro that will not gather dust"
+    description: "The whole record from nothing to live: why a static site, how the content is organised, and the specific trade-offs made for load speed inside China."
+  ja:
+    title: "Astro で埃をかぶらない個人サイトを作る"
+    description: "ゼロから公開までの記録：なぜ静的サイトなのか、内容をどう組んだか、そして中国国内からの速度のために何を引き換えにしたか。"
 ---
 
 这篇是本站自己的搭建记录。写下来一是给自己留个档，二是如果你也想搭一个，可以少走几步弯路。

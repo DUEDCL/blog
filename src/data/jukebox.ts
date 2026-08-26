@@ -41,11 +41,18 @@
  * 73194 字节，JSON 是不完整的。
  */
 
-/** 一个歌单。id 同时是 Worker 的白名单键 */
+/**
+ * 一个歌单。`id` 同时是 Worker 的白名单键；`key` 是它在三份词条表里的键 ——
+ * **名字不写在这里**（R46）：chip 上那三个词三种语言各一份，住在 `i18n/*.ts` 的
+ * `music.juke.charts`。
+ */
 export interface Chart {
   id: string;
-  name: string;
+  key: ChartKey;
 }
+
+/** 三个歌单的词条键。与 `i18n` 的 `music.juke.charts` 逐项对应 */
+export type ChartKey = 'mine' | 'hot' | 'original';
 
 /**
  * 曲库 = 沉麟自己的歌单 + 两个官方榜。
@@ -65,11 +72,16 @@ export interface Chart {
  *
  * 名字用 `music.163.com/playlist?id=` 的 <title> 核对过，条数是逐个实测值：
  * 沉麟推荐 324、热歌 200、原创 100。
+ *
+ * R46：chip 上的三个名字搬去了 `i18n/*.ts` 的 `music.juke.charts`。**这三个是标签
+ * 不是实体名** —— 「沉麟推荐」本来就不是那个歌单在网易云上的名字（原名「我喜欢的音乐」，
+ * 见上一段），它是给访客看的一句话；「热歌榜」「原创榜」同理，日文版页面上留着中文
+ * 只会是漏译。歌单**内容**仍然是中文歌，那与 chip 上写什么语言无关。
  */
 export const CHARTS: readonly Chart[] = [
-  { id: '12607934375', name: '沉麟推荐' },
-  { id: '3778678', name: '热歌榜' },
-  { id: '2884035', name: '原创榜' },
+  { id: '12607934375', key: 'mine' },
+  { id: '3778678', key: 'hot' },
+  { id: '2884035', key: 'original' },
 ];
 
 /**

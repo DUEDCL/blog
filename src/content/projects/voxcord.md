@@ -4,6 +4,16 @@ description: Vox 的前身。Flutter 移动端 + Tauri/React 桌面端 + 共享�
 pubDate: 2026-05-04
 tags: ['Python', '语音', 'Tauri', 'Flutter']
 status: 'archived'
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "VoxCord"
+    description: "What came before Vox. A cross-platform wake-word assistant: Flutter on mobile, Tauri/React on desktop, a shared core in the middle. I tore it down on purpose once “swappable” turned out to be a convention rather than a contract."
+  ja:
+    title: "VoxCord"
+    description: "Vox の前身。Flutter のモバイル + Tauri/React のデスクトップ + 共有コアという構成のウェイクワード・アシスタント。「差し替え可能」が契約ではなく約束事にすぎないと分かって、自分から作り直した。"
 ---
 
 Vox 之前的那一版，跨平台。Flutter 做移动端，Tauri + React 做桌面端，中间一个共享的 Python 核心运行时，用 monorepo 管起来。

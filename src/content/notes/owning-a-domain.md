@@ -3,6 +3,16 @@ title: 把域名买下来这件事
 description: 一个可能有点过时的想法：有个自己的地址，比在任何平台上有账号都重要。
 pubDate: 2026-08-15
 tags: ['随想']
+# 元数据的译文（R46）。正文仍是中文原文，详情页会在标题下挂一条说明 ——
+# 正文也译好之后放到 src/content/i18n/<语言>/<栏目>/ 下，那时这一段可以留着，
+# 两处都有时以译文文件里的为准（见 content.config.ts 的注释）。
+i18n:
+  en:
+    title: "On buying the domain"
+    description: "A thought that may be out of date: having an address of your own matters more than having an account anywhere."
+  ja:
+    title: "ドメインを買うということ"
+    description: "少し時代遅れかもしれない考え：自分の住所を持つことは、どのプラットフォームのアカウントよりも大事だ。"
 ---
 
 今天把域名买了下来。一年几十块钱，买的是一个地址。

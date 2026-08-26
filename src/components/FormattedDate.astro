@@ -1,7 +1,20 @@
 ---
+/**
+ * 日期。**格式跟着语言走**（R46）：中文「2026 年 8 月 16 日」、英文
+ * 「August 16, 2026」、日文「2026年8月16日」，三种写法都在 `i18n/*.ts` 的 `date` 里。
+ *
+ * 仍然手工拼、不用 `toLocaleDateString`：那个函数的输出随运行环境的 ICU 数据变
+ * （同一份代码在本机与 CI 上可能给出不同的月份缩写），而这是静态站，构建在哪台机器上
+ * 跑不该影响产物。
+ *
+ * 语言从 `Astro.url.pathname` 认，不从 props 传 —— 这个组件被四个地方用，
+ * 逐个传一遍的下一步就是其中一处忘了传。
+ */
+import { localeOf, t } from '../i18n';
+
 interface Props {
   date: Date;
-  /** short: 2026.08.16（列表用）｜long: 2026 年 8 月 16 日（正文用） */
+  /** short: 2026.08.16（列表用）｜long: 语言各自的长写法（正文用） */
   format?: 'short' | 'long';
 }
 
@@ -11,11 +24,8 @@ const y = date.getFullYear();
 const m = date.getMonth() + 1;
 const d = date.getDate();
 
-// 手动格式化而非 toLocaleDateString：避免不同运行环境下的格式漂移
-const text =
-  format === 'long'
-    ? `${y} 年 ${m} 月 ${d} 日`
-    : `${y}.${String(m).padStart(2, '0')}.${String(d).padStart(2, '0')}`;
+const fmt = t(localeOf(Astro.url.pathname)).date;
+const text = format === 'long' ? fmt.long(y, m, d) : fmt.short(y, m, d);
 ---
 
 <time datetime={date.toISOString()}>{text}</time>
