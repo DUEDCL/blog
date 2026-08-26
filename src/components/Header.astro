@@ -1,6 +1,7 @@
 ---
 import { Image } from 'astro:assets';
 import { SITE_TITLE, NAV } from '../consts';
+import ThemeSwitch from './ThemeSwitch.astro';
 import avatar from '../assets/avatar.jpg';
 
 const path = Astro.url.pathname;
@@ -12,8 +13,16 @@ function isCurrent(href: string) {
 ---
 
 <header class="site-header" id="site-header">
-  <div class="wrap">
-    <div class="bar glass">
+  {/* R44 起顶栏是**通栏的一条**，不再是浮在版心里的圆角药丸。
+      三个理由，按重要程度排：
+      ① 药丸的左边缘在 72rem 版心里，而首页刊名在 80rem 版心里 —— 渲染实测两者
+         差 64px，顶栏看起来没跟内容对齐（那是「简陋」里最不容易指出来的一条）。
+      ② 少一个大圆角。这一版全站只有浮层是圆角，顶栏虽然是浮层，但它是**页眉**，
+         刊物的页眉是通栏的。
+      ③ sticky 元素贴顶时药丸上下都有空隙，滚动内容会从缝里穿过去。
+      玻璃底仍然要 —— 它得挡住从下面滚过来的内容。 */}
+  <div class="bar glass">
+    <div class="wrap wrap--broad bar__inner">
       {/* 品牌位是两个独立链接，不是一个：头像 → 名片页，站名 → 首页（R12）。
           R29 起「名片」在 NAV 里也有一项，所以头像不再是那一页唯一的入口；
           但站名必须自己承担回首页 —— 合成一个 <a> 就等于顶栏没有回首页的入口
@@ -48,8 +57,9 @@ function isCurrent(href: string) {
           ))
         }
       </nav>
-      {/* R31 之前这儿还有一枚深浅色切换键。浅色主题整个砍掉了，键也跟着删 ——
-          `.brand` 的 `margin-right: auto` 仍然把导航推到右侧，少一项不用改布局。 */}
+      {/* R44 把切换键加了回来（R31 砍掉浅色时连它一起删了）。位置在导航右侧 ——
+          `.brand` 的 `margin-right: auto` 把导航推到右侧，这一枚跟在导航后面。 */}
+      <ThemeSwitch />
     </div>
   </div>
 </header>
@@ -59,30 +69,37 @@ function isCurrent(href: string) {
     position: sticky;
     top: 0;
     z-index: 50;
-    /* 玻璃条上方留一点空隙，让它真的是「浮」着的。
-       这个值必须恒定 —— 它参与布局，动画它会让整页每帧重排、把下方内容上下推，
-       在阈值附近表现为可见的抖动（踩过）。收紧观感改由 .bar 的 transform 实现。
-       顶栏占位高度恒为 --header-h，global.css 的 --header-offset 依赖这个前提。 */
-    padding-block: var(--sp-4);
+    /* R44 去掉了 padding-block：通栏的页眉贴顶，上下不留缝。
+       顶栏占位高度因此就是 .bar 的高度（3.5rem），global.css 的 --header-h
+       与 --header-offset 依赖这个前提。 */
   }
 
   .bar {
+    /* 通栏：只留底部一条线，左右上三条边去掉 —— 满宽元素画侧边框等于在视口边缘
+       描一道竖线，那是「这里有个盒子」的信号，而页眉不是盒子 */
+    border-radius: 0;
+    border-inline: 0;
+    border-top: 0;
+    border-bottom: var(--rule-w) solid var(--rule-strong);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .bar__inner {
     display: flex;
     align-items: center;
     gap: var(--sp-6);
     height: 3.5rem;
-    padding-inline: var(--sp-4);
-    border-radius: var(--r-full);
-    transition: background-color 0.3s ease, box-shadow 0.3s ease,
-      transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
-  /* 位移只走合成层，不触发重排，视觉上仍是「贴顶后收紧」 */
+  /* 滚动后玻璃变实、底下垫一道投影。
+     R44 删掉了 `transform: translateY(-8px)` 那个「贴顶收紧」—— 通栏页眉本来就
+     贴着顶，没有可收紧的空隙，那段位移只会让整条抖一下（不携带信息，宪法第 4 条）。
+     少了它，`.site-header` 的 border box 在两种状态下逐位相同，跨页过渡的
+     `view-transition-name: site-header` 更不会插值出位移。 */
   .site-header.is-scrolled .bar {
-    transform: translateY(calc(var(--sp-2) * -1));
-    background: var(--glass-bg-strong);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 12px 32px -10px rgba(0, 0, 0, 0.5);
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong));
+    box-shadow: 0 12px 32px -14px rgba(0, 0, 0, 0.5);
   }
 
   .brand {
@@ -153,23 +170,25 @@ function isCurrent(href: string) {
     background: var(--glass-bg);
   }
 
-  /* 当前栏目：一枚更亮的玻璃药丸，比下划线更贴合整体语言 */
+  /* 当前栏目：**去掉了玻璃药丸**（R44）。通栏页眉里那枚圆角药丸是整条唯一的
+     圆角，渲染实测比导航本身更抢眼；报纸的做法是一道游标线。
+     线用签名色、文字提到 --ink，两者一起说明「你在这一栏」。 */
   .nav__link.is-current {
     color: var(--ink);
-    background: var(--glass-bg-strong);
-    box-shadow: inset 0 0 0 1px var(--glass-border-lit);
   }
 
+  /* 游标线用**签名色**而不是交互色：它回答的是「你在哪一栏」，不是「这里可以点」。
+     全站黄铜=可点、朱红=刊物在标记，两者不混用。
+     left/right 跟着 .nav__link 的内边距走，所以线与文字同宽 —— 固定宽度的短横线
+     在「名片」（2 字）和「作品」（2 字）下等宽，但换成三字栏目就会偏短。 */
   .nav__link.is-current::after {
     content: '';
     position: absolute;
-    left: 50%;
-    bottom: 0.15rem;
-    width: 0.75rem;
+    left: var(--sp-3);
+    right: var(--sp-3);
+    bottom: 0.1rem;
     height: 2px;
-    border-radius: 2px;
-    background: var(--seal);
-    transform: translateX(-50%);
+    background: var(--press);
   }
 
   /* 窄屏：导航换到品牌下方，五项折成两行（3 + 2）。
@@ -179,12 +198,12 @@ function isCurrent(href: string) {
      而蒙版本身已被 R10 删掉（纯 CSS 判断不了溢出，它会无条件啃掉首末项）。折行让五项全部可见。
      导航因此多占 44px，global.css 的窄屏 --header-offset 已同步重测为 12.25rem。 */
   @media (max-width: 46rem) {
-    .bar {
+    .bar__inner {
       height: auto;
       flex-wrap: wrap;
-      padding: var(--sp-3) var(--sp-4);
-      border-radius: var(--r-lg);
+      padding-block: var(--sp-3);
       row-gap: var(--sp-2);
+      gap: var(--sp-3);
     }
 
     .nav {

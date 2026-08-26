@@ -16,11 +16,65 @@
  *
  * 位置在左下角：药丸默认在右下（`player.css` 的 `.jk-mini`），分开放两角，
  * 第一次打开时两者不会重叠。
+ *
+ * ## R45：入口从「匿名圆键」改成「带名字的键 + 一次性引导」
+ *
+ * 报上来的是「按钮做得明显一点，加上适当的提示」。改之前量过的基线
+ * （`.tmpcolor/dock.mjs`，1280×900 / 390×844 / 320×640 三档）说明问题在哪：
+ * 键是 48×48 的玻璃圆，里面一个通用对话气泡图标，**没有一个字**说明它是什么 ——
+ * 全站最独特的那个功能藏在一个可能被读成「客服」「反馈」「评论」的符号后面。
+ * 这正是 `ANTI_SLOP.md` 八轴里 Usability 那条低分证据：「关键信息要悬停/展开才看得到」。
+ *
+ * 三层，各解一件事：
+ * 1. **键上写字**（`.ai__label`）—— 静息态就说清「问沉麟的分身」。打开后文字收掉、
+ *    键缩回圆形叉号：那时面板顶上已经写着「沉麟的分身」，键上再重复一遍是冗余。
+ * 2. **一次性引导纸条**（`.ai__hint`）—— 进站 2.6 秒后从键上方浮出，说明这个分身
+ *    答些什么。`localStorage` 记一次，看过就不再出。刻意不做成常驻提示：常驻的
+ *    提示第二次访问就变成噪音，而它占的是视口左下角。
+ * 3. **三个可点的开场问题**（`.ai__tips`）—— 措辞抄知识库原文（见 `data/chat.ts`
+ *    的 `STARTERS`），发出第一句就整块 `remove()`。空对话时它承担「这个分身知道
+ *    什么」，聊起来之后就该让位。
+ *
+ * 同一轮修掉的两处旧账（都在这枚键身上）：
+ * · `:hover` 的 `translateY(-2px)` —— `ANTI_SLOP.md` 第 1 节「hover 时整卡/整行位移」
+ *   已裁决禁用并宣称「Blog 已清零（2026-08-26）」，这一处是漏网的。位移报告不了
+ *   任何状态，反馈留「换色 + 换描边」。
+ * · 阴影里硬编码的 `rgba(255,255,255,.06)` 与 `rgba(0,0,0,.7)` —— R44 主题化之后
+ *   `themes.css` 有派生好的 `--shadow-glass`（按版次算，浅色版次的受光边是白的、
+ *   阴影用纸色不用纯黑）。硬编码那两个值在晨版上是「灰黑描边 + 脏阴影」。
+ *
+ * 窄屏下键与音乐药丸**原本 100% 重叠**（390 与 320 两档实测都是 44×44px 全覆盖 ——
+ * 药丸在窄屏是贴底通栏，见 `player.css` 的 `@media (max-width: 40rem)`）。从前是
+ * 一枚小圆压在药丸左端，加了文字会变成压掉药丸左半边，所以这一轮一起解决：
+ * 照抄门上那枚进站键的手法 —— `margin-bottom: var(--jk-room)`，药丸真贴底时才有值，
+ * 被拖到别处或没在放音乐时自动退回 0。
  */
-import { MSG_MAX, OPENING } from '../data/chat';
+import { MSG_MAX, OPENING, STARTERS } from '../data/chat';
 ---
 
 <div class="ai" data-ai transition:persist="ai">
+  {/* 一次性引导纸条。`hidden` 由脚本按 localStorage 决定，服务端渲染时一律是收着的 ——
+      首屏不该为一个「可能已经看过」的提示留位置。
+      主体是个撑满的按钮（点了直接开对话，比让人再瞄一眼下面那枚键少一步），
+      关闭键是它的同级而不是子元素：button 套 button 是无效 HTML。 */}
+  <aside class="ai__hint" data-ai-hint hidden>
+    <button class="ai__hint-go" type="button" data-ai-hint-go>
+      <span class="ai__hint-t">沉麟的分身</span>
+      <span class="ai__hint-d">关于我、这个站、我在做的东西，问它。</span>
+    </button>
+    <button class="ai__hint-x" type="button" data-ai-hint-x aria-label="不看了">
+      <svg viewBox="0 0 24 24" aria-hidden="true"
+        ><path
+          d="M8 8l8 8M16 8l-8 8"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        /></svg
+      >
+    </button>
+  </aside>
+
   <button
     class="ai__key"
     type="button"
@@ -28,7 +82,6 @@ import { MSG_MAX, OPENING } from '../data/chat';
     id="ai-key"
     aria-expanded="false"
     aria-controls="ai-panel"
-    aria-label="和沉麟的分身说话"
   >
     <svg class="ai__ico ai__ico--talk" viewBox="0 0 24 24" aria-hidden="true"
       ><path
@@ -53,7 +106,13 @@ import { MSG_MAX, OPENING } from '../data/chat';
         stroke-linecap="round"
       /></svg
     >
+    {/* 键上那行字。**不是 aria-label 的替代品而是它的来源** —— 从前只有 label，
+        读屏念得出、眼睛看不见。打开态收掉（见 `.ai.is-open .ai__label`），
+        那时可读名字在面板标题上。 */}
+    <span class="ai__label">问沉麟的分身</span>
+    <span class="ai__label ai__label--shut">收起</span>
   </button>
+
 
   <section class="ai__panel" id="ai-panel" data-ai-panel hidden aria-labelledby="ai-key">
     <header class="ai__head">
@@ -62,6 +121,26 @@ import { MSG_MAX, OPENING } from '../data/chat';
 
     <div class="ai__log" data-ai-log role="log" aria-live="polite">
       <p class="ai__msg ai__msg--ai">{OPENING}</p>
+    </div>
+
+    {/* 开场那三个可点的问题。点一下走 `form.requestSubmit()` —— 复用发送那一条路，
+        不另写一份提交逻辑（额度、busy 锁、剥 <think>、游标推进全在那儿）。
+        发出第一句就整块 remove()：它的用处只在「还没开口」那一刻。
+        排版刻意用短横线而不是药丸胶囊 —— 后者在 `ANTI_SLOP.md` 第 1 节被禁，
+        短横线列举也是这个分身自己答话的格式（见 `data/chat.ts` 的规则 7）。 */}
+    <div class="ai__tips" data-ai-tips>
+      <p class="ai__tips-h">可以这样问</p>
+      <ul class="ai__tips-l">
+        {
+          STARTERS.map((q) => (
+            <li>
+              <button class="ai__tip" type="button" data-ai-ask={q}>
+                {q}
+              </button>
+            </li>
+          ))
+        }
+      </ul>
     </div>
 
     <form class="ai__form" data-ai-form>
@@ -110,6 +189,8 @@ import { MSG_MAX, OPENING } from '../data/chat';
     const form = pick<HTMLFormElement>('[data-ai-form]');
     const input = pick<HTMLInputElement>('[data-ai-in]');
     const send = pick<HTMLButtonElement>('[data-ai-send]');
+    const hint = pick('[data-ai-hint]');
+    const tips: HTMLElement | null = root.querySelector('[data-ai-tips]');
 
     /**
      * 窗口号：一个标签页一份，关掉标签就换新的（R42 起它不再是会话号）。
@@ -193,6 +274,53 @@ import { MSG_MAX, OPENING } from '../data/chat';
       return p;
     };
 
+    /* ---------- 一次性引导纸条（R45）--------------------------------------
+       进站 2.6 秒后浮出，`localStorage` 记一次，看过就永远不再出。
+
+       三个决定与它们的理由：
+       ① **延迟而不是首帧就出** —— 首帧那会儿页面还在落字体、排版面，一张浮出的
+          纸条会和它们抢注意力，读起来像弹窗广告。等页面安静下来再出。
+       ② **12 秒自动收** —— 它占的是视口左下角，会压住正文。自动收的同时就落盘
+          「看过了」：一个见过它的人不需要第二次。
+       ③ **localStorage 读失败按「没看过」处理** —— 隐私模式下读写都会抛，那种环境
+          本来每次都是全新的；这段脚本一个标签页只跑一次，最多也就多出一回。 */
+    const HINT_KEY = 'ai:hinted';
+    const hintGo = pick('[data-ai-hint-go]');
+    const hintX = pick('[data-ai-hint-x]');
+    let hintTimer = 0;
+
+    /** 收掉纸条并记住。`quiet` 只在「还没到该出的时候就被打断」时用（比如先点了键） */
+    const dropHint = () => {
+      clearTimeout(hintTimer);
+      hintTimer = 0;
+      if (!hint.hidden) hint.hidden = true;
+      root.classList.remove('is-hinting');
+      try {
+        localStorage.setItem(HINT_KEY, '1');
+      } catch {
+        /* 记不住就只在这一次里有效 —— 比不显示提示好 */
+      }
+    };
+
+    let hinted = false;
+    try {
+      hinted = localStorage.getItem(HINT_KEY) === '1';
+    } catch {
+      /* 读不到当作没看过，见上面第 ③ 条 */
+    }
+    if (!hinted) {
+      hintTimer = window.setTimeout(() => {
+        // 这 2.6 秒里可能已经自己点开对话了 —— 那就不用再教了
+        if (!panel.hidden) {
+          dropHint();
+          return;
+        }
+        hint.hidden = false;
+        root.classList.add('is-hinting');
+        hintTimer = window.setTimeout(dropHint, 12000);
+      }, 2600);
+    }
+
     /* ---------- 开关。开的时候把音乐药丸收成吸附圆（R32 决议） -------------
        靠自定义事件通知 MiniPlayer，不去碰它的内部状态 —— 它那三态有一套自己的
        落盘规则（吸附态刻意不记住），从外面改类名会把那套规则绕过去。 */
@@ -206,7 +334,19 @@ import { MSG_MAX, OPENING } from '../data/chat';
       if (on) wake();
     };
 
-    key.addEventListener('click', () => setOpen(panel.hidden));
+    key.addEventListener('click', () => {
+      // 碰过这枚键就算见过引导了，开还是关都一样
+      dropHint();
+      setOpen(panel.hidden);
+    });
+
+    /* 纸条主体点了直接开对话 —— 比「读完提示再去找下面那枚键」少一步 */
+    hintGo.addEventListener('click', () => {
+      dropHint();
+      setOpen(true);
+    });
+
+    hintX.addEventListener('click', dropHint);
 
     /** 让接收通道重新转起来。访客每次「动一下」都调它 —— 空转停下之后靠这个复活 */
     const wake = () => {
@@ -314,6 +454,10 @@ import { MSG_MAX, OPENING } from '../data/chat';
       const text = input.value.trim();
       if (!text) return;
 
+      /* 开场那三个问题的用处只在「还没开口」那一刻 —— 已经问出第一句了，
+         它们就该让位给对话本身。remove 而不是 hidden：这一个标签页里不会再需要它。 */
+      tips?.remove();
+
       busy = true;
       // 那条挂着的接收通道要让位：不掐掉它，这一轮的人工回复会出两次（见 listenAc 的注释）
       listenAc?.abort();
@@ -385,6 +529,22 @@ import { MSG_MAX, OPENING } from '../data/chat';
         wake();
       }
     });
+
+    /* ---------- 开场三问 ---------------------------------------------------
+       填进输入框再走 `requestSubmit()`，**不直接调发送逻辑** —— 那条路上有额度锁、
+       剥 <think>、游标推进、错误文案，复制一份的下一步一定是其中一份忘了改。
+
+       `requestSubmit` 在旧内核上可能没有（本站要在 X5 一类国产内核上活着，见
+       `themes.css` 顶部那段），所以留一条 dispatchEvent 的退路：单输入框的 form
+       本来也会隐式提交，这里只是把那件事显式做一遍。 */
+    tips?.addEventListener('click', (e) => {
+      const hit = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-ai-ask]');
+      const ask = hit?.dataset.aiAsk; // 属性是 data-ai-ask，驼峰化后是 aiAsk，不是 ask
+      if (!ask || busy) return;
+      input.value = ask;
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
   }
 </script>
 
@@ -402,43 +562,97 @@ import { MSG_MAX, OPENING } from '../data/chat';
   }
 
   .ai__key {
-    display: grid;
-    place-items: center;
-    width: 3rem;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    /* 视觉隐藏的「收起」靠它定位（见 `.ai.is-open .ai__label--shut`） */
+    position: relative;
+    /* 高度钉死 3rem，宽度随文字走。3rem 是 `--dock-room`（global.css）算出来的那一半，
+       改它要连那个变量一起改 —— 页脚的滚动余量按「键高 + 边距」算 */
     height: 3rem;
-    padding: 0;
+    padding: 0 var(--sp-4);
     order: 2;
-    color: var(--ink-soft);
+    color: var(--ink);
     background-color: var(--glass-under);
     background-image: linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong));
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     border: 1px solid var(--glass-border);
     border-radius: var(--r-full);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 36px -14px rgba(0, 0, 0, 0.7);
+    /* R44 派生的玻璃阴影，不再硬编码 —— 见顶部注释里那条旧账 */
+    box-shadow: var(--shadow-glass);
     cursor: pointer;
-    transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
   }
 
-  .ai__key:hover {
+  /* 反馈只换色与描边，**不位移** —— `ANTI_SLOP.md` 第 1 节裁决（位移报告不了任何状态） */
+  .ai__key:hover,
+  .ai__key:focus-visible {
     color: var(--seal);
     border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
   }
 
+  .ai__key:focus-visible {
+    outline: 2px solid var(--seal);
+    outline-offset: 2px;
+  }
+
+  /* 打开态收回一枚正圆的叉：那时名字写在面板标题上，键上再重复一遍是冗余 */
+  .ai.is-open .ai__key {
+    width: 3rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* 键上那行字。等宽 + 字距是本站刊眉与元信息的嗓音（`global.css` 的 `.meta`），
+     浮层上的标识跟着它走，而不是另起一套 */
+  .ai__label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+
+  /* 图标比文字轻一档：这枚键的主信息是那行字，图标只是给它一个落点 */
   .ai__ico {
     width: 1.35rem;
     height: 1.35rem;
+    flex: 0 0 auto;
+    color: var(--ink-soft);
   }
 
-  /* 两个图标叠在一个键里，露哪个由 `.is-open` 决定 —— 与播放/暂停那对同一套做法 */
+  .ai__key:hover .ai__ico,
+  .ai__key:focus-visible .ai__ico {
+    color: inherit;
+  }
+
+  /* 两个图标与两行字叠在一个键里，露哪个由 `.is-open` 决定 —— 与播放/暂停那对同一套做法 */
   .ai__ico--shut,
-  .ai.is-open .ai__ico--talk {
+  .ai__label--shut,
+  .ai.is-open .ai__ico--talk,
+  .ai.is-open .ai__label {
     display: none;
   }
 
   .ai.is-open .ai__ico--shut {
     display: block;
+  }
+
+  /* 打开态那枚键上只剩一枚叉，**它的可读名字得有出处**。
+     视觉隐藏而不是 display:none —— 后者会把它从无障碍树上一起摘掉，
+     读屏念到的就是一个没有名字的按钮。
+     不复用 global.css 的 `.visually-hidden`：这个组件刻意自带全部样式，
+     理由与玻璃那几行相同（见顶部注释 —— 门不引 global.css）。 */
+  .ai.is-open .ai__label--shut {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   .ai__panel {
@@ -454,7 +668,12 @@ import { MSG_MAX, OPENING } from '../data/chat';
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     border: 1px solid var(--glass-border);
     border-radius: var(--r-lg);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 28px 56px -20px rgba(0, 0, 0, 0.75);
+    /* R45：这一行原来是硬编码的 `rgba(255,255,255,.06)` + `rgba(0,0,0,.75)`。
+       同一轮里 `.ai__key` 已经换成派生的 `--shadow-glass`（R44 之后的规矩：
+       阴影跟着纸色走，纯黑在晨版上是脏阴影），面板是这个组件里最后一处漏网。
+       换过来之后四套版次一致，晨版的受光边也自动变成白的（themes.css 的
+       版次例外那段给 paper 重写了 `--shadow-glass`）。 */
+    box-shadow: var(--shadow-glass);
   }
 
   /* ⚠ 这一条不能省。`hidden` 属性的 UA 样式是 `[hidden] { display: none }`，
@@ -465,10 +684,120 @@ import { MSG_MAX, OPENING } from '../data/chat';
     display: none;
   }
 
+  /* ---------- 一次性引导纸条（R45）--------------------------------------
+     刊物里的告示长相：一块小版面，标题一行、说明一行，中间一道细规则线。
+     **刻意不做指向键的三角箭头** —— 那是 UI kit 的 tooltip 语汇，与「对开大版」
+     无关；关系靠位置说明（就在键正上方，间距比 panel 那档更近）。
+     **也刻意不给左侧竖色条** —— `ANTI_SLOP.md` 第 1 节禁 side-tab，
+     那条禁令只对状态载体开例外，而这里没有状态。 */
+  .ai__hint {
+    order: 0;
+    position: relative;
+    width: min(17rem, calc(100vw - var(--sp-8)));
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .ai__hint[hidden] {
+    display: none;
+  }
+
+  /* 出现是一次淡入，**没有位移** —— 位移在这套规则里只留给携带信息的动效。
+     淡入携带的信息是「这是刚出现的东西」，这一条留着 */
+  .ai.is-hinting .ai__hint {
+    animation: ai-fade 0.32s ease both;
+  }
+
+  @keyframes ai-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* 纸条主体本身就是那枚键的第二个触发点：读完提示的下一步就是开口，
+     不该让人再去瞄一眼下面那枚键 */
+  .ai__hint-go {
+    display: block;
+    width: 100%;
+    /* 右边给关闭键让出一列，不然长标题会顶到叉底下 */
+    padding: var(--sp-3) var(--sp-8) var(--sp-3) var(--sp-4);
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+  }
+
+  .ai__hint-t {
+    display: block;
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-variation-settings: 'opsz' 14, 'SOFT' 0, 'WONK' 0;
+    color: var(--ink);
+    /* 标题与说明之间那道线 —— 报头线的缩小版，刊物版面用它分层 */
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .ai__hint-d {
+    display: block;
+    margin-top: var(--sp-2);
+    font-size: var(--text-xs);
+    line-height: var(--leading-normal);
+    color: var(--ink-soft);
+  }
+
+  .ai__hint-go:hover .ai__hint-t,
+  .ai__hint-go:focus-visible .ai__hint-t {
+    color: var(--seal);
+  }
+
+  .ai__hint-go:focus-visible {
+    outline: 2px solid var(--seal);
+    outline-offset: -2px;
+    border-radius: var(--r-md);
+  }
+
+  .ai__hint-x {
+    position: absolute;
+    top: var(--sp-2);
+    right: var(--sp-2);
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    color: var(--ink-faint);
+    background: none;
+    border: 0;
+    border-radius: var(--r-full);
+    cursor: pointer;
+  }
+
+  .ai__hint-x svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .ai__hint-x:hover,
+  .ai__hint-x:focus-visible {
+    color: var(--ink);
+  }
+
   /* 不支持 backdrop-filter 时给一层不透明底 —— 半透明白字压在正文上没法读 */
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .ai__key,
-    .ai__panel {
+    .ai__panel,
+    .ai__hint {
       background-color: var(--glass-fallback);
       background-image: none;
     }
@@ -531,6 +860,74 @@ import { MSG_MAX, OPENING } from '../data/chat';
     color: var(--ink-faint);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
+  }
+
+  /* ---------- 开场三问（R45）---------------------------------------------
+     排版按刊物的「另见」栏：一行等宽小标 + 三条短横线列举。
+     **不用药丸胶囊** —— `ANTI_SLOP.md` 第 1 节禁「药丸形状的关键词与元信息」，
+     而短横线列举本来也是这个分身答话时的格式（`data/chat.ts` 的规则 7）。 */
+  .ai__tips {
+    padding: 0 var(--sp-5) var(--sp-4);
+  }
+
+  .ai__tips-h {
+    margin: 0 0 var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.12em;
+    /* 这里**刻意不是** `--ink-faint`（`.meta` 语汇里元信息小字的常规色）：那一档
+       的 5.1:1 是对 `--paper` 实底算的，而这块在玻璃上 —— 玻璃把深色版次的底提亮
+       了一档，实测夜刊 4.23:1、胶片 4.11:1，都掉到 4.5 判据之下
+       （`scripts/glass-contrast.mjs` 逐像素量的合成背景，非零退出码 = 不合格）。
+       换 `--ink-soft` 之后四套版次最低 5.97:1（胶片）。层次不靠明度也还在：
+       等宽 + 字距 + 灰调，与下面 `--seal` 的三问色相就不同。 */
+    color: var(--ink-soft);
+  }
+
+  .ai__tips-l {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .ai__tip {
+    display: block;
+    width: 100%;
+    padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+    /* 短横线用 ::before 而不是写进文案：那三句要原样发给模型（措辞抄的是知识库
+       条目的 question，见 data/chat.ts 的 STARTERS），文案里多一个字符就多一个变量 */
+    position: relative;
+    text-align: left;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--seal);
+    background: none;
+    border: 0;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: color 0.16s ease, background-color 0.16s ease;
+  }
+
+  .ai__tip::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--ink-faint);
+  }
+
+  .ai__tip:hover,
+  .ai__tip:focus-visible {
+    color: var(--seal-hover);
+    background: var(--seal-wash);
+  }
+
+  .ai__tip:focus-visible {
+    outline: 2px solid var(--seal);
+    outline-offset: -2px;
   }
 
   .ai__form {
@@ -597,17 +994,34 @@ import { MSG_MAX, OPENING } from '../data/chat';
     cursor: default;
   }
 
-  /* 窄屏：面板按视口宽算，键收小一档。药丸在右下、这枚在左下，
-     再加上「开对话时药丸自动收成圆」，375 屏上两者不会挤在一起。 */
+  /* 窄屏：面板按视口宽算，键收小一档。
+     **药丸在窄屏是贴底通栏的**（`player.css` 的 `@media (max-width: 40rem)`：
+     `left`/`right` 都是 `--sp-4`），所以「一左一右分开放」那条在这一档不成立 ——
+     改之前实测 390 与 320 两档这枚键 100% 压在药丸上（44×44px 全覆盖）。
+     抬法照抄门上那枚进站键（`player.css` 末尾的 `[data-portal] .go`）：
+     加 `margin-bottom` 而不是重写 `bottom`，因为 bottom 有两档，重写要抄两遍。
+     `--jk-room` 由 MiniPlayer 的 room() 在药丸**真的贴着底部**时才写，
+     药丸藏起来或被拖到别处时这条算出来就是 0，与从前逐像素一致。 */
   @media (max-width: 40rem) {
     .ai {
       left: var(--sp-4);
       bottom: var(--sp-4);
+      margin-bottom: var(--jk-room, 0px);
+    }
+
+    /* 药丸真贴底时两个玻璃浮层之间留一道缝，不然它们边贴边糊成一块 */
+    :root[data-jk] .ai {
+      margin-bottom: calc(var(--jk-room, 0px) + var(--sp-2));
     }
 
     .ai__key {
-      width: 2.75rem;
       height: 2.75rem;
+      padding: 0 var(--sp-3);
+    }
+
+    .ai.is-open .ai__key {
+      width: 2.75rem;
+      padding: 0;
     }
 
     .ai__panel {
@@ -618,12 +1032,13 @@ import { MSG_MAX, OPENING } from '../data/chat';
 
   @media (prefers-reduced-motion: reduce) {
     .ai__key,
-    .ai__send {
+    .ai__send,
+    .ai__tip {
       transition: none;
     }
 
-    .ai__key:hover {
-      transform: none;
+    .ai.is-hinting .ai__hint {
+      animation: none;
     }
   }
 </style>

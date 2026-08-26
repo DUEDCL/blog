@@ -65,11 +65,17 @@ const ogImage = image ? new URL(image, SITE_URL) : undefined;
 {ogImage && <meta name="twitter:image" content={ogImage} />}
 
 {/* 移动端浏览器地址栏跟随页面底色，不会露出一条白边。
-    R31 起只有一条：浅色主题砍掉了，没有第二档要跟。 */}
-<meta name="color-scheme" content="dark" />
-<meta name="theme-color" content="#050505" />
+    这两条是**首屏静态值**，写的是默认版次（夜刊）；R44 起读者可能选了别的版次，
+    真正的同步在 ThemeBoot.astro —— 它从 CSS 变量 `--theme-color` 读当前版次的底色
+    再写回这个 meta（值因此只有 themes.css 一个来源）。
+    `color-scheme` 给两档：四套版次里晨版是浅色，只写 dark 会让表单控件与滚动条
+    在那一档仍按深色渲染（CSS 里每套版次自己的 `color-scheme` 会接管，但这条 meta
+    在样式表解析完之前就生效，首屏那一帧靠它）。 */}
+<meta name="color-scheme" content="dark light" />
+<meta name="theme-color" content="#0b0b0c" />
 
-{/* `<html data-js>` 在样式加载前同步确定，避免闪烁（R31 之前这里还有 data-theme）。
-    脚本本体在 ThemeBoot.astro —— 起始页不走 BaseLayout，得自己引同一个组件，
-    而 SPA 导航按脚本 textContent 逐字去重，两处必须一模一样才只跑一次。 */}
+{/* `<html data-js data-theme>` 在样式加载前同步确定，避免闪烁 —— data-theme 是
+    R44 加回来的（R31 那轮砍浅色时连它一起删了）。脚本本体在 ThemeBoot.astro：
+    起始页不走 BaseLayout，得自己引同一个组件，而 SPA 导航按脚本 textContent
+    逐字去重，两处必须一模一样才只跑一次。 */}
 <ThemeBoot />

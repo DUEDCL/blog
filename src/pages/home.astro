@@ -1,8 +1,21 @@
 ---
+/**
+ * 首页 —— 对开大版的头版（R44 重做）。
+ *
+ * 上一版是「玻璃 hero 卡 + 三块等重的玻璃列表 + 四张入口卡」，1280 宽渲染实测
+ * 从上到下六个圆角矩形、边框圆角底色全部相同，站主的判断是「简陋」。诊断在
+ * DESIGN_DECISIONS 的 DD-014，一句话版：**版面没有层级**——
+ * 内容区最大的字号是 19px（条目标题），最小是 12px，中间什么都没有，
+ * 而每个区块的视觉重量一模一样，所以第一眼不知道该看哪里。
+ *
+ * 这一版按报纸头版排：一处刊头、一条头条、一根朱红报头线、两栏加一道分栏线。
+ * 层级由**字号跨度**（刊名 120px → 头条 48px → 条目 19px → 刊眉 12px，跨 10 倍）
+ * 和**栏宽差异**（左栏 2.1fr、右栏 1fr）承担，不由卡片边框承担。
+ */
 import { Image } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import EntryCard from '../components/EntryCard.astro';
-import { getPublished } from '../utils/content';
+import FormattedDate from '../components/FormattedDate.astro';
+import { getPublished, getAllEntries } from '../utils/content';
 import {
   SITE_TITLE,
   SITE_DESCRIPTION,
@@ -10,12 +23,28 @@ import {
   SOCIAL,
   SECTIONS,
   PORTALS,
+  EDITIONS,
 } from '../consts';
 import avatar from '../assets/avatar.jpg';
 
-const posts = (await getPublished('posts')).slice(0, 3);
-const notes = (await getPublished('notes')).slice(0, 2);
-const projects = (await getPublished('projects')).filter((p) => p.data.featured).slice(0, 2);
+const posts = await getPublished('posts');
+const notes = await getPublished('notes');
+const projects = (await getPublished('projects')).filter((p) => p.data.featured);
+const all = await getAllEntries();
+
+/* 头条 = 最新那篇文章，其余排成小条目。posts 为空时 lead 是 undefined，整块不渲染 */
+const [lead, ...more] = posts;
+const rest = more.slice(0, 3);
+const asides = notes.slice(0, 3);
+const works = projects.slice(0, 3);
+
+/**
+ * 期号用**全站条目总数**：报纸期号单调递增，而「发一篇 +1」正好也是单调递增的
+ * 真实数字，数得出来（宪法第 2 条：能数出来的真实数字比任何「智能感」装饰都强）。
+ * 刻意不用建站天数 —— 那个每天都变，而这是静态站，不重新构建就会撒谎。
+ */
+const issue = all.length;
+const latest = all[0]?.pubDate;
 
 const socialLinks = [
   { label: 'GitHub', href: SOCIAL.github },
@@ -24,316 +53,418 @@ const socialLinks = [
 ].filter((l) => l.href);
 ---
 
-<BaseLayout description={SITE_DESCRIPTION}>
-  {/* ---------- 开篇 ---------- */}
-  <section class="hero">
-    <div class="hero__card glass rise rise-1">
-      <div class="hero__portrait">
+<BaseLayout description={SITE_DESCRIPTION} width="broad">
+  {/* ---------- 刊头 ---------- */}
+  <header class="mast rise rise-1">
+    <div class="mast__row">
+      <h1 class="mast__name">{SITE_TITLE}</h1>
+
+      <div class="mast__verse">
         <Image
           src={avatar}
           alt={`${SITE_TITLE}的头像`}
-          width={320}
-          height={320}
+          width={120}
+          height={120}
           loading="eager"
-          class="hero__avatar"
+          class="mast__face"
         />
-      </div>
-
-      <div class="hero__text">
-        <p class="meta hero__eyebrow">个人站点</p>
-
-        <h1 class="hero__title">
-          <span class="hero__name">{SITE_TITLE}</span>
-        </h1>
-
-        <div class="hero__bio">
-          {BIO.map((line) => <p>{line}</p>)}
+        <div>
+          {BIO.map((line, i) => (
+            <p class={i === 0 ? 'mast__lead' : 'mast__sub'}>{line}</p>
+          ))}
         </div>
+      </div>
+    </div>
 
-        {socialLinks.length > 0 && (
-          <ul class="hero__links">
-            {socialLinks.map((l) => (
-              <li>
-                <a href={l.href} target={l.href.startsWith('http') ? '_blank' : undefined}>
-                  {l.label}
-                </a>
-              </li>
-            ))}
-          </ul>
+    <div class="pressrule"></div>
+
+    {/* 刊眉：期号与日期是真实数字（见上面 issue 的注释）；版次名靠纯 CSS 选，
+        没有一行 JS —— 静态产物里四个名字都在，由 html[data-theme] 决定露哪一个 */}
+    <div class="mast__line">
+      <p class="meta mast__meta">
+        <span>第 {issue} 号</span>
+        {latest && (
+          <>
+            <span class="dot" aria-hidden="true">·</span>
+            <FormattedDate date={latest} format="long" />
+          </>
         )}
-      </div>
+        <span class="dot" aria-hidden="true">·</span>
+        <span class="edname">
+          {EDITIONS.map((e) => <span data-for={e.id}>{e.name}</span>)}
+        </span>
+      </p>
+
+      {socialLinks.length > 0 && (
+        <ul class="mast__links">
+          {socialLinks.map((l) => (
+            <li>
+              <a href={l.href} target={l.href.startsWith('http') ? '_blank' : undefined}>
+                {l.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
-  </section>
+  </header>
 
-  {/* ---------- 文章 ---------- */}
-  <section class="block">
-    <div class="block__head">
-      <h2 class="block__title">{SECTIONS.posts.title}</h2>
-      <a href="/posts" class="block__more meta">全部 →</a>
-    </div>
-
-    {posts.length > 0 ? (
-      <ul class="entries glass">
-        {posts.map((p) => (
-          <EntryCard
-            href={`/posts/${p.id}`}
-            title={p.data.title}
-            pubDate={p.data.pubDate}
-          />
-        ))}
-      </ul>
-    ) : (
-      <p class="empty glass">{SECTIONS.posts.empty}</p>
-    )}
-  </section>
-
-  {/* ---------- 随笔 ---------- */}
-  <section class="block">
-    <div class="block__head">
-      <h2 class="block__title">{SECTIONS.notes.title}</h2>
-      <a href="/notes" class="block__more meta">全部 →</a>
-    </div>
-
-    {notes.length > 0 ? (
-      <ul class="entries glass">
-        {notes.map((n) => (
-          <EntryCard
-            href={`/notes/${n.id}`}
-            title={n.data.title}
-            pubDate={n.data.pubDate}
-          />
-        ))}
-      </ul>
-    ) : (
-      <p class="empty glass">{SECTIONS.notes.empty}</p>
-    )}
-  </section>
-
-  {/* ---------- 精选作品（无精选时整块不出现） ---------- */}
-  {projects.length > 0 && (
-    <section class="block">
-      <div class="block__head">
-        <h2 class="block__title">{SECTIONS.projects.title}</h2>
-        <a href="/projects" class="block__more meta">全部 →</a>
+  {/* ---------- 头版：左栏文章（含头条），右栏随笔 ---------- */}
+  <div class="front rise rise-2">
+    <section class="front__main">
+      <div class="colhead">
+        <span class="vlabel">文章</span>
+        <h2 class="colhead__title">{SECTIONS.posts.title}</h2>
+        <a href="/posts" class="colhead__more">全部 {posts.length} 篇 →</a>
       </div>
 
-      <ul class="works glass">
-        {projects.map((pr) => (
+      {lead ? (
+        <>
+          {/* 头条：整个版面唯一一处出现摘要的地方 —— 其余条目只有标题与日期。
+              「哪一条是头条」因此不需要标签，字号自己说了 */}
+          <article class="lead">
+            <a href={`/posts/${lead.id}`} class="lead__link">
+              <h3 class="lead__title">{lead.data.title}</h3>
+              <p class="lead__dek">{lead.data.description}</p>
+            </a>
+            <p class="meta lead__date">
+              <FormattedDate date={lead.data.pubDate} />
+            </p>
+          </article>
+
+          {rest.length > 0 && (
+            <ul class="briefs">
+              {rest.map((p) => (
+                <li class="brief">
+                  <a href={`/posts/${p.id}`}>
+                    <span class="brief__title">{p.data.title}</span>
+                    <span class="meta brief__date">
+                      <FormattedDate date={p.data.pubDate} />
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <p class="empty">{SECTIONS.posts.empty}</p>
+      )}
+    </section>
+
+    <section class="front__side">
+      <div class="colhead">
+        <span class="vlabel">随笔</span>
+        <h2 class="colhead__title">{SECTIONS.notes.title}</h2>
+        <a href="/notes" class="colhead__more">全部 →</a>
+      </div>
+
+      {asides.length > 0 ? (
+        <ul class="briefs briefs--stack">
+          {asides.map((n) => (
+            <li class="brief">
+              <a href={`/notes/${n.id}`}>
+                <span class="brief__title">{n.data.title}</span>
+                <span class="meta brief__date">
+                  <FormattedDate date={n.data.pubDate} />
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="empty">{SECTIONS.notes.empty}</p>
+      )}
+    </section>
+  </div>
+
+  {/* ---------- 作品：三栏并列，栏与栏之间是分栏线 ---------- */}
+  {works.length > 0 && (
+    <section class="works rise rise-3">
+      <div class="hairline"></div>
+
+      <div class="colhead">
+        <span class="vlabel">作品</span>
+        <h2 class="colhead__title">{SECTIONS.projects.title}</h2>
+        <a href="/projects" class="colhead__more">全部 →</a>
+      </div>
+
+      <ul class="works__grid">
+        {works.map((pr) => (
           <li class="work">
             <a href={`/projects/${pr.id}`}>
-              <span class="work__title">{pr.data.title}</span>
-              <span class="work__desc">{pr.data.description}</span>
+              <h3 class="work__title">{pr.data.title}</h3>
+              <p class="work__desc">{pr.data.description}</p>
             </a>
           </li>
         ))}
       </ul>
     </section>
   )}
-  {/* ---------- 入口 ---------- */}
-  <section class="block">
-    <div class="block__head">
-      <h2 class="block__title">别处</h2>
-    </div>
 
-    <ul class="portals">
+  {/* ---------- 别处：本期目录 ----------
+      上一版这里是四张玻璃卡（`.portal`，hover 时整卡上浮 —— 宪法第 4 条把
+      「hover 时整卡上浮」列为反例）。改成报纸的目录条：一行文字链，竖线分隔。
+      四个入口本来就只是四个地址，不需要四个盒子。 */}
+  <nav class="toc rise rise-4" aria-label="别处">
+    <div class="hairline"></div>
+    <ul class="toc__list">
       {PORTALS.map((p) => (
-        <li>
-          <a href={p.href} class="portal glass">
-            <span class="portal__label">{p.label}</span>
-            <span class="portal__desc">{p.description}</span>
-            <span class="portal__arrow" aria-hidden="true">→</span>
+        <li class="toc__item">
+          <a href={p.href}>
+            <span class="toc__label">{p.label}</span>
+            <span class="toc__desc">{p.description}</span>
           </a>
         </li>
       ))}
     </ul>
-  </section>
+  </nav>
 </BaseLayout>
 
 <style>
-  /* ---------- 开篇 ---------- */
-  .hero {
+  /* ---------- 刊头 ---------- */
+  .mast {
     padding-top: var(--sp-8);
   }
 
-  .hero__card {
+  .mast__row {
     display: flex;
-    align-items: center;
-    gap: var(--sp-12);
-    padding: var(--sp-12);
-    border-radius: var(--r-xl);
-  }
-
-  .hero__portrait {
-    position: relative;
-    flex-shrink: 0;
-  }
-
-  /* 头像背后一团同色光晕，把纯黑的方图从玻璃面上「托」起来 */
-  .hero__portrait::before {
-    content: '';
-    position: absolute;
-    inset: -18%;
-    border-radius: 50%;
-    background: radial-gradient(circle, var(--seal-wash), transparent 68%);
-    filter: blur(12px);
-    z-index: 0;
-  }
-
-  .hero__avatar {
-    position: relative;
-    z-index: 1;
-    width: 8.5rem;
-    height: 8.5rem;
-    border-radius: var(--r-full);
-    object-fit: cover;
-    border: 1px solid var(--glass-border-lit);
-    box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.7);
-  }
-
-  .hero__text {
-    min-width: 0;
-  }
-
-  .hero__eyebrow {
-    margin-bottom: var(--sp-3);
-  }
-
-  .hero__title {
-    font-size: var(--text-4xl);
-    font-variation-settings: 'opsz' 60, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
-    line-height: 1.05;
-  }
-
-  /* 名字用渐变填充，比纯色更有层次 */
-  .hero__name {
-    background: linear-gradient(
-      120deg,
-      var(--ink) 20%,
-      var(--seal) 60%,
-      var(--ink) 95%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .hero__bio {
-    margin-top: var(--sp-6);
-    color: var(--ink-soft);
-    font-size: var(--text-lg);
-    max-width: 34rem;
-  }
-
-  .hero__bio p + p {
-    margin-top: var(--sp-3);
-  }
-
-  .hero__links {
-    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
     flex-wrap: wrap;
-    gap: var(--sp-3);
-    margin: var(--sp-8) 0 0;
-    padding: 0;
-    list-style: none;
+    gap: var(--sp-6) var(--sp-8);
   }
 
-  .hero__links a {
-    display: inline-block;
-    padding: var(--sp-2) var(--sp-4);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    letter-spacing: 0.06em;
-    text-decoration: none;
-    color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    transition: color 0.18s ease, border-color 0.18s ease,
-      background-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+  /**
+   * 刊名。这是整站最大的一个字号，也是「简陋」的解药里最便宜的一条：
+   * 上一版首页最大的字是 64px 的名字，但它压在一张玻璃卡里、旁边还有个 136px
+   * 的头像，于是读起来是「一张名片」而不是「一份刊物的头版」。
+   *
+   * 三个数都不是默认值：
+   *   · 字距 0.08em —— 中文大字必须放开字距，宋体在 100px 以上时字面会挤在一起；
+   *     西文标题惯用的负字距（-0.02em）在中文上直接糊成一团。
+   *   · line-height 0.86 —— 单行标题不需要行距，0.86 把顶部空铅收掉，
+   *     刊名于是真的贴着版心上沿。
+   *   · margin-left -0.045em —— 宋体字面左侧留白比右侧大，不补这一点，
+   *     刊名看起来会比下面的报头线往右缩一格（光学对齐，不是像素对齐）。
+   */
+  .mast__name {
+    font-size: var(--text-masthead);
+    font-variation-settings: 'opsz' 72, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: 0.08em;
+    line-height: 0.86;
+    margin-left: -0.045em;
   }
 
-  .hero__links a:hover {
+  .mast__verse {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--sp-5);
+    padding-bottom: 0.35rem;
+    max-width: 30rem;
+  }
+
+  /* 直角。报纸上的专栏作者照是方的 —— 圆头像是社交产品的语汇，
+     而这一版全站只有浮层是圆角 */
+  .mast__face {
+    width: 3.25rem;
+    height: 3.25rem;
+    flex-shrink: 0;
+    object-fit: cover;
+    border: var(--rule-w) solid var(--rule-strong);
+  }
+
+  /* 题词 = BIO 第一句，用标题那套宋体。它是**他自己说的话**（见 consts.ts 的注释），
+     所以给它衬线体和更大的字号，不当说明文字排 */
+  .mast__lead {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
     color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
   }
 
-  /* ---------- 区块 ---------- */
-  .block {
-    margin-top: var(--sp-24);
+  .mast__sub {
+    margin-top: var(--sp-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--ink-faint);
   }
 
-  .block__head {
+  .pressrule {
+    margin-top: var(--sp-6);
+  }
+
+  .mast__line {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: var(--sp-4);
-    margin-bottom: var(--sp-6);
-    padding-inline: var(--sp-2);
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-6);
+    margin-top: var(--sp-3);
   }
 
-  .block__title {
-    font-size: var(--text-xl);
-    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
+  .mast__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-2);
   }
 
-  .block__more {
-    text-decoration: none;
-    white-space: nowrap;
-    transition: color 0.18s ease;
+  .dot {
+    opacity: 0.45;
   }
 
-  .block__more:hover {
-    color: var(--seal);
-  }
-
-  /* 条目列表整体是一块玻璃，内部只有分隔线 —— 比每条一块玻璃省 GPU */
-  .entries {
+  .mast__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-5);
     list-style: none;
     margin: 0;
     padding: 0;
-    overflow: hidden;
+  }
+
+  /* 社交链接退成刊眉里的一行小字（上一版是三枚玻璃药丸 + hover 上浮）。
+     它们是次要出口，不该有按钮的重量 */
+  .mast__links a {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    text-decoration: none;
+    transition: color 0.18s ease;
+  }
+
+  .mast__links a:hover {
+    color: var(--seal);
+  }
+
+  /* ---------- 头版两栏 ---------- */
+  /**
+   * 2.1 : 1 不是随手取的，也不是估的 —— `node scripts/measure.mjs` 量过：
+   * 1280 视口下左栏 798px、右栏 407px（含它自己 27px 的内边距）。
+   *   · 左栏 798px 装得下头条标题两行不折断，摘要另有 34rem 的上限压着，
+   *     所以正文每行 32 字左右，落在中文长阅读的舒适区（--measure-prose 那条实测）。
+   *   · 右栏 380px 是随笔标题两行内排得下的最小宽度，再窄就要折三行。
+   * 改这个比例要回来重跑那个脚本。
+   *
+   * 天沟 3 倍 --gutter（54px），分栏线画在它正中间：右栏 `border-left` 先用负 margin
+   * 往左推 1.5 倍（27px），再用同样的 padding 把内容推回来。线的位置因此只由
+   * --gutter 一个变量决定，不会和 column-gap 各说一套。
+   */
+  .front {
+    display: grid;
+    grid-template-columns: 2.1fr 1fr;
+    column-gap: calc(var(--gutter) * 3);
+    margin-top: var(--sp-12);
+  }
+
+  .front__side {
+    border-left: var(--rule-w) solid var(--rule-strong);
+    margin-left: calc(var(--gutter) * -1.5);
+    padding-left: calc(var(--gutter) * 1.5);
+  }
+
+  /* ---------- 头条 ---------- */
+  .lead__link {
+    display: block;
+    text-decoration: none;
+  }
+
+  .lead__title {
+    font-size: var(--text-headline);
+    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: -0.015em;
+    line-height: 1.16;
+    transition: color 0.18s ease;
+  }
+
+  .lead__link:hover .lead__title {
+    color: var(--seal);
+  }
+
+  /* 摘要只出现在头条上。其余条目只有标题与日期 —— 「哪条是头条」因此不需要
+     任何标签或角标，字号与摘要自己说明了 */
+  .lead__dek {
+    margin-top: var(--sp-4);
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
+    color: var(--ink-soft);
+    max-width: 34rem;
+  }
+
+  .lead__date {
+    margin-top: var(--sp-4);
+  }
+
+  /* ---------- 小条目 ----------
+     `.briefs` / `.brief` 那一套在 global.css（三处页面共用，见那里的注释）。
+     这里只有首页右栏那个变体。 */
+  .briefs {
+    margin-top: var(--sp-8);
+  }
+
+  /* 右栏只有 372px，标题与日期挤在一行会让标题折成三行。换成日期落在标题下方 */
+  .briefs--stack .brief > a {
+    display: block;
+  }
+
+  .briefs--stack .brief__date {
+    display: block;
+    margin-top: var(--sp-2);
   }
 
   .empty {
-    padding: var(--sp-8);
+    margin-top: var(--sp-6);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
 
   /* ---------- 作品 ---------- */
-  .works {
+  .works,
+  .toc {
+    margin-top: var(--sp-16);
+  }
+
+  .works .colhead,
+  .toc .hairline {
+    margin-top: var(--sp-8);
+  }
+
+  .works__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     list-style: none;
     margin: 0;
     padding: 0;
-    overflow: hidden;
   }
 
   .work + .work {
-    border-top: 1px solid var(--rule);
+    border-left: var(--rule-w) solid var(--rule);
   }
 
   .work a {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--sp-4);
+    display: block;
+    height: 100%;
     padding: var(--sp-5) var(--sp-6);
     text-decoration: none;
-    transition: background-color 0.2s ease, padding-left 0.24s ease;
+    transition: background-color 0.2s ease;
   }
 
+  /* 第一栏与版心左沿对齐 —— 有内边距的话，这一列的字会比上面的栏目标题缩进一格 */
+  .work:first-child a {
+    padding-left: 0;
+  }
+
+  /* hover 只换底色，不上浮。宪法第 4 条把「hover 时整卡上浮」列为反例：
+     那段位移不携带任何信息，纯装饰 */
   .work a:hover {
     background: var(--seal-wash);
-    padding-left: var(--sp-8);
   }
 
   .work__title {
-    font-family: var(--font-display);
     font-size: var(--text-lg);
-    font-weight: 600;
+    font-variation-settings: 'opsz' 18, 'SOFT' 0, 'WONK' 0;
     transition: color 0.18s ease;
   }
 
@@ -342,89 +473,101 @@ const socialLinks = [
   }
 
   .work__desc {
-    font-size: var(--text-sm);
-    color: var(--ink-soft);
-  }
-
-  /* ---------- 入口 ---------- */
-  .portals {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: var(--sp-4);
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .portal {
-    display: grid;
-    /* 箭头固定在右上，标题与描述占左栏 */
-    grid-template-columns: 1fr auto;
-    align-content: start;
-    gap: var(--sp-2) var(--sp-4);
-    height: 100%;
-    padding: var(--sp-6);
-    text-decoration: none;
-    transition: background-color 0.24s ease, border-color 0.18s ease,
-      transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.3s ease;
-  }
-
-  .portal:hover {
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lift);
-  }
-
-  .portal__label {
-    font-family: var(--font-display);
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--ink);
-    transition: color 0.18s ease;
-  }
-
-  .portal:hover .portal__label {
-    color: var(--seal);
-  }
-
-  .portal__desc {
-    grid-column: 1 / -1;
+    margin-top: var(--sp-3);
     font-size: var(--text-sm);
     line-height: var(--leading-normal);
     color: var(--ink-soft);
   }
 
-  .portal__arrow {
-    color: var(--rule-strong);
-    font-size: var(--text-sm);
-    transition: color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+  /* ---------- 本期目录 ---------- */
+  .toc__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
 
-  .portal:hover .portal__arrow {
+  .toc__item + .toc__item {
+    border-left: var(--rule-w) solid var(--rule);
+  }
+
+  .toc__item a {
+    display: block;
+    height: 100%;
+    padding: var(--sp-5);
+    text-decoration: none;
+    transition: background-color 0.2s ease;
+  }
+
+  .toc__item:first-child a {
+    padding-left: 0;
+  }
+
+  .toc__item a:hover {
+    background: var(--seal-wash);
+  }
+
+  .toc__label {
+    display: block;
+    font-family: var(--font-display);
+    font-size: var(--text-base);
+    font-weight: 600;
+    transition: color 0.18s ease;
+  }
+
+  .toc__item a:hover .toc__label {
     color: var(--seal);
-    transform: translateX(0.25rem);
   }
 
+  .toc__desc {
+    display: block;
+    margin-top: var(--sp-2);
+    font-size: var(--text-xs);
+    line-height: var(--leading-normal);
+    color: var(--ink-faint);
+  }
+
+  /* ---------- 窄屏：所有分栏塌成单列 ----------
+     分栏线跟着从竖线变成横线。报纸在手机上也是这么做的（对开变四开再变单栏），
+     线的方向变了，语汇没变。 */
   @media (max-width: 52rem) {
-    .hero__card {
-      flex-direction: column;
+    .front {
+      grid-template-columns: 1fr;
+    }
+
+    .front__side {
+      border-left: 0;
+      border-top: var(--rule-w) solid var(--rule-strong);
+      margin-left: 0;
+      padding-left: 0;
+      margin-top: var(--sp-12);
+      padding-top: var(--sp-8);
+    }
+
+    .works__grid,
+    .toc__list {
+      grid-template-columns: 1fr;
+    }
+
+    .work + .work,
+    .toc__item + .toc__item {
+      border-left: 0;
+      border-top: var(--rule-w) solid var(--rule);
+    }
+
+    .work a,
+    .toc__item a {
+      padding-inline: 0;
+    }
+
+    .mast__verse {
+      /* 宽屏时题词与刊名底部对齐（报纸刊头的基线）；窄屏时题词换到下一行、
+         头像与文字并排，这时候要顶部对齐 —— 底部对齐会让 3.25rem 的头像
+         沉到两行文字的下沿，第一行文字看起来是「凭空缩进了一格」（390 宽实测） */
       align-items: flex-start;
-      gap: var(--sp-8);
-      padding: var(--sp-8);
-    }
-
-    .hero__avatar {
-      width: 6rem;
-      height: 6rem;
-    }
-
-    .hero__title {
-      font-size: var(--text-3xl);
-    }
-
-    .block {
-      margin-top: var(--sp-16);
+      padding-bottom: 0;
+      max-width: none;
     }
   }
 </style>

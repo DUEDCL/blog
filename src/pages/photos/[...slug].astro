@@ -55,7 +55,7 @@ const lbJson = JSON.stringify(
   image={album.data.cover.src}
   width="wide"
 >
-  <header class="head glass rise rise-1">
+  <header class="head rise rise-1">
     <p class="meta crumbs">
       <a href="/photos">{SECTIONS.photos.title}</a>
     </p>
@@ -238,10 +238,10 @@ const lbJson = JSON.stringify(
 </script>
 
 <style>
+  /* R44：与文章页同一套页头，去掉玻璃卡与圆角 */
   .head {
     max-width: var(--measure-prose);
-    padding: var(--sp-8);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
   }
 
   .crumbs a {
@@ -255,9 +255,10 @@ const lbJson = JSON.stringify(
 
   .title {
     margin-top: var(--sp-4);
-    font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
-    letter-spacing: -0.02em;
+    font-size: var(--text-headline);
+    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: -0.015em;
+    line-height: 1.16;
   }
 
   .stamps {
@@ -301,16 +302,16 @@ const lbJson = JSON.stringify(
   .plate__open {
     position: relative;
     display: block;
-    border-radius: var(--r-lg);
-    /* 图片自己有圆角，链接层要跟着裁，否则 hover 的高光会露出方角 */
+    /* R44 直角：印刷品上的图是切方的。overflow 仍要留 —— hover 的高光要跟着裁 */
     overflow: hidden;
   }
 
+  /* 边框代替落影（R44）。印刷品里的图不投影，它就印在纸上；
+     一道 1px 的规则线才是「图到此为止」的印刷说法 */
   .plate :global(img) {
     width: 100%;
     height: auto;
-    border-radius: var(--r-lg);
-    box-shadow: var(--shadow-lift);
+    border: var(--rule-w) solid var(--rule);
   }
 
   /* 「放大」角标：只在装上了灯箱脚本时才出现 —— 脚本没跑起来时点图是
@@ -448,29 +449,20 @@ const lbJson = JSON.stringify(
   }
 
   .back a {
-    display: inline-block;
-    padding: var(--sp-2) var(--sp-4);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-decoration: none;
-    color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    transition: color 0.18s ease, background-color 0.24s ease,
-      border-color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+    color: var(--ink-faint);
+    transition: color 0.18s ease;
   }
 
   .back a:hover {
-    color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
+    color: var(--seal);
   }
 
   @media (max-width: 40rem) {
     .head {
-      padding: var(--sp-6);
+      padding-top: var(--sp-6);
     }
 
     .title {

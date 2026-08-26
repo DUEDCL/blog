@@ -1,5 +1,12 @@
 ---
-/* 文章 / 随笔的详情页布局：窄栏长阅读。 */
+/**
+ * 文章 / 随笔的详情页布局：窄栏长阅读。
+ *
+ * R44 去掉了页头那张圆角玻璃卡。理由与列表页同一条：一张卡把标题、摘要、日期、
+ * 标签全装进去，读起来是「一个信息盒子」，而报纸的文章头是**排版**——
+ * 栏目标识、标题、副题、署名行，靠字号与一道线分层，不靠边框围起来。
+ * 标签也从玻璃药丸退成等宽小字：它们是关键词，不是按钮。
+ */
 import 'katex/dist/katex.min.css'; /* 自托管，不走 CDN */
 import { Image } from 'astro:assets';
 import BaseLayout from './BaseLayout.astro';
@@ -40,7 +47,7 @@ const {
   width="prose"
 >
   <article>
-    <header class="head glass rise rise-1">
+    <header class="head rise rise-1">
       <p class="meta crumbs">
         <a href={section.href}>{section.label}</a>
       </p>
@@ -49,25 +56,31 @@ const {
 
       <p class="dek">{description}</p>
 
-      <div class="stamps meta">
-        <FormattedDate date={pubDate} />
-        {updatedDate && (
-          <>
-            <span class="sep" aria-hidden="true">/</span>
-            <span>更新于 <FormattedDate date={updatedDate} /></span>
-          </>
+      {/* 署名行：日期 + 关键词。一道细线把它与正文分开 —— 报纸里这条线的作用是
+          「上面是关于这篇文章的，下面是文章本身」 */}
+      <div class="byline">
+        <div class="stamps meta">
+          <FormattedDate date={pubDate} />
+          {updatedDate && (
+            <>
+              <span class="sep" aria-hidden="true">/</span>
+              <span>更新于 <FormattedDate date={updatedDate} /></span>
+            </>
+          )}
+        </div>
+
+        {tags.length > 0 && (
+          <ul class="tags">
+            {tags.map((t) => (
+              <li>
+                <a class="tag" href={tagHref(t)}>{t}</a>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
-      {tags.length > 0 && (
-        <ul class="tags">
-          {tags.map((t) => (
-            <li>
-              <a class="tag" href={tagHref(t)}>{t}</a>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div class="hairline"></div>
     </header>
 
     {cover && (
@@ -88,8 +101,7 @@ const {
 
 <style>
   .head {
-    padding: var(--sp-8);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
   }
 
   .crumbs a {
@@ -101,108 +113,106 @@ const {
     color: var(--seal);
   }
 
+  /* 文章标题与首页头条同一档字号 —— 同一篇文章在两个地方出现，重量应该一样，
+     否则点进来会觉得「怎么变小了」 */
   .title {
     margin-top: var(--sp-4);
-    font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
+    font-size: var(--text-headline);
+    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: -0.015em;
+    line-height: 1.16;
   }
 
   .dek {
-    margin-top: var(--sp-4);
+    margin-top: var(--sp-5);
+    font-family: var(--font-display);
     font-size: var(--text-lg);
     line-height: var(--leading-normal);
     color: var(--ink-soft);
+  }
+
+  .byline {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--sp-3) var(--sp-6);
+    margin-top: var(--sp-6);
   }
 
   .stamps {
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-    margin-top: var(--sp-6);
   }
 
   .sep {
     color: var(--rule-strong);
   }
 
+  .hairline {
+    margin-top: var(--sp-4);
+  }
+
+  /* 关键词退成等宽小字（上一版是玻璃药丸 + hover 换底色）。判据是它们**是什么**：
+     关键词是索引入口，不是操作按钮，药丸给了它们不该有的重量。
+     前面那个 `#` 是印刷品里标记关键词的做法，也让它们在一行里读得出边界 */
   .tags {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-2);
-    margin: var(--sp-4) 0 0;
+    gap: var(--sp-4);
+    margin: 0;
     padding: 0;
     list-style: none;
   }
 
   .tag {
-    display: inline-block;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    padding: 0.25em 0.7em;
+    color: var(--ink-faint);
     text-decoration: none;
-    transition: color 0.18s ease, border-color 0.18s ease,
-      background-color 0.24s ease;
+    transition: color 0.18s ease;
+  }
+
+  .tag::before {
+    content: '#';
+    opacity: 0.55;
+    margin-right: 0.15em;
   }
 
   .tag:hover {
-    color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
+    color: var(--seal);
   }
 
   .cover {
     margin: var(--sp-8) 0 0;
   }
 
+  /* 图片也是直角了。全站只有浮层有圆角 —— 印刷品里的图是切成方的 */
   .cover :global(img) {
-    border-radius: var(--r-lg);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--shadow-lift);
+    border: var(--rule-w) solid var(--rule);
   }
 
   .prose {
-    margin-top: var(--sp-12);
+    margin-top: var(--sp-8);
   }
 
   .back {
     margin-top: var(--sp-16);
-    padding-top: var(--sp-8);
-    border-top: 1px solid var(--rule);
+    padding-top: var(--sp-6);
+    border-top: var(--rule-w) solid var(--rule-strong);
   }
 
   .back a {
-    display: inline-block;
-    padding: var(--sp-2) var(--sp-4);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-decoration: none;
-    color: var(--ink-soft);
-    transition: color 0.18s ease, background-color 0.24s ease,
-      border-color 0.18s ease;
+    color: var(--ink-faint);
+    transition: color 0.18s ease;
   }
 
   .back a:hover {
-    color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-  }
-
-  @media (max-width: 40rem) {
-    .head {
-      padding: var(--sp-6);
-    }
-
-    .title {
-      font-size: var(--text-2xl);
-    }
+    color: var(--seal);
   }
 </style>

@@ -3,6 +3,10 @@
 import '@fontsource-variable/fraunces/standard.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
+/* 版次色板要排在 global.css 前面 —— 顺序对 CSS 变量的解析没有影响
+   （变量在使用处按计算值替换），但读代码的人应该先看到「有四套色板」这件事。
+   themes.css 里的「版次例外」段依赖它自己内部的书写顺序，与这里无关。 */
+import '../styles/themes.css';
 import '../styles/global.css';
 /* player.css 不在这里 —— 它由 MiniPlayer.astro 自己 import。
    起始页（门）不走这个布局，而 R22④ 要它也显示状态栏，样式于是跟着视图走。 */
@@ -20,8 +24,8 @@ interface Props {
   image?: string;
   type?: 'website' | 'article';
   publishedAt?: Date;
-  /** 版心宽度：常规 / 文章窄栏 / 摄影宽幅 */
-  width?: 'page' | 'prose' | 'wide';
+  /** 版心宽度：常规 / 文章窄栏 / 对开大版 / 摄影宽幅 */
+  width?: 'page' | 'prose' | 'broad' | 'wide';
   /**
    * 透传给页脚版权行右边那句话。R19 起五个页面都传：/music 与四个栏目页
    * （栏目页那句原来是页头卡里的大字介绍，按需求搬到了这儿 —— 见 consts.ts 的 SECTIONS 注释）。
@@ -40,7 +44,13 @@ interface Props {
 const { width = 'page', footerNote, siteHeader = true, ...head } = Astro.props;
 
 const wrapClass =
-  width === 'prose' ? 'wrap wrap--prose' : width === 'wide' ? 'wrap wrap--wide' : 'wrap';
+  width === 'prose'
+    ? 'wrap wrap--prose'
+    : width === 'broad'
+      ? 'wrap wrap--broad'
+      : width === 'wide'
+        ? 'wrap wrap--wide'
+        : 'wrap';
 ---
 
 <!doctype html>

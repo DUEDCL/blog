@@ -1,11 +1,16 @@
 ---
 /**
- * 首屏定妆：在样式生效之前把 `<html>` 上那个属性定下来。
+ * 首屏定妆：在样式生效之前把 `<html>` 上那两个属性定下来。
  *   - data-js：有 JS 就打开渐进增强的那一半（/music 靠它决定露唱片机还是原生 <audio>）
+ *   - data-theme：当前版次（夜刊／晨版／胶片／霓虹）
  *
- * **R31 之前这里还管 data-theme**（读 localStorage、退回 `prefers-color-scheme`）。
- * 站主那一轮把浅色主题整个砍掉了，全站只剩深色，于是主题那一半连同切换键一起删了 ——
- * 深色现在由 global.css 的 `color-scheme: dark` 一处定妆，不需要运行期插手。
+ * **R44 把 data-theme 加了回来。** R31 那轮站主砍掉浅色、只留深色，于是这里连主题
+ * 那一半和切换键一起删了；这一版他要「任何主题皆可切换」，四套版次的色值在
+ * `themes.css`，这里只负责在**第一帧之前**把属性写上 —— 少了这一步，浅色版次的
+ * 读者每次进站都会先看到一帧夜刊的黑底（FOUC），而那一帧在浅色下格外刺眼。
+ *
+ * 刻意不看 `prefers-color-scheme`：四套版次里有两套是深色、一套暖褐、一套荧光，
+ * 系统的「深/浅」二选一映射不到它们。没存过选择就是夜刊 —— 那是这份刊物的默认版次。
  *
  * 单独抽成组件、而不是在两个地方各写一份，是因为 Astro 的 SPA 导航按
  * **脚本 textContent 逐字去重**（`deselectScripts` → `detectScriptExecuted`）：
@@ -17,9 +22,12 @@
  *   - BaseHead.astro —— 正站所有页面。
  *   - pages/index.astro（起始页）—— 它不走 BaseLayout。R14 阶段⑥ 之后它是根路径，
  *     也就是**最常见的首屏**；少了这一份，从门里进正站时属性要等新页脚本跑起来才补上。
+ *     门自己不引 themes.css（那一页是一幅有视频的幕布，近黑是它的本体），所以
+ *     data-theme 落在它的 <html> 上没有任何 CSS 规则会匹配 —— 写上是无害的，
+ *     而且必须写：SPA 去重要求两处逐字相同。
  *
  * 为什么还要 `astro:after-swap` 那一半：换页时 Astro 用**新文档的 `<html>` 属性**
- * 覆盖当前的（`swapRootAttributes` 先把现有属性全删再套新的），而这个属性是运行期
+ * 覆盖当前的（`swapRootAttributes` 先把现有属性全删再套新的），而这两个属性是运行期
  * 写上去的、静态产物里没有，所以每次 swap 都会丢。after-swap 在换页后、paint 之前触发，
  * 在那儿重设不会闪。
  */
@@ -27,9 +35,40 @@
 
 <script is:inline>
   (function () {
-    function paint() {
-      document.documentElement.dataset.js = '1';
+    var KEY = 'theme';
+    var OK = ['night', 'paper', 'film', 'neon'];
+
+    function read() {
+      try {
+        var t = localStorage.getItem(KEY);
+        return OK.indexOf(t) >= 0 ? t : 'night';
+      } catch (e) {
+        /* 隐私模式下 localStorage 会抛 —— 那就用默认版次，不要把首屏一起带走 */
+        return 'night';
+      }
     }
+
+    /* 移动端地址栏底色跟着版次走。值**从 CSS 变量读**而不是在这里抄一份 ——
+       色值的唯一来源是 themes.css（`--theme-color`），抄第二份的下一步就是它开始撒谎。
+       首屏调用时样式表可能还没解析完，读到空字符串就跳过，由下面那次 rAF 补。 */
+    function bar(el) {
+      try {
+        var c = getComputedStyle(el).getPropertyValue('--theme-color').trim();
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (c && m) m.setAttribute('content', c);
+      } catch (e) {}
+    }
+
+    function paint() {
+      var el = document.documentElement;
+      el.dataset.js = '1';
+      el.dataset.theme = read();
+      bar(el);
+      requestAnimationFrame(function () {
+        bar(el);
+      });
+    }
+
     paint();
     document.addEventListener('astro:after-swap', paint);
   })();

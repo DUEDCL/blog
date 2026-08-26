@@ -18,248 +18,264 @@ const STATUS_LABEL = {
   title={SECTIONS.projects.title}
   description={SECTIONS.projects.description}
   footerNote={SECTIONS.projects.note}
+  width="broad"
 >
-  {/* R19 起页头卡只剩标题与计数，那段大字介绍搬去了页脚（见 consts.ts 的 SECTIONS 注释）。
-      description 留在上面那行，那是 <meta>，不显示在页面上。 */}
-  <header class="head glass rise rise-1">
-    <h1 class="head__title">{SECTIONS.projects.title}</h1>
-    <p class="head__count meta">共 {projects.length} 个</p>
+  {/* R44 从「玻璃卡片网格」改成一栏索引。判据是内容本身：五个作品**一个都没有封面图**
+      （`grep cover: src/content/projects/*.md` 返回 0），所以那套卡片渲染出来就是
+      五个纯文字方块排成格子 —— 图片位一直是空的，格子只剩边框在起作用。
+      改成一栏之后每条能放下更长的描述，也不会在作品数是奇数时留一个空格子。
+      封面支持没有删：填了 cover 的作品会在左侧多一张方图。 */}
+  <header class="head rise rise-1">
+    <div class="head__row">
+      <span class="vlabel">{SECTIONS.projects.label}</span>
+      <h1 class="head__title">{SECTIONS.projects.title}</h1>
+      <p class="meta head__count">共 {projects.length} 个</p>
+    </div>
+    <div class="pressrule"></div>
   </header>
 
   {projects.length > 0 ? (
-    <ul class="cards rise rise-2">
+    <ul class="works rise rise-2">
       {projects.map((p) => (
-        <li class="card glass">
-          <a href={`/projects/${p.id}`} class="card__main">
+        <li class="work">
+          <a href={`/projects/${p.id}`} class="work__main">
             {p.data.cover && (
-              <div class="card__shot">
+              <div class="work__shot">
                 <Image
                   src={p.data.cover}
                   alt={p.data.coverAlt ?? ''}
-                  widths={[400, 800]}
+                  widths={[200, 400]}
                   loading="lazy"
                 />
               </div>
             )}
 
-            <div class="card__text">
-              <div class="card__top">
-                <h2 class="card__title">{p.data.title}</h2>
+            <div class="work__body">
+              <div class="work__top">
+                <h2 class="work__title">{p.data.title}</h2>
                 <span class:list={['badge', `badge--${p.data.status}`]}>
                   {STATUS_LABEL[p.data.status]}
                 </span>
               </div>
 
-              <p class="card__desc">{p.data.description}</p>
-
-              {p.data.tags.length > 0 && (
-                <p class="card__tags meta">
-                  {p.data.tags.slice(0, 4).map((t) => (
-                    <span class="card__tag">{t}</span>
-                  ))}
-                </p>
-              )}
-
-              <p class="card__date meta">
-                <FormattedDate date={p.data.pubDate} />
-              </p>
+              <p class="work__desc">{p.data.description}</p>
             </div>
           </a>
 
-          {/* 外链单独放在卡片外层，避免嵌套 <a> */}
-          {(p.data.link || p.data.repo) && (
-            <p class="card__links">
-              {p.data.link && (
-                <a href={p.data.link} target="_blank" rel="noopener">
-                  线上 ↗
-                </a>
-              )}
-              {p.data.repo && (
-                <a href={p.data.repo} target="_blank" rel="noopener">
-                  源码 ↗
-                </a>
-              )}
+          <div class="work__foot">
+            <p class="meta work__date">
+              <FormattedDate date={p.data.pubDate} />
             </p>
-          )}
+
+            {p.data.tags.length > 0 && (
+              <p class="meta work__tags">
+                {p.data.tags.slice(0, 4).map((t) => (
+                  <span class="work__tag">{t}</span>
+                ))}
+              </p>
+            )}
+
+            {/* 外链在主链接外层，避免嵌套 <a> */}
+            {(p.data.link || p.data.repo) && (
+              <p class="work__links">
+                {p.data.link && (
+                  <a href={p.data.link} target="_blank" rel="noopener">线上 ↗</a>
+                )}
+                {p.data.repo && (
+                  <a href={p.data.repo} target="_blank" rel="noopener">源码 ↗</a>
+                )}
+              </p>
+            )}
+          </div>
         </li>
       ))}
     </ul>
   ) : (
-    <p class="empty glass">{SECTIONS.projects.empty}</p>
+    <p class="empty">{SECTIONS.projects.empty}</p>
   )}
 </BaseLayout>
 
 <style>
-  /* 只剩标题与计数两行了，竖向 padding 收一档（同 ListLayout） */
   .head {
-    padding: var(--sp-8) var(--sp-12);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
+  }
+
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
   }
 
   .head__title {
     font-size: var(--text-3xl);
     font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-right: auto;
   }
 
   .head__count {
-    margin-top: var(--sp-3);
+    flex-shrink: 0;
   }
 
-  /* auto-fit + 固定上限，兼顾「只有一两个作品」和「以后堆到十几个」两种情况：
-     auto-fit 折叠空轨道，卡片不会孤零零缩在左上角；34rem 的上限防止只剩一张时
-     被拉成横贯全屏的长条。justify-content: start 保持与全站一致的左对齐。
+  .pressrule {
+    margin-top: var(--sp-5);
+  }
 
-     下限写成 min(20rem, 100%) 而不是 20rem：轨道下限是硬的，视口窄于 20rem + 页面
-     左右 padding 时（320px 屏就是），轨道撑不下去只能横向溢出。加 min() 之后
-     窄屏让位给容器宽度，宽屏照旧按 20rem 起跳。 */
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 34rem));
-    justify-content: start;
-    gap: var(--sp-6);
+  .works {
     list-style: none;
     margin: var(--sp-8) 0 0;
     padding: 0;
+    border-bottom: var(--rule-w) solid var(--rule-strong);
   }
 
-  /* 边框、背景、圆角、阴影都来自全局 .glass，这里只补布局与交互 */
-  .card {
+  .work {
+    border-top: var(--rule-w) solid var(--rule-strong);
+    padding-block: var(--sp-6);
+    transition: background-color 0.2s ease;
+  }
+
+  /* hover 只换底色，不上浮、不换边框、不加阴影（上一版三样都做，加 0.24s 的
+     translateY(-3px)）—— 宪法第 4 条：不携带信息的动效删掉 */
+  .work:hover {
+    background: var(--seal-wash);
+  }
+
+  .work__main {
     display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    transition: border-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1),
-      box-shadow 0.24s ease;
-  }
-
-  .card:hover {
-    border-color: var(--glass-border-lit);
-    transform: translateY(-3px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 24px 48px -16px rgba(0, 0, 0, 0.6);
-  }
-
-  .card__main {
-    display: block;
+    gap: var(--sp-6);
     text-decoration: none;
-    flex: 1;
   }
 
-  .card__shot {
-    aspect-ratio: 16 / 9;
+  /* 方图。这一版全站只有浮层是圆角，图一律切方 */
+  .work__shot {
+    width: 7rem;
+    flex-shrink: 0;
+    aspect-ratio: 4 / 3;
     overflow: hidden;
-    border-bottom: 1px solid var(--rule);
+    border: var(--rule-w) solid var(--rule);
     background: var(--paper-sunken);
   }
 
-  .card__shot :global(img) {
+  .work__shot :global(img) {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 
-  .card__text {
-    padding: var(--sp-6);
+  .work__body {
+    min-width: 0;
   }
 
-  .card__top {
+  .work__top {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+    align-items: baseline;
     gap: var(--sp-3);
   }
 
-  .card__title {
-    font-size: var(--text-lg);
-    font-variation-settings: 'opsz' 18, 'SOFT' 0, 'WONK' 0;
+  .work__title {
+    font-size: var(--text-xl);
+    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
     transition: color 0.18s ease;
   }
 
-  .card__main:hover .card__title {
+  .work__main:hover .work__title {
     color: var(--seal);
   }
 
+  /* 状态标记：方框（上一版是 --r-full 药丸）。它是印在条目上的一枚戳，不是按钮 */
   .badge {
     flex-shrink: 0;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    padding: 0.25em 0.7em;
-    border-radius: var(--r-full);
-    border: 1px solid currentColor;
+    padding: 0.2em 0.55em;
+    border: var(--rule-w) solid currentColor;
   }
 
   .badge--active {
     color: var(--seal);
-    background: var(--seal-wash);
   }
 
   .badge--wip {
-    color: var(--ink-soft);
+    color: var(--press);
   }
 
   .badge--archived {
     color: var(--ink-faint);
   }
 
-  .card__desc {
+  .work__desc {
     margin-top: var(--sp-3);
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     line-height: var(--leading-normal);
     color: var(--ink-soft);
+    max-width: 46rem;
   }
 
-  .card__tags {
+  /* 元信息一行：日期 · 关键词 · 外链。上一版把外链放在卡片底部一条带底色的栏里
+     （`background: rgba(0,0,0,.12)`—— 那个写死的黑在浅色版次上是一道脏灰） */
+  .work__foot {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--sp-3) var(--sp-6);
+    margin-top: var(--sp-4);
+  }
+
+  .work__tags {
     display: flex;
     flex-wrap: wrap;
     gap: var(--sp-3);
-    margin-top: var(--sp-4);
   }
 
-  .card__tag::before {
+  .work__tag::before {
     content: '#';
     color: var(--seal);
+    opacity: 0.7;
   }
 
-  .card__date {
-    margin-top: var(--sp-4);
-  }
-
-  .card__links {
+  .work__links {
     display: flex;
-    gap: var(--sp-6);
+    gap: var(--sp-5);
     margin: 0;
-    padding: var(--sp-3) var(--sp-6);
-    border-top: 1px solid var(--rule);
-    background: rgba(0, 0, 0, 0.12);
+    margin-left: auto;
   }
 
-  .card__links a {
+  .work__links a {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
     text-decoration: none;
-    color: var(--ink-soft);
+    color: var(--ink-faint);
+    transition: color 0.18s ease;
   }
 
-  .card__links a:hover {
+  .work__links a:hover {
     color: var(--seal);
   }
 
   .empty {
     margin-top: var(--sp-8);
-    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
 
-  @media (max-width: 52rem) {
-    .head {
-      padding: var(--sp-8);
-    }
-
+  @media (max-width: 46rem) {
     .head__title {
       font-size: var(--text-2xl);
+    }
+
+    .work__main {
+      gap: var(--sp-4);
+    }
+
+    .work__shot {
+      width: 5rem;
+    }
+
+    .work__links {
+      margin-left: 0;
     }
   }
 </style>

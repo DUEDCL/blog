@@ -131,8 +131,12 @@ const cards = [
       「这个站怎么搭的」。站主圈掉了那三样（原话「将图示圈起来的地方全部删掉，添加『名片』栏」），
       于是这一页只剩名片与「别处」，页面本身就是名片：名片那一节因此从 h2 升成 h1
       （一页只能有一个 h1，而页头卡已经没了），顶栏也多了一项「名片」指到这儿。 */}
-  <div class="prose glass rise rise-1">
-    <h1 class="title">名片</h1>
+  <div class="prose rise rise-1">
+    <div class="head__row">
+      <span class="vlabel">名片</span>
+      <h1 class="title">名片</h1>
+    </div>
+    <div class="pressrule"></div>
     {cards.length > 0 ? (
       <ul class="cards">
         {cards.map((c) => (
@@ -337,21 +341,32 @@ const cards = [
 </script>
 
 <style>
+  /* R44：去掉包住整页的那张玻璃卡。名片页原来是「一整页装在一个圆角面板里」——
+     那是「卡片里的卡片」（名片卡又套在面板里），两层边框在渲染里互相干扰。
+     现在这一页就是纸，名片是纸上印的一排格子。 */
   .prose {
-    padding: var(--sp-8);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
   }
 
-  /* 页头卡删掉之后，这一页的标题就是名片那一行（h1）。字号仍按页头那一档给 ——
-     它现在是整页唯一的标题，压成 h2 的大小会显得这一页没有头 */
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+  }
+
+  /* 这一页唯一的标题（页头卡在 R29 就删了）。与栏目列表页同一档字号与字距 */
   .title {
     margin-top: 0;
     font-size: var(--text-3xl);
     font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.04em;
+    line-height: 1;
   }
 
-  /* 玻璃面板里首个标题不需要额外顶部间距 */
+  .pressrule {
+    margin-top: var(--sp-5);
+  }
+
   .prose :global(> *:first-child) {
     margin-top: 0;
   }
@@ -366,15 +381,15 @@ const cards = [
     list-style: none;
   }
 
+  /* 纸上的一格：实底 + 一道线 + 直角。上一版是 4.5% 白膜 + 圆角的玻璃格子 */
   .card {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--sp-3);
     padding: var(--sp-5);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-lg);
+    background: var(--paper-raised);
+    border: var(--rule-w) solid var(--rule-strong);
   }
 
   .card__label {
@@ -461,6 +476,24 @@ const cards = [
     --qr-flip: none;
   }
 
+  /**
+   * **晨版（浅色）下不许翻转**（R44）。
+   *
+   * 上面那段长注释是 R31「浅色主题整个砍掉」之后写的，前提是「本站恒定深色」，
+   * 所以码恒定翻成亮模块、靠透明底透出深色卡片。R44 把版次加回来之后那个前提没了：
+   * 亮模块压在 #f2efe8 的纸上等于**看不见**，二维码在晨版下会整块消失 ——
+   * 这不是变丑，是功能坏掉。
+   *
+   * 于是浅色版次退回正相（墨模块 + 浅底）。附带的好处是那一档不再需要解码器
+   * 「试一次反转」（见上面实测表的「浅色·正相」两行：四个尺寸全通），
+   * 也就是说微信自家扫码器能不能试反转这个**本机核实不了**的风险，
+   * 在晨版下根本不存在。深色三档仍是反相码，灯箱里那颗「加白底」的退路照旧留着。
+   */
+  :global(html[data-theme='paper']) .cards,
+  :global(html[data-theme='paper']) .lb__figure {
+    --qr-flip: none;
+  }
+
   .card__qr,
   .lb__code {
     display: block;
@@ -478,16 +511,10 @@ const cards = [
     transition: transform 0.24s ease, background-color 0.18s ease;
   }
 
-  /* 悬停时码本身泛铜色，替代原来那块板的抬升反馈。
-     纸底那张要走深铜 —— 浅色的 --seal 压在白纸上几乎看不见。
-     （R32 起统一成「轻微提亮」，见下面那条。） */
-  .card__qrbtn:hover .card__qr,
-  .card__qrbtn:focus-visible .card__qr {
-    transform: translateY(-1px);
-  }
-
-  /* 悬停的反馈从「码变铜色」换成「轻微提亮」（R32）：颜色现在由 filter 决定，
-     --qr-color 那套已经没有了。纸底那张也吃这一条，两处一致。 */
+  /* 悬停的反馈是「轻微提亮」（R32）：颜色由 filter 决定，--qr-color 那套已经没有了。
+     纸底那张也吃这一条，两处一致。
+     R44 删掉了同时存在的 `transform: translateY(-1px)` —— 1px 的位移在一张
+     140px 的码上根本读不出来，只是让 transition 多了一个属性。 */
   .card__qrbtn:hover .card__qr,
   .card__qrbtn:focus-visible .card__qr {
     opacity: 0.82;
@@ -513,6 +540,8 @@ const cards = [
     gap: var(--sp-2);
   }
 
+  /* 方框（R44）：这些是「复制/打开」两类动作，方框已经够重。上一版是玻璃药丸，
+     而这一版全站只有浮层保留圆角 */
   .card__btn {
     display: inline-block;
     padding: var(--sp-2) var(--sp-4);
@@ -520,9 +549,8 @@ const cards = [
     font-size: var(--text-sm);
     line-height: 1.2;
     color: var(--ink-soft);
-    background: var(--glass-bg-strong);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
+    background: none;
+    border: var(--rule-w) solid var(--rule-strong);
     text-decoration: none;
     cursor: pointer;
     transition: color 0.18s ease, border-color 0.18s ease,
@@ -531,7 +559,8 @@ const cards = [
 
   .card__btn:hover {
     color: var(--ink);
-    border-color: var(--glass-border-lit);
+    background: var(--seal-wash);
+    border-color: var(--seal);
   }
 
   /* `display: inline-block` 会盖掉 UA 的 [hidden]{display:none}（类选择器权重更高），

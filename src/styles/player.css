@@ -837,9 +837,17 @@
    滚到底时页脚就从它下面出来了。
    高度不写死：`--jk-room` 由 MiniPlayer 的 room() 现量现写（展开还是收起、
    窄屏折行都算在内），藏起来时连 `data-jk` 一起撤掉，余量随之消失，
-   所以页面高度只在「开始/停止显示状态栏」这一刻变，不会来回跳。 */
+   所以页面高度只在「开始/停止显示状态栏」这一刻变，不会来回跳。
+
+   R44 起与 `--dock-room`（左下那枚对话入口的通道，定义在 global.css）取 **max**
+   而不是相加：两个浮层一左一右，需要的通道是两者的较大值，相加会在页面底部
+   多留一整段空。门不引 global.css，那儿 `--dock-room` 未定义、也没有对话入口，
+   所以 fallback 给 0px。 */
 [data-jk] body {
-  padding-bottom: calc(var(--jk-room, 0px) + var(--sp-6) * 2);
+  padding-bottom: max(
+    var(--dock-room, 0px),
+    calc(var(--jk-room, 0px) + var(--sp-6) * 2)
+  );
 }
 
 /**

@@ -14,13 +14,13 @@ const albums = await getPublished('photos');
   footerNote={SECTIONS.photos.note}
   width="wide"
 >
-  {/* R19 起页头卡只剩标题与计数，那段大字介绍搬去了页脚（见 consts.ts 的 SECTIONS 注释）。
-      description 留在上面那行，那是 <meta>，不显示在页面上。 */}
-  <header class="head glass rise rise-1">
-    <h1 class="head__title">{SECTIONS.photos.title}</h1>
-    <p class="head__count meta">
-      共 {albums.length} 组
-    </p>
+  <header class="head rise rise-1">
+    <div class="head__row">
+      <span class="vlabel">{SECTIONS.photos.label}</span>
+      <h1 class="head__title">{SECTIONS.photos.title}</h1>
+      <p class="meta head__count">共 {albums.length} 组</p>
+    </div>
+    <div class="pressrule"></div>
   </header>
 
   {albums.length > 0 ? (
@@ -50,25 +50,35 @@ const albums = await getPublished('photos');
       ))}
     </ul>
   ) : (
-    <p class="empty glass">{SECTIONS.photos.empty}</p>
+    <p class="empty">{SECTIONS.photos.empty}</p>
   )}
 </BaseLayout>
 
 <style>
-  /* 只剩标题与计数两行了，竖向 padding 收一档（同 ListLayout） */
   .head {
-    padding: var(--sp-8) var(--sp-12);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
+  }
+
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
   }
 
   .head__title {
     font-size: var(--text-3xl);
     font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-right: auto;
   }
 
   .head__count {
-    margin-top: var(--sp-3);
+    flex-shrink: 0;
+  }
+
+  .pressrule {
+    margin-top: var(--sp-5);
   }
 
   /* 密排网格：每第 5 张跨两行，打破整齐的方格感。
@@ -88,22 +98,21 @@ const albums = await getPublished('photos');
     grid-row: span 2;
   }
 
+  /* 直角（R44）：印刷品上的图是切方的。描边用规则线，与全站分栏线同一档 */
   .cell__link {
     position: relative;
     display: block;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    border-radius: var(--r-lg);
-    border: 1px solid var(--glass-border);
-    background: var(--glass-bg);
+    border: var(--rule-w) solid var(--rule-strong);
+    background: var(--paper-sunken);
     text-decoration: none;
-    transition: box-shadow 0.4s ease, border-color 0.24s ease;
+    transition: border-color 0.24s ease;
   }
 
   .cell__link:hover {
-    border-color: var(--glass-border-lit);
-    box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.6);
+    border-color: var(--seal);
   }
 
   .cell__link :global(img) {
@@ -111,11 +120,14 @@ const albums = await getPublished('photos');
     height: 100%;
     object-fit: cover;
     filter: saturate(0.9);
-    transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.3, 1), filter 0.4s ease;
+    transition: filter 0.4s ease;
   }
 
+  /* R44 删掉了 hover 时的 `transform: scale(1.04)` 与那道 40px 落影：
+     图片放大是「可点」的常见套路，但它不报告任何东西（宪法第 4 条）。
+     留下的饱和度变化很轻，作用是「这一张被选中了」—— 换句话说它替代的是
+     hover 高亮，不是动画。 */
   .cell__link:hover :global(img) {
-    transform: scale(1.04);
     filter: saturate(1.05);
   }
 
@@ -160,16 +172,11 @@ const albums = await getPublished('photos');
 
   .empty {
     margin-top: var(--sp-8);
-    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
 
   @media (max-width: 52rem) {
-    .head {
-      padding: var(--sp-8);
-    }
-
     .head__title {
       font-size: var(--text-2xl);
     }

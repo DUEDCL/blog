@@ -1,6 +1,13 @@
 ---
-/* 文章 / 随笔列表项。日期在左、标题在右。
-   刻意只有这两样 —— 杂志式极简：列表负责「有什么」，摘要留给详情页。 */
+/**
+ * 索引条目（文章 / 随笔列表项）。
+ *
+ * R44 起视觉全部在 global.css 的 `.brief` 那一段 —— 首页头版、栏目列表页用的是
+ * 同一套条目，样式抄三份的下一步就是其中一份的间距悄悄漂走。这里只剩结构。
+ *
+ * 刻意只有标题与日期：列表负责「有什么」，摘要留给详情页；整个版面里唯一带摘要的
+ * 是首页那条头条（见 home.astro 的 .lead）。
+ */
 import FormattedDate from './FormattedDate.astro';
 
 interface Props {
@@ -12,60 +19,11 @@ interface Props {
 const { href, title, pubDate } = Astro.props;
 ---
 
-<li class="entry">
-  <a href={href} class="entry__link">
-    <span class="meta entry__date">
+<li class="brief">
+  <a href={href}>
+    <span class="brief__title">{title}</span>
+    <span class="meta brief__date">
       <FormattedDate date={pubDate} />
     </span>
-
-    <span class="entry__title">{title}</span>
   </a>
 </li>
-
-<style>
-  .entry + .entry {
-    border-top: 1px solid var(--rule);
-  }
-
-  .entry__link {
-    display: grid;
-    grid-template-columns: 6.5rem 1fr;
-    align-items: baseline;
-    gap: var(--sp-6);
-    padding: var(--sp-6);
-    text-decoration: none;
-    transition: background-color 0.2s ease, padding-left 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
-  }
-
-  .entry__link:hover {
-    background: var(--seal-wash);
-    padding-left: var(--sp-8);
-  }
-
-  .entry__title {
-    display: block;
-    font-family: var(--font-display);
-    font-size: var(--text-lg);
-    font-weight: 600;
-    font-variation-settings: 'opsz' 18;
-    line-height: var(--leading-tight);
-    color: var(--ink);
-    transition: color 0.18s ease;
-  }
-
-  .entry__link:hover .entry__title {
-    color: var(--seal);
-  }
-
-  @media (max-width: 46rem) {
-    .entry__link {
-      grid-template-columns: 1fr;
-      gap: var(--sp-3);
-    }
-
-    /* 窄屏把日期挪到标题上方 */
-    .entry__date {
-      grid-column: 1 / -1;
-    }
-  }
-</style>

@@ -130,6 +130,23 @@ export function pickKb(kb: KbItem[], ask: string, keep = KB_KEEP): KbItem[] {
  */
 export const OPENING = '你好，我是沉麟，你想和我聊些什么';
 
+/**
+ * 开场那三个可点的问题（R45）。
+ *
+ * 为什么要有：入口从前是左下角一枚匿名的对话气泡圆键，打开之后只有一句问候 +
+ * 一个空输入框 —— 访客知道能打字，但不知道**该问什么**，也不知道这个分身到底
+ * 装了些什么。这三条同时答这两件事：它们本身就是提示，点一下就发出去。
+ *
+ * 措辞**照抄知识库条目的 `question` 原文**，不自己另写一遍。理由是 `pickKb()` 按
+ * 字面重叠打分（见上面那个函数）：抄原文命中的一定是那一条，自己改写措辞就要赌
+ * 分词还能不能对上。三条各对一个 topic：
+ *   · `what-i-do.md`（我）· `site-stack.md`（这个站）· `what-im-learning.md`（当下）
+ *
+ * 改这三条之前先去 `src/content/kb/` 确认对应文件里的 `question` 还是这个字 ——
+ * 那边改了这边不改，就退化成一次普通的字面检索。
+ */
+export const STARTERS = ['你平时做什么？', '这个站是用什么做的？', '你最近在学什么？'] as const;
+
 /** Qwen3 是会「思考」的模型，输出可能裹一层 <think>…</think>。软开关 + 前端剥壳，双保险 */
 const NO_THINK = '/no_think';
 

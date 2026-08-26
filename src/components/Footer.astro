@@ -37,8 +37,12 @@ const links = [
 ---
 
 <footer class="site-footer">
-  <div class="wrap">
-    <div class="foot glass">
+  <div class="wrap wrap--broad">
+    {/* R44 起页脚是**报尾**：一道细线 + 两簇小字，不再是那枚跟顶栏几乎一样的
+        圆角玻璃药丸（渲染实测：一页的头和尾长得一模一样，读不出「到底了」）。 */}
+    <div class="hairline"></div>
+
+    <div class="foot">
       {/* 左簇：版权 + 那句随页面走的话。包一层是为了让 space-between 仍然只分
           「左簇 / 右簇链接」两段 —— 直接把 note 作为第三个 flex 项会把链接挤到中间 */}
       <div class="foot__brand">
@@ -78,9 +82,10 @@ const links = [
 </footer>
 
 <style>
+  /* 上一版是 --sp-32（8rem）。纸面语汇下不需要那么大的一段空 —— 内容与报尾之间
+     隔一道线就够，8rem 会让长页面结尾处露出一大片空白（渲染实测） */
   .site-footer {
-    margin-top: var(--sp-32);
-    padding-block: var(--sp-8);
+    margin-top: var(--sp-16);
   }
 
   .foot {
@@ -89,8 +94,7 @@ const links = [
     align-items: center;
     justify-content: space-between;
     gap: var(--sp-4);
-    padding: var(--sp-5) var(--sp-8);
-    border-radius: var(--r-full);
+    padding-block: var(--sp-5);
   }
 
   .foot__brand {
@@ -139,9 +143,10 @@ const links = [
 
   @media (max-width: 40rem) {
     .foot {
-      /* 窄屏会换行成两行，胶囊形状会变得很怪，改回大圆角矩形 */
-      padding: var(--sp-6);
-      border-radius: var(--r-lg);
+      /* 窄屏两簇各占一行，左对齐读起来才是「两段」而不是「两端」 */
+      align-items: flex-start;
+      flex-direction: column;
+      gap: var(--sp-4);
     }
   }
 </style>

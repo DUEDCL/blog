@@ -36,7 +36,7 @@ const STATUS_LABEL = {
   width="prose"
 >
   <article>
-    <header class="head glass rise rise-1">
+    <header class="head rise rise-1">
       <p class="meta crumbs">
         <a href="/projects">{SECTIONS.projects.title}</a>
       </p>
@@ -74,6 +74,8 @@ const STATUS_LABEL = {
           ))}
         </ul>
       )}
+
+      <div class="hairline"></div>
     </header>
 
     {project.data.cover && (
@@ -98,9 +100,10 @@ const STATUS_LABEL = {
 </BaseLayout>
 
 <style>
+  /* R44：与文章页（ArticleLayout）同一套页头语汇 —— 去掉玻璃卡，靠字号与一道线分层。
+     同一个站里「作品详情」和「文章详情」应该长得像同一份刊物的两页。 */
   .head {
-    padding: var(--sp-8);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
   }
 
   .crumbs a {
@@ -121,27 +124,27 @@ const STATUS_LABEL = {
   }
 
   .title {
-    font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40;
-    letter-spacing: -0.02em;
+    font-size: var(--text-headline);
+    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: -0.015em;
+    line-height: 1.16;
   }
 
+  /* 状态戳：方框（与作品列表页那枚一致） */
   .badge {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    padding: 0.25em 0.7em;
-    border-radius: var(--r-full);
-    border: 1px solid currentColor;
+    padding: 0.2em 0.55em;
+    border: var(--rule-w) solid currentColor;
   }
 
   .badge--active {
     color: var(--seal);
-    background: var(--seal-wash);
   }
 
   .badge--wip {
-    color: var(--ink-soft);
+    color: var(--press);
   }
 
   .badge--archived {
@@ -149,7 +152,8 @@ const STATUS_LABEL = {
   }
 
   .dek {
-    margin-top: var(--sp-4);
+    margin-top: var(--sp-5);
+    font-family: var(--font-display);
     font-size: var(--text-lg);
     line-height: var(--leading-normal);
     color: var(--ink-soft);
@@ -159,6 +163,8 @@ const STATUS_LABEL = {
     margin-top: var(--sp-6);
   }
 
+  /* 外链是这一页唯一「去别处」的动作，所以给它方框（比纯文字链重一档），
+     但不上浮、不换边框 —— 那三样加起来是按钮的语汇，这里只需要「可点」 */
   .links {
     display: flex;
     flex-wrap: wrap;
@@ -173,48 +179,48 @@ const STATUS_LABEL = {
     font-size: var(--text-sm);
     text-decoration: none;
     color: var(--seal);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
+    border: var(--rule-w) solid var(--rule-strong);
     transition: color 0.18s ease, background-color 0.24s ease,
-      border-color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+      border-color 0.18s ease;
   }
 
   .links a:hover {
     color: var(--seal-hover);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
+    background: var(--seal-wash);
+    border-color: var(--seal);
   }
 
+  /* 关键词退成等宽小字（与文章页一致） */
   .tags {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-2);
+    gap: var(--sp-4);
     margin: var(--sp-6) 0 0;
     padding: 0;
     list-style: none;
   }
 
   .tag {
-    display: inline-block;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    padding: 0.25em 0.7em;
+    color: var(--ink-faint);
     text-decoration: none;
-    transition: color 0.18s ease, border-color 0.18s ease,
-      background-color 0.24s ease;
+    transition: color 0.18s ease;
+  }
+
+  .tag::before {
+    content: '#';
+    opacity: 0.55;
+    margin-right: 0.15em;
   }
 
   .tag:hover {
-    color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
+    color: var(--seal);
+  }
+
+  .hairline {
+    margin-top: var(--sp-6);
   }
 
   .cover {
@@ -222,44 +228,32 @@ const STATUS_LABEL = {
   }
 
   .cover :global(img) {
-    border-radius: var(--r-lg);
-    box-shadow: var(--shadow-lift);
+    border: var(--rule-w) solid var(--rule);
   }
 
   .prose {
-    margin-top: var(--sp-12);
+    margin-top: var(--sp-8);
   }
 
   .back {
     margin-top: var(--sp-16);
+    padding-top: var(--sp-6);
+    border-top: var(--rule-w) solid var(--rule-strong);
   }
 
   .back a {
-    display: inline-block;
-    padding: var(--sp-2) var(--sp-4);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-decoration: none;
-    color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    transition: color 0.18s ease, background-color 0.24s ease,
-      border-color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+    color: var(--ink-faint);
+    transition: color 0.18s ease;
   }
 
   .back a:hover {
-    color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
+    color: var(--seal);
   }
 
   @media (max-width: 40rem) {
-    .head {
-      padding: var(--sp-6);
-    }
-
     .title {
       font-size: var(--text-2xl);
     }

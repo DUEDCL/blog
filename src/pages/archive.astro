@@ -12,13 +12,20 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
 <BaseLayout
   title="归档"
   description="沉麟站内全部内容的时间线，按年份分组。"
+  width="broad"
 >
   <header class="head rise rise-1">
-    <p class="meta">ARCHIVE</p>
-    <h1 class="head__title">归档</h1>
-    <p class="head__desc">
-      文章、随笔与作品合成一条时间线，共 {total} 篇。
-    </p>
+    {/* 与栏目列表页同一套页头（竖排标识 + 标题 + 计数 + 朱红报头线）——
+        R44 之前这里是「ARCHIVE + 标题 + 一段描述」，三个索引页三种页头 */}
+    <div class="head__row">
+      <span class="vlabel">归档</span>
+      <h1 class="head__title">归档</h1>
+      <p class="meta head__count">共 {total} 篇</p>
+    </div>
+
+    <div class="pressrule"></div>
+
+    <p class="head__desc">文章、随笔与作品合成一条时间线。</p>
 
     {total > 0 && (
       /* 搜索只过滤下面已经渲染出来的 DOM，不内联 JSON、不建索引 —— 全站条目
@@ -43,7 +50,7 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
         <section class={`year rise rise-${Math.min(i + 2, 4)}`}>
           <h2 class="year__num">{group.year}</h2>
 
-          <ol class="line glass">
+          <ol class="line">
             {group.entries.map((entry) => (
               <li class="item">
                 <a href={entry.href} class="item__link">
@@ -60,7 +67,7 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
       ))}
     </div>
   ) : (
-    <p class="empty glass">还没有内容。</p>
+    <p class="empty">还没有内容。</p>
   )}
 </BaseLayout>
 
@@ -119,15 +126,32 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     margin-bottom: var(--sp-16);
   }
 
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+  }
+
   .head__title {
     font-size: var(--text-3xl);
-    margin-top: var(--sp-3);
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-right: auto;
+  }
+
+  .head__count {
+    flex-shrink: 0;
+  }
+
+  .pressrule {
+    margin-top: var(--sp-5);
   }
 
   .head__desc {
     margin-top: var(--sp-4);
     color: var(--ink-soft);
-    font-size: var(--text-lg);
+    font-size: var(--text-base);
   }
 
   /* --- 标题搜索 ----------------------------------------------------------- */
@@ -139,15 +163,17 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     margin-top: var(--sp-8);
   }
 
+  /* 方框，不是药丸（R44）。表单控件的圆角是「app 的长相」；印刷品上的填写框
+     是方的，而这一版全站只有浮层保留圆角 */
   .find__input {
     flex: 0 1 18rem;
-    padding: var(--sp-3) var(--sp-5);
+    padding: var(--sp-3) var(--sp-4);
     font-family: inherit;
     font-size: var(--text-base);
     color: var(--ink);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
+    background: transparent;
+    border: var(--rule-w) solid var(--rule-strong);
+    border-radius: 0;
     transition: border-color 0.18s ease, background-color 0.24s ease;
   }
 
@@ -157,7 +183,7 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
 
   .find__input:focus-visible {
     outline: none;
-    background: var(--glass-bg-strong);
+    background: var(--seal-wash);
     border-color: var(--seal);
   }
 
@@ -194,13 +220,15 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     list-style: none;
     margin: 0;
     padding: 0;
-    overflow: hidden;
+    /* 上下封口：报纸的索引块两端都有线，不然最后一条读起来像被裁掉了 */
+    border-top: var(--rule-w) solid var(--rule-strong);
+    border-bottom: var(--rule-w) solid var(--rule-strong);
   }
 
   /* :not([hidden]) 是给搜索用的 —— 否则被隐藏的条目照样算作相邻兄弟，
      第一条可见行头上会多出一道悬空的分隔线 */
   .item:not([hidden]) + .item:not([hidden]) {
-    border-top: 1px solid var(--rule);
+    border-top: var(--rule-w) solid var(--rule);
   }
 
   .item__link {
@@ -208,14 +236,15 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     grid-template-columns: 6.5rem 1fr auto;
     align-items: baseline;
     gap: var(--sp-4);
-    padding: var(--sp-4) var(--sp-6);
+    padding: var(--sp-4) var(--sp-3);
     text-decoration: none;
-    transition: background-color 0.2s ease, padding-left 0.24s ease;
+    transition: background-color 0.2s ease;
   }
 
+  /* hover 只换底色。上一版还同时把 padding-left 从 sp-6 推到 sp-8（0.24s），
+     那段位移不携带任何信息 —— 宪法第 4 条：报告不了状态、数据或进度的动效删掉 */
   .item__link:hover {
     background: var(--seal-wash);
-    padding-left: var(--sp-8);
   }
 
   .item__date {
@@ -239,7 +268,6 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
   }
 
   .empty {
-    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }

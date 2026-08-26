@@ -310,7 +310,10 @@
   width: 6px;
   height: 6px;
   border-radius: var(--r-full);
-  background: var(--brass);
+  /* R44 从 `--brass`（写死的暖褐物料色）换成 `--seal`（随版次走的交互色）：
+     #c4ad97 压在晨版的米白纸上只有 1.4:1，一个 6px 的在线指示点在那一档等于消失。
+     --seal 在四套版次里都 ≥ 4.8:1。 */
+  background: var(--seal);
   animation: adm-pulse 2.4s ease-in-out infinite;
 }
 
@@ -385,7 +388,11 @@
   padding: var(--sp-4) var(--sp-5);
   background: var(--glass-bg);
   border: 1px solid var(--rule);
-  border-left: 2px solid var(--rule-strong);
+  /* R44 删掉了 `border-left: 2px solid var(--rule-strong)`。impeccable 检测器把它
+     判为 side-tab（「单侧粗色边框是 AI 生成 UI 最好认的标记」），而按 ANTI_SLOP 的
+     判据它确实该删：这道左边框不表示任何状态，只是把左侧加重了一点 ——
+     删掉之后线路块仍然是一个块，什么信息都没丢。
+     `.res` 那处不同，它的左边框吃状态，保留并在 ANTI_SLOP 留了例外裁决。 */
   border-radius: var(--r-md);
 }
 
@@ -463,8 +470,9 @@
   border-color: var(--rule-strong);
 }
 
-/* ---- 结果条（探测、测试、体检共用）--------------------------------------- */
-
+/* ---- 结果条（探测、测试、体检共用）---------------------------------------
+   这道左边框**是状态载体**（ok / warn / bad 三档换色），所以它不在 R44 那轮
+   「删掉不携带信息的单侧边框」里，例外裁决记在 ANTI_SLOP 第 1 节。 */
 .res {
   margin-top: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
@@ -474,18 +482,32 @@
   background: var(--glass-bg);
 }
 
+/**
+ * 三档状态色（R44 修）。
+ *
+ * 修的是一个真实缺陷：原来 `--ok` 与 `--bad` **都是 `var(--seal)`**，
+ * 两个相反的结果在色边上一模一样，只靠 bad 多一层 `--paper-sunken` 底色区分 ——
+ * 而那层底色在深色版次上几乎看不出来。也就是说「状态由颜色承载」这条在
+ * 这个组件上是坏的（ANTI_SLOP：状态的主载体必须是几何或颜色）。
+ *
+ * 现在三档分开，用的都是随版次走的语义 token，四套版次自动跟随：
+ *   ok   = --seal（黄铜，本站的「正常」色）
+ *   warn = --ink-soft（次墨：看得见但不报警）
+ *   bad  = --press（朱红签名色，全站唯一的警示色）
+ * `--brass-deep` 那个旧的 warn 色被撤掉了 —— 它是深色档专用的写死值，
+ * 在晨版的米白纸上几乎读不出来。
+ */
 .res--ok {
   border-left-color: var(--seal);
 }
 
-/* 能连通但不认角色 / 有待改的项 —— 比「连不上」更值得注意，因为它「看着像在工作」 */
 .res--warn {
-  border-left-color: var(--brass-deep);
+  border-left-color: var(--ink-soft);
 }
 
 .res--bad {
-  border-left-color: var(--seal);
-  background: var(--paper-sunken);
+  border-left-color: var(--press);
+  background: var(--press-wash);
 }
 
 .res__head {
@@ -519,7 +541,7 @@
   color: var(--ink-soft);
   background: var(--glass-bg);
   border: 1px solid var(--rule);
-  border-left: 2px solid var(--rule-strong);
+  /* 同 .route：删掉那道不携带信息的 2px 左边框（R44） */
   border-radius: var(--r-sm);
   cursor: pointer;
 }

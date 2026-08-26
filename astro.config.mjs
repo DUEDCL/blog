@@ -44,11 +44,19 @@ export default defineConfig({
       rehypePlugins: [rehypeKatex],
     }),
     shikiConfig: {
-      /* 单主题（R31 砍掉浅色之后）：从前是双主题 + `defaultColor: false`，两套颜色都以
-         CSS 变量输出、再由 global.css 里两条 `!important` 规则按 `[data-theme]` 切。
-         浅色档没了，那两条规则也删了 —— 双主题只会让每个 code 块多带一份用不上的
-         `--shiki-light-*`。改成单主题后 Shiki 直接写行内色，产物更小。 */
-      theme: 'github-dark',
+      /* 双主题（R44 恢复）。R31 砍掉浅色时这里改成了单主题 `github-dark`，
+         理由是「浅色档没了，双主题只会让每个 code 块多带一份用不上的
+         --shiki-light-*」。现在四套版次里「晨版」是浅底纸，深底代码块压在米白纸上
+         是整页唯一一块深色 —— 不是不能读，是与那一版的其余部分不是一份印刷品。
+
+         `defaultColor: 'dark'` 让行内色直接是深色档（夜刊/胶片/霓虹三档零开销），
+         浅色档以 `--shiki-light-*` 变量输出，由 global.css 里那两条按
+         `html[data-theme='paper']` 切过去。 */
+      themes: {
+        light: 'github-light',
+        dark: 'github-dark',
+      },
+      defaultColor: 'dark',
       wrap: true,
     },
   },

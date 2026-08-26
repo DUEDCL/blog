@@ -1,13 +1,17 @@
 /* ==========================================================================
-   设计系统 —— 深色毛玻璃
-   方向：深色为基底，视口底层铺固定的彩色光晕，内容浮在其上的玻璃面板里。
-   关键前提：backdrop-filter 在纯色背景上完全看不出效果，必须有可折射的底层。
-   中文走系统字体栈（零加载成本），西文与数字用自托管 Fraunces / IBM Plex Mono。
+   设计系统 —— 对开大版（Broadsheet）
+   方向：一份独立刊物的对开版面。非对称多栏、头条制、真实分栏线、竖排中文栏目标识。
+   内容区是**纸**（实底 + 细线），浮层才是玻璃（顶栏、播放器、对话入口）——
+   这是 R44 的核心改动：从前全站都是圆角玻璃卡堆叠，六个等重的块从上排到下，
+   渲染实测下来「所有层次消失」（.glass 的白膜只有 4.5%，纸面与底色差 0.6% 亮度，
+   于是面板只靠一条 8% 的描边和背景区分）。纸与玻璃分工之后，玻璃反而更像玻璃：
+   它只出现在真的浮在内容之上的东西上。
 
-   **R31 起本站只有深色**（站主原话「彻底砍掉浅色状态，只保留目前的黑色状态」）。
-   于是这里没有第二套色板、没有 `[data-theme]` 选择器、没有主题切换键，也不看
-   `prefers-color-scheme` —— `color-scheme: dark` 一处定妆，表单控件与滚动条跟着走。
-   起始页（门）本来就只有深色，两边从此是同一个方向。
+   **色值不在这个文件里** —— 四套版次（夜刊/晨版/胶片/霓虹）在 `themes.css`，
+   由 `<html data-theme>` 选，对比度由 `scripts/contrast.mjs` 复算。
+   这里只有结构、字体、间距与版面语汇。
+
+   中文走系统字体栈（零加载成本），西文与数字用自托管 Fraunces / IBM Plex Mono。
    ========================================================================== */
 
 :root {
@@ -21,7 +25,12 @@
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas,
     'PingFang SC', monospace;
 
-  /* --- 字号（中文阅读优先，行高偏大） ----------------------------------- */
+  /* --- 字号（中文阅读优先，行高偏大） -----------------------------------
+     R44 加了两档 clamp 的大字号。理由是层级：上一版内容区最大只有 19px
+     （`--text-lg`，条目标题），而 hero 里那个 64px 是孤例 —— 于是整页读起来
+     「所有东西一样重」。对开大版靠字号跨度撑层级，实测跨度是 **9.6 倍**
+     （1280 下刊名 115px → 刊眉 12px，`node scripts/measure.mjs` 量的；
+     窄屏 clamp 收到 52px，跨度 4.3 倍）。 */
   --text-xs: 0.75rem;
   --text-sm: 0.8125rem;
   --text-base: 1.0625rem; /* 17px：中文正文的舒适下限 */
@@ -30,6 +39,12 @@
   --text-2xl: 2rem;
   --text-3xl: 2.75rem;
   --text-4xl: 4rem;
+  /* 刊名：视口宽度的 9%，两端夹住。窄屏 3.25rem 是「沉麟」两个字加上
+     字距之后仍能单行放下的上限（375px 实测） */
+  --text-masthead: clamp(3.25rem, 9vw, 7.5rem);
+  /* 头条标题 */
+  --text-headline: clamp(1.75rem, 4vw, 3rem);
+
 
   --leading-tight: 1.25;
   --leading-normal: 1.6;
@@ -54,20 +69,43 @@
      --header-offset 再多留一点呼吸空间，供 html 的 scroll-padding-top 统一使用 ——
      锚点偏移只在这一处定义，页面不要各自再写 scroll-margin-top（踩过：
      两处魔法数字互不知情，改了顶栏断点就有一处失效）。 */
-  --header-h: 5.5rem;
-  --header-offset: 6rem;
+  /* --- 顶栏高度与锚点偏移 -------------------------------------------------
+     R44 起顶栏是通栏的一条，贴顶、上下不留缝，所以占位高度就是 .bar__inner 的
+     3.5rem（56px）—— 上一版是 --sp-4 + 3.5rem + --sp-4 = 5.5rem。
+     --header-offset 再多留一点呼吸空间，供 html 的 scroll-padding-top 统一使用 ——
+     锚点偏移只在这一处定义，页面不要各自再写 scroll-margin-top（踩过：
+     两处魔法数字互不知情，改了顶栏断点就有一处失效）。 */
+  --header-h: 3.5rem;
+  --header-offset: 4.5rem;
 
   /* --- 版心宽度 --------------------------------------------------------- */
   --measure-prose: 38rem; /* 文章窄栏：中文每行约 33-36 字，长阅读最舒服 */
   --measure-page: 72rem; /* 常规页面 */
+  --measure-broad: 80rem; /* 对开大版：首页与栏目索引，要能容下两栏加分栏线 */
   --measure-wide: 96rem; /* 摄影宽幅 */
 
   /* --- 圆角与阴影 ------------------------------------------------------- */
+  /* R44 起圆角只给浮层用（顶栏药丸、播放器、对话入口）。纸面是直角 ——
+     报纸没有圆角，而上一版「全站 20/28px 圆角」正是卡片堆看起来像模板的一半原因 */
   --r-sm: 8px;
   --r-md: 14px;
   --r-lg: 20px;
   --r-xl: 28px;
   --r-full: 999px;
+
+  /* --- 版面度量（对开大版专用） -----------------------------------------
+     分栏间距 `--gutter` 是排版里的天沟：两栏之间的空白，分栏线画在它中间。
+     18px 不是圆整值 —— 它是「两侧各留 8px 呼吸 + 1px 线 + 1px 视觉补偿」，
+     再宽两栏就散成两块，再窄字会贴到线上（1280 宽下实测）。 */
+  --gutter: 1.125rem;
+  --rule-w: 1px;
+
+  /* 左下角那枚对话入口（ChatDock）占的高度：3rem 的键 + 1.5rem 边距。
+     body 靠它留一段滚动余量，不然滚到底时那枚键正好压在页脚版权行上
+     （/posts 渲染实测：「© 2026 沉麟」被整枚键盖住）。
+     player.css 里状态栏的余量与这一条取 max，不相加 —— 两个浮层一左一右，
+     需要的通道是两者的较大值。 */
+  --dock-room: 4.5rem;
 
   /* ======================================================================
      色阶 —— 取自 /start 在 1487×1058 下的**屏幕像素**，不是视频源文件。
@@ -108,61 +146,22 @@
      压在 --sand-970 上对比度 9.4:1。 */
   --brass: #c4ad97;
   --brass-lit: #dcc9b4;
-  --brass-deep: #6b573f; /* 同色相的深档。R31 砍掉浅色主题后只剩一个用户：纸底二维码上的悬停色 */
+  /* 深档。**R44 之后这三档只剩一个用户**：player.css 拾音头渐变里的 `--brass-deep`
+     —— 那是物料色（金属件的暗面），与版次无关，所以留在这儿是对的。
+     撤掉的两处都是同一个毛病「写死的暖褐在晨版的米白纸上读不出来」：
+     admin 的 `.res--warn`（改成随版次走的 --ink-soft）与在线指示点（改成 --seal）。
+     `--brass` / `--brass-lit` 目前没有用户，留着是因为三档是同一组物料的三个面，
+     删掉其中一两个会让这组读不完整；真要清理就三档一起。 */
+  --brass-deep: #6b573f;
 
-  /* --- 颜色：深色（默认） -----------------------------------------------
-     底色取 --sand-970 而不是 --sand-990：屏幕上占 72% 面积的是 #080807，
-     纯 #050505 只出现在最底那 5%。用面积最大的那一档当页面底色才是对齐。 */
-  --paper: var(--sand-970);
-  --paper-raised: var(--sand-850); /* 实测排版区底色 —— 正文卡片就该是这个亮度 */
-  --paper-sunken: var(--sand-990); /* 与起始页 stage 逐位相同 */
-  --ink: var(--sand-50); /* 门洞光核，13.9:1。饱和度只有 2.6% —— 不是暖白 */
-  --ink-soft: var(--sand-200); /* 7.0:1 */
-  --ink-faint: #847d75; /* 5.0:1，S 只有 6%，跟画面一样克制 */
-  /* 描边跟着白光走，不跟暖褐走：画面的亮部是中性白，暖只存在于暗部。
-     旧版把描边也调暖（#e3dbd5 / S=11%），亮部于是整体发黄 —— 那是过度上色。 */
-  --rule: rgba(251, 251, 251, 0.08);
-  --rule-strong: rgba(251, 251, 251, 0.19);
-
-  /* 变量名沿用 --seal（朱红时代留下的），组件一行都不用改 */
-  --seal: var(--brass);
-  --seal-hover: var(--brass-lit);
-  --seal-wash: rgba(196, 173, 151, 0.11);
-
-  /* --- 玻璃 ------------------------------------------------------------- */
-  /* 半透明层用中性白（#fbfbfb）。这里刻意不带暖偏移：玻璃是「被光照亮」，
-     而画面里的光是中性的，暖色只从底下的光晕透上来 */
-  --glass-bg: rgba(251, 251, 251, 0.045);
-  --glass-bg-strong: rgba(251, 251, 251, 0.075);
-  --glass-border: rgba(251, 251, 251, 0.1);
-  --glass-border-lit: rgba(251, 251, 251, 0.28);
-  --glass-blur: 20px;
-  --glass-saturate: 180%;
-  /* 玻璃底下那层半不透明的深底（R32）。X5 一类内核声称支持 backdrop-filter 却不渲染，
-     只靠白膜的话面板就是透明的（真机上顶栏与正文叠成一团）。这一层保证哪儿都读得清。 */
-  --glass-under: rgba(7, 7, 6, 0.55);
-  /* 玻璃后方的提亮量。深色下不需要 —— 半透明本身就在提亮。
-     留着这个变量是因为 player.css 的门上那份 token 也钉了它，两处要对齐 */
-  --glass-brightness: 100%;
-  --glass-fallback: #14130f; /* 不支持 backdrop-filter 时的不透明底 */
-
-  /* --- 底层光晕（玻璃的折射来源） ---------------------------------------
-     这一层是毛玻璃的物理前提，不能删（纯黑底上 backdrop-filter 完全看不出
-     效果）。构造照抄画面的打光：glow-1 = 门洞那束中性白光（画面的亮部不暖，
-     所以这一档也不暖），glow-2/3 = 被照亮的雾与地面，取自实测的
-     #8b755d / #453a31 两桶 —— 都是低饱和暖褐，且只出现在暗部。
-     强度整体比上一版砍掉一半以上：全图饱和度只有 4.8%，光晕越浓越不像。 */
-  --glow-1: rgba(251, 251, 251, 0.06); /* 中性白光源 */
-  --glow-2: rgba(139, 117, 93, 0.17); /* 被照亮的雾（实测暖色天花板） */
-  --glow-3: rgba(69, 58, 49, 0.3); /* 更深的地面 */
-  --noise-opacity: 0.04;
-
-  --shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.5),
-    0 12px 32px -14px rgba(0, 0, 0, 0.7);
-  --shadow-glass: inset 0 1px 0 rgba(251, 251, 251, 0.07),
-    0 16px 40px -12px rgba(0, 0, 0, 0.55);
-
-  color-scheme: dark;
+  /* --- 版面语义色在 themes.css ------------------------------------------
+     `--paper` / `--ink` / `--rule` / `--seal` / `--glass-*` / `--glow-*` /
+     `--shadow-*` / `color-scheme` 全部搬去了 `themes.css`，四套版次各给一份。
+     上面那 15 档 `--sand-*` 与三档 `--brass` **留在这里**，因为它们不是版面色
+     而是**物料色**：唱盘的黑胶、金属唱臂、拾音头、纸底二维码的白。
+     黑胶不会因为读者换了版次就变成米色，所以它们与版次无关。
+     判据：一个色值如果回答的是「这个东西是什么做的」，留在这儿；
+     回答「这一版的纸和墨是什么颜色」，去 themes.css。 */
 }
 
 /* ==========================================================================
@@ -185,16 +184,21 @@ html {
      比每个页面自己写 scroll-margin-top 可靠 */
   scroll-padding-top: var(--header-offset);
   background-color: var(--paper);
-  transition: background-color 0.4s ease;
+  /* R44 删掉了 `transition: background-color .4s` —— 换版次现在走
+     `document.startViewTransition`（见 ThemeSwitch.astro）：整页快照做一次
+     0.28s 的 cross-fade，纸、墨、线、玻璃**同时**换完。
+     留着那条 transition 的话，底色会自己再渐变一次，与快照过渡叠成
+     「背景慢、其余快」的两段动画，看起来像卡了一下。 */
 }
 
-/* 窄屏顶栏折成三行（品牌 + 主题键一行，导航自己折两行；断点与 Header.astro 的 46rem 一致）。
-   实测 375×812 与 320×720 下占位高度都是 186px，所以 12.25rem（196px）留出 10px 呼吸。
-   R12 前导航是一行、占位 142px（9.5rem）—— 加「音乐」「图库」后导航折两行，多出 44px。
-   数字是实测的，不是估的 —— 改 .bar 的窄屏内边距、行距或导航项数时要回来重测。 */
+/* 窄屏顶栏折成两行（品牌 + 版次键一行，导航自己折两行；断点与 Header.astro 的 46rem 一致）。
+   **10rem（160px）是实测值**：390×844 与 320×720 下 `.site-header` 的占位高度都是 157px
+   （`node scripts/measure.mjs` 量的），留 3px 呼吸。
+   R44 第一版按 9.5rem 估，被那个脚本判为 FAIL —— 152px < 157px，锚点跳转会把标题
+   压在顶栏底下 5px。改 .bar__inner 的窄屏内边距、行距或导航项数时回来重跑它。 */
 @media (max-width: 46rem) {
   :root {
-    --header-offset: 12.25rem;
+    --header-offset: 10rem;
   }
 }
 
@@ -234,6 +238,8 @@ body {
   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
+  /* 浮层的滚动通道，见 :root 里 --dock-room 那段 */
+  padding-bottom: var(--dock-room);
   /* 注意：这里刻意不设 background-color。body 只有 position: relative、
      z-index: auto，不构成层叠上下文，所以下面两个 z-index 为负的伪元素会落到
      根（html）层叠上下文里 —— 在根上下文中负 z-index 后代先绘制、body 自身背景
@@ -248,7 +254,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  transition: color 0.4s ease;
 }
 
 /* 固定光晕层：整个毛玻璃效果的物理前提，没有它 blur 无从折射。
@@ -390,6 +395,12 @@ hr {
   max-width: var(--measure-wide);
 }
 
+/* 对开大版：首页与栏目索引。比 --measure-page 宽 8rem —— 两栏加一道天沟之后，
+   每栏还要能放下中文 28 字以上，不然分栏就变成两条挤在一起的窄条 */
+.wrap--broad {
+  max-width: var(--measure-broad);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -459,6 +470,164 @@ hr {
   .glass {
     background: var(--glass-fallback);
   }
+}
+
+/* ==========================================================================
+   对开大版的版面语汇（R44）
+
+   这一段是这次重构的骨架。四个字的判据：**纸不是玻璃**。
+   上一版把内容也放进玻璃面板，于是从上到下六个圆角矩形、边框一样、圆角一样、
+   底色一样 —— 渲染实测「所有层次消失」。现在分工是：
+     · 纸（.sheet）承载内容：实底、直角、一条细线，不模糊不投影不上浮。
+     · 玻璃（.glass）只给真的浮在内容之上的东西：顶栏、播放器、对话入口。
+   毛玻璃因此仍然是本站的身份（ANTI_SLOP 给的例外），但它不再是「所有东西的皮」。
+   ========================================================================== */
+
+/* --- 纸面 ---------------------------------------------------------------
+   直角。报纸没有圆角，这是它与「卡片」最短的区别。
+   底色比页面底亮一档（暗色版次）或亮一档（浅色版次）—— 见 themes.css 的
+   --paper-raised，两个方向都是「纸压在台面上」。 */
+.sheet {
+  background-color: var(--paper-raised);
+  border: var(--rule-w) solid var(--rule);
+}
+
+/* --- 报头线：朱红粗线 + 细线 --------------------------------------------
+   中文报纸的红报头。这一笔是整站「一眼是刊物」的主要来源，也是 --press
+   这个签名色唯一的大面积用法。**不可点击** —— 签名色不承担交互（那是黄铜的活）。
+   高度 5px 是两道线加中间 2px 空隙，不是圆整值：3px 时两条线看起来是一条粗线，
+   8px 时中间那道空隙开始像「漏了背景」（1280 宽下实测）。 */
+.pressrule {
+  height: 5px;
+  border-top: 2px solid var(--press);
+  border-bottom: var(--rule-w) solid var(--rule-strong);
+}
+
+/* 次级分隔：栏目之间。只有细线，靠间距分层，不再加第二种颜色 */
+.hairline {
+  height: 0;
+  border-top: var(--rule-w) solid var(--rule-strong);
+}
+
+/* --- 竖排栏目标识 -------------------------------------------------------
+   贴在每个区块左侧的竖排中文栏目名。这是这套版面辨识度的第二个来源，也是
+   **只有中文排版能做的一笔** —— 西文竖排要么转 90° 要么逐字排，都不自然，
+   而中文方块字天生可以竖着读（`text-orientation: upright` 保证它们正立，
+   不是把横排整个转过去）。
+
+   它左边那道线是**分栏线**，不是 ANTI_SLOP 禁的 side-tab：判据是宽度与颜色 ——
+   1px 的 --rule-strong（墨色 24%）是排版线，3px 的彩色边条才是那个反模式。
+   VISUAL_VOCABULARY 里「竖排中文栏目标识」被上一版收掉了，这一版把它请回来。 */
+.vlabel {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  align-self: start;
+  padding-left: var(--sp-3);
+  border-left: var(--rule-w) solid var(--rule-strong);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  /* 竖排的字距要比横排大得多：横排 0.35em 会显得散，竖排 0.35em 才读得出「一个词」 */
+  letter-spacing: 0.35em;
+  line-height: 1;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* --- 栏目头：标识 + 标题 + 计数 + 全部 ---------------------------------- */
+.colhead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.colhead__title {
+  font-size: var(--text-xl);
+  font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
+  margin-right: auto;
+}
+
+.colhead__more {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.18s ease;
+}
+
+.colhead__more:hover {
+  color: var(--seal);
+}
+
+/* --- 版次名 -------------------------------------------------------------
+   刊眉里那个「夜刊／晨版／胶片／霓虹」。静态产物里四个名字都在，由
+   `html[data-theme]` 决定露哪一个 —— **零 JS**：换版次时不需要更新任何文本节点，
+   也就不存在「切了主题但刊眉还写着上一版」的中间态。
+   最后那条是没有 JS 时的兜底（ThemeBoot 没跑，html 上没有 data-theme）。 */
+.edname > span {
+  display: none;
+}
+
+html[data-theme='night'] .edname > span[data-for='night'],
+html[data-theme='paper'] .edname > span[data-for='paper'],
+html[data-theme='film'] .edname > span[data-for='film'],
+html[data-theme='neon'] .edname > span[data-for='neon'],
+html:not([data-theme]) .edname > span[data-for='night'] {
+  display: inline;
+}
+
+/* --- 索引条目 -----------------------------------------------------------
+   首页头版、栏目列表页、标签页共用这一套。放在这里而不是各页 scoped ——
+   三处长得必须一样，抄三份的下一步就是其中一份的间距悄悄漂走。
+
+   与上一版 `.entry` 的区别只有一条，但是关键的一条：**日期不占死一列**。
+   上一版是 `grid-template-columns: 6.5rem 1fr`，标题从版心 40% 处才开始，
+   1280 宽下渲染实测「日期后面的空白比日期本身还宽」。报纸索引是标题左、
+   日期右、中间自适应 —— 长标题吃掉整行，短标题旁边是空白而不是空的一列。 */
+.briefs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.brief {
+  border-top: var(--rule-w) solid var(--rule);
+}
+
+/* 收尾线：报纸的索引块上下都封口，不然最后一条读起来像被裁掉了 */
+.briefs > .brief:last-child {
+  border-bottom: var(--rule-w) solid var(--rule);
+}
+
+.brief > a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  padding: var(--sp-4) 0;
+  text-decoration: none;
+}
+
+.brief__title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variation-settings: 'opsz' 18, 'SOFT' 0, 'WONK' 0;
+  line-height: var(--leading-tight);
+  transition: color 0.18s ease;
+}
+
+.brief > a:hover .brief__title {
+  color: var(--seal);
+}
+
+.brief__date {
+  flex-shrink: 0;
 }
 
 /* 元信息标签：等宽 + 全大写 + 宽字距，编辑感的来源之一 */
@@ -576,6 +745,31 @@ hr {
     }
   }
 
+  /* 换版次（R44）：同一套 root 快照，但**不要位移**。
+     跨页导航的进出场带 0.75rem 上浮，那是「翻到下一页」的语汇；换版次是同一页
+     换纸换墨，页面不该动 —— 位移会读成「又跳了一次页」。
+     `.is-turning` 由 ThemeSwitch 在 startViewTransition 前后加/删，
+     所以这条只在换版次那 0.28 秒里生效。 */
+  html.is-turning::view-transition-old(root) {
+    animation: turn-out 0.28s ease both;
+  }
+
+  html.is-turning::view-transition-new(root) {
+    animation: turn-in 0.28s ease both;
+  }
+
+  @keyframes turn-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes turn-in {
+    from {
+      opacity: 0;
+    }
+  }
+
   /* 过渡本身已经在淡入了，页面自己的 rise 是第二遍：叠起来的效果是内容在旧页快照下方
      空等一个 animation-delay 才出现，观感反而更卡。过渡期间关掉，冷加载时照旧。 */
   html:active-view-transition .rise {
@@ -626,16 +820,23 @@ hr {
 
 .prose strong {
   font-weight: 600;
-  /* 中文没有真正的粗体区分，用强调色比加粗更清晰 */
-  color: var(--seal);
+  /* 中文没有真正的粗体区分（微软雅黑只有 Regular/Bold 两档，600 会被凑成其中一档），
+     所以强调靠颜色。R44 从 --seal 换成 --press：黄铜是**可点击**的信号，
+     强调不可点击，两者同色时读者会去点粗体。签名色只用在这一处内容里。 */
+  color: var(--press);
 }
 
 .prose blockquote {
   margin-inline: 0;
-  padding: var(--sp-4) var(--sp-6);
-  border-left: 2px solid var(--seal);
-  border-radius: 0 var(--r-md) var(--r-md) 0;
-  background: var(--seal-wash);
+  /* R44 删掉了「2px 彩色左边框 + 圆角 + 淡色底」那一套：那是通用 UI 的引用块长相
+     （impeccable 检测器把 3px 以上的单侧彩边叫「AI 生成 UI 最好认的标记」，2px 只是
+     没到阈值，不是不同的东西）。换成排版的做法 —— 缩进 + 换成标题那套宋体 + 一道
+     1px 排版线。少三个属性，读起来更像引文。 */
+  padding-left: var(--sp-6);
+  border-left: var(--rule-w) solid var(--rule-strong);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: var(--leading-normal);
   color: var(--ink-soft);
   font-style: normal;
 }
@@ -653,9 +854,9 @@ hr {
   color: var(--seal);
 }
 
+/* 正文里的图也是直角（R44）：全站只有浮层保留圆角，印刷品里的图是切成方的 */
 .prose img {
-  border-radius: var(--r-md);
-  border: 1px solid var(--rule);
+  border: var(--rule-w) solid var(--rule);
 }
 
 .prose figure {
@@ -680,14 +881,39 @@ hr {
 
 .prose pre {
   padding: var(--sp-4) var(--sp-6);
-  border-radius: var(--r-md);
-  border: 1px solid var(--rule);
+  border: var(--rule-w) solid var(--rule);
   overflow-x: auto;
   line-height: 1.65;
   font-size: var(--text-sm);
   /* 代码块出血到版心之外，缓解窄栏的压迫感 */
   margin-inline: calc(var(--sp-4) * -1);
-  box-shadow: var(--shadow-lift);
+}
+
+/**
+ * 晨版（浅底纸）用 Shiki 的浅色档。
+ *
+ * Shiki 双主题的输出形状：行内写的是 `defaultColor`（这里是 dark）那一档的颜色，
+ * 另一档以 `--shiki-light` / `--shiki-light-bg` 自定义属性挂在同一个元素上。
+ * 所以切换就是「把行内色换成那个变量」—— 而行内样式只有 `!important` 压得过，
+ * 这两条 `!important` 不是偷懒，是唯一的写法。
+ *
+ * 只有 paper 一档要切：夜刊、胶片、霓虹都是深底纸，深色档直接可用。
+ * 选择器写 `.astro-code`（Astro 给 Shiki 产物的类名）而不是 `pre` ——
+ * 手写的 `<pre>` 没有那些变量，切过去会得到 `color: <空>`。
+ */
+html[data-theme='paper'] .prose .astro-code {
+  /* fallback 不是保险起见：`!important` 会把一个**无值**的 var() 变成 `unset`，
+     于是背景直接透明、前景回落到 --ink —— 也就是说变量一旦缺失（改了 Shiki 配置
+     忘了重启 dev、或将来 Astro 换了产物类名），代码块会静默变成「无底色的正文」
+     而不是报错。实测踩过一次。 */
+  background-color: var(--shiki-light-bg, #ffffff) !important;
+}
+
+/* 前景色分开写：背景只属于 <pre>，给每个 span 也刷一遍白底会把 Shiki 的
+   行高亮底色一起盖掉 */
+html[data-theme='paper'] .prose .astro-code,
+html[data-theme='paper'] .prose .astro-code span {
+  color: var(--shiki-light, #24292e) !important;
 }
 
 .prose table {

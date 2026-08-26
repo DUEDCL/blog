@@ -3,14 +3,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { NAV } from '../consts';
 ---
 
-<BaseLayout title="页面不存在" description="没有找到这个页面。">
-  <section class="void glass rise rise-1">
-    <p class="code">404</p>
-    <h1 class="title">这里没有东西</h1>
-    <p class="hint">
-      地址可能拼错了，或者这篇内容已经被我删掉了。
-    </p>
+<BaseLayout title="页面不存在" description="没有找到这个页面。" width="broad">
+  {/* R44：报纸的**更正栏**。上一版是一张居中的圆角玻璃卡，与站上其他页的
+      卡片长得一样 —— 一个「什么都没找到」的页面和一个列表页视觉重量相同。
+      「更正」是报刊里勘误那一栏的名字，用在这儿正好，不用另造一个词。 */}
+  <section class="void rise rise-1">
+    <div class="void__row">
+      <span class="vlabel">更正</span>
+      <h1 class="title">这里没有东西</h1>
+      <p class="meta code">404</p>
+    </div>
 
+    <div class="pressrule"></div>
+
+    <p class="hint">地址可能拼错了，或者这篇内容已经被我删掉了。</p>
+
+    <p class="meta ways__label">回哪儿去</p>
     <ul class="ways">
       {
         NAV.map((item) => (
@@ -25,67 +33,82 @@ import { NAV } from '../consts';
 
 <style>
   .void {
-    margin-top: var(--sp-16);
-    padding: var(--sp-12);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
   }
 
-  .code {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    letter-spacing: 0.3em;
-    color: var(--seal);
-    margin: 0;
+  .void__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
   }
 
   .title {
-    margin-top: var(--sp-4);
     font-size: var(--text-3xl);
     font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-right: auto;
+  }
+
+  /* 状态码退成刊眉那一档小字。它是给我看的调试信息，不是给访客的标题 ——
+     上一版把它放在标题上方当 eyebrow，等于告诉访客「这个数字很重要」 */
+  .code {
+    flex-shrink: 0;
+    color: var(--press);
+  }
+
+  .pressrule {
+    margin-top: var(--sp-5);
   }
 
   .hint {
-    margin-top: var(--sp-4);
+    margin-top: var(--sp-5);
     color: var(--ink-soft);
     font-size: var(--text-lg);
+    font-family: var(--font-display);
   }
 
+  .ways__label {
+    margin-top: var(--sp-12);
+  }
+
+  /* 一行文字链，竖线分隔（上一版是七枚玻璃药丸 + hover 上浮 2px）。
+     它们是七个地址，不是七个按钮 */
   .ways {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-3);
-    margin: var(--sp-8) 0 0;
+    gap: var(--sp-2) 0;
+    margin: var(--sp-4) 0 0;
     padding: 0;
     list-style: none;
+    border-top: var(--rule-w) solid var(--rule-strong);
+    padding-top: var(--sp-4);
+  }
+
+  .ways li + li {
+    border-left: var(--rule-w) solid var(--rule);
   }
 
   .ways a {
     display: inline-block;
-    padding: var(--sp-2) var(--sp-4);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    padding: 0 var(--sp-5);
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
     text-decoration: none;
     color: var(--ink-soft);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
-    transition: color 0.18s ease, background-color 0.24s ease,
-      border-color 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+    transition: color 0.18s ease;
+  }
+
+  .ways li:first-child a {
+    padding-left: 0;
   }
 
   .ways a:hover {
-    color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
+    color: var(--seal);
   }
 
   @media (max-width: 40rem) {
-    .void {
-      padding: var(--sp-8);
-    }
-
     .title {
       font-size: var(--text-2xl);
     }

@@ -1,11 +1,28 @@
 ---
-/* 文章 / 随笔列表页的共用布局。 */
+/**
+ * 文章 / 随笔列表页的共用布局。
+ *
+ * R44 改成栏目刊头：竖排栏目标识 + 大标题 + 计数 + 朱红报头线，下面直接是索引。
+ * 上一版是一张 `padding: 2rem 3rem` 的圆角玻璃卡里放「标题 + 共 N 篇」两行 ——
+ * 那张卡的高度（渲染实测 132px）几乎全是空白，而它下面又是一张同样长相的玻璃卡
+ * 装列表，一页两张一样的卡片，读不出「这是页头、那是内容」。
+ *
+ * R19 起页头不再有大字介绍（那段按需求整块删了，同一句话移到页脚，见 consts.ts 的
+ * SECTIONS 注释）。description 仍在 <BaseLayout> 上，那是 <meta>，不显示在页面上。
+ */
 import BaseLayout from './BaseLayout.astro';
 import EntryCard from '../components/EntryCard.astro';
 import type { CollectionEntry } from 'astro:content';
 
 interface Props {
   title: string;
+  /**
+   * 竖排栏目标识用的短名（SECTIONS.*.label）。**必须是两个字** ——
+   * 竖排标识的高度等于字数×字号，「技术文章」四个字竖起来比标题本身还高
+   * （渲染实测 72px vs 标题 44px），读起来是标题旁边多了一条杆。
+   * 缺省回落到 title，是为了让调用方漏传时不至于没有标识。
+   */
+  label?: string;
   description: string;
   /** 页脚版权行右边那句小字（见 consts.ts 的 SECTIONS 注释） */
   note: string;
@@ -15,20 +32,21 @@ interface Props {
   items: CollectionEntry<'posts' | 'notes'>[];
 }
 
-const { title, description, note, empty, base, items } = Astro.props;
+const { title, label, description, note, empty, base, items } = Astro.props;
 ---
 
-<BaseLayout title={title} description={description} footerNote={note}>
-  {/* R19 起页头卡只剩标题与计数：那段大字介绍（`.head__desc`）按需求整块删了，
-      同一句话的位置移到页脚 —— 栏目页一进来先看到条目，不再先读一段自我说明。
-      description 仍在 <BaseLayout> 上，那是 <meta>，不显示在页面上。 */}
-  <header class="head glass rise rise-1">
-    <h1 class="head__title">{title}</h1>
-    <p class="head__count meta">共 {items.length} 篇</p>
+<BaseLayout title={title} description={description} footerNote={note} width="broad">
+  <header class="head rise rise-1">
+    <div class="head__row">
+      <span class="vlabel">{label ?? title}</span>
+      <h1 class="head__title">{title}</h1>
+      <p class="meta head__count">共 {items.length} 篇</p>
+    </div>
+    <div class="pressrule"></div>
   </header>
 
   {items.length > 0 ? (
-    <ul class="entries glass rise rise-3">
+    <ul class="briefs rise rise-2">
       {items.map((item) => (
         <EntryCard
           href={`${base}/${item.id}`}
@@ -38,48 +56,51 @@ const { title, description, note, empty, base, items } = Astro.props;
       ))}
     </ul>
   ) : (
-    <p class="empty glass">{empty}</p>
+    <p class="empty">{empty}</p>
   )}
 </BaseLayout>
 
 <style>
-  /* 只剩标题与计数两行了，竖向 padding 收一档 —— sp-12 是给三行内容留的高度，
-     内容少了不收就是一张空荡荡的大卡片 */
   .head {
-    padding: var(--sp-8) var(--sp-12);
-    border-radius: var(--r-xl);
+    padding-top: var(--sp-8);
   }
 
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+  }
+
+  /* 栏目标题比首页刊名小一档、比头条大一档 —— 它是这一页的第一层。
+     字距放开 0.04em：中文大字在 44px 以上就开始挤，比刊名（0.08em）少一半，
+     因为这一档还没到会糊成一团的尺寸 */
   .head__title {
     font-size: var(--text-3xl);
     font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-right: auto;
   }
 
-  /* 原来隔着一段介绍，所以是 sp-6；现在紧跟标题，那么大的空隙会像漏了东西 */
   .head__count {
-    margin-top: var(--sp-3);
+    flex-shrink: 0;
   }
 
-  .entries {
-    list-style: none;
-    margin: var(--sp-8) 0 0;
-    padding: 0;
-    overflow: hidden;
+  .pressrule {
+    margin-top: var(--sp-5);
+  }
+
+  .briefs {
+    margin-top: var(--sp-8);
   }
 
   .empty {
     margin-top: var(--sp-8);
-    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
 
-  @media (max-width: 52rem) {
-    .head {
-      padding: var(--sp-8);
-    }
-
+  @media (max-width: 46rem) {
     .head__title {
       font-size: var(--text-2xl);
     }

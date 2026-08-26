@@ -22,13 +22,21 @@ const groups = await Promise.all(
 );
 ---
 
-<BaseLayout title="标签" description="沉麟站内全部标签，以及每个标签下的内容。">
+<BaseLayout
+  title="标签"
+  description="沉麟站内全部标签，以及每个标签下的内容。"
+  width="broad"
+>
   <header class="head rise rise-1">
-    <p class="meta">TAGS</p>
-    <h1 class="head__title">标签</h1>
-    <p class="head__desc">
-      共 {tags.length} 个标签。文章、随笔与作品共用这一套标签。
-    </p>
+    <div class="head__row">
+      <span class="vlabel">标签</span>
+      <h1 class="head__title">标签</h1>
+      <p class="meta head__count">共 {tags.length} 个</p>
+    </div>
+
+    <div class="pressrule"></div>
+
+    <p class="head__desc">文章、随笔与作品共用这一套标签。</p>
   </header>
 
   {groups.length > 0 ? (
@@ -53,7 +61,7 @@ const groups = await Promise.all(
               <span class="group__count meta">{count} 篇</span>
             </h2>
 
-            <ol class="line glass">
+            <ol class="line">
               {entries.map((entry) => (
                 <li class="item">
                   <a href={entry.href} class="item__link">
@@ -71,7 +79,7 @@ const groups = await Promise.all(
       </div>
     </>
   ) : (
-    <p class="empty glass">还没有标签。给文章的 frontmatter 加 tags 就会出现在这里。</p>
+    <p class="empty">还没有标签。给文章的 frontmatter 加 tags 就会出现在这里。</p>
   )}
 </BaseLayout>
 
@@ -81,23 +89,44 @@ const groups = await Promise.all(
     margin-bottom: var(--sp-8);
   }
 
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+  }
+
   .head__title {
     font-size: var(--text-3xl);
-    margin-top: var(--sp-3);
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-right: auto;
+  }
+
+  .head__count {
+    flex-shrink: 0;
+  }
+
+  .pressrule {
+    margin-top: var(--sp-5);
   }
 
   .head__desc {
     margin-top: var(--sp-4);
     color: var(--ink-soft);
-    font-size: var(--text-lg);
+    font-size: var(--text-base);
   }
 
-  /* --- 标签胶囊 ---------------------------------------------------------- */
+  /* --- 标签索引 -----------------------------------------------------------
+     R44 从「玻璃胶囊 + hover 上浮 2px」改成方框（宪法第 4 条：hover 上浮不携带
+     信息）。方框而不是药丸，与全站一致：只有浮层保留圆角。
+     字号统一，不按频次加权 —— 加权的标签云是把频次编码进字号，读者要靠比大小
+     才能读出数字，而数字就写在旁边。 */
   .cloud {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-3);
-    margin: 0 0 var(--sp-16);
+    gap: var(--sp-2);
+    margin: var(--sp-8) 0 var(--sp-16);
     padding: 0;
     list-style: none;
   }
@@ -106,23 +135,20 @@ const groups = await Promise.all(
     display: inline-flex;
     align-items: baseline;
     gap: var(--sp-2);
-    padding: 0.35em 0.85em;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--r-full);
+    padding: 0.3em 0.7em;
+    border: var(--rule-w) solid var(--rule-strong);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--ink-soft);
     text-decoration: none;
     transition: color 0.18s ease, border-color 0.18s ease,
-      background-color 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+      background-color 0.24s ease;
   }
 
   .chip:hover {
     color: var(--ink);
-    background: var(--glass-bg-strong);
-    border-color: var(--glass-border-lit);
-    transform: translateY(-2px);
+    background: var(--seal-wash);
+    border-color: var(--seal);
   }
 
   .chip__name::before {
@@ -146,7 +172,6 @@ const groups = await Promise.all(
 
   .group {
     /* 锚点偏移由 global.css 的 html { scroll-padding-top } 统一管，这里不重复定义 */
-    border-radius: var(--r-lg);
     transition: background-color 0.5s ease;
   }
 
@@ -162,7 +187,6 @@ const groups = await Promise.all(
     gap: var(--sp-3);
     font-size: var(--text-xl);
     margin-bottom: var(--sp-4);
-    padding-inline: var(--sp-2);
   }
 
   .group__hash {
@@ -178,11 +202,12 @@ const groups = await Promise.all(
     list-style: none;
     margin: 0;
     padding: 0;
-    overflow: hidden;
+    border-top: var(--rule-w) solid var(--rule-strong);
+    border-bottom: var(--rule-w) solid var(--rule-strong);
   }
 
   .item + .item {
-    border-top: 1px solid var(--rule);
+    border-top: var(--rule-w) solid var(--rule);
   }
 
   .item__link {
@@ -190,14 +215,13 @@ const groups = await Promise.all(
     grid-template-columns: 6.5rem 1fr auto;
     align-items: baseline;
     gap: var(--sp-4);
-    padding: var(--sp-4) var(--sp-6);
+    padding: var(--sp-4) var(--sp-3);
     text-decoration: none;
-    transition: background-color 0.2s ease, padding-left 0.24s ease;
+    transition: background-color 0.2s ease;
   }
 
   .item__link:hover {
     background: var(--seal-wash);
-    padding-left: var(--sp-8);
   }
 
   .item__date {
@@ -221,7 +245,6 @@ const groups = await Promise.all(
   }
 
   .empty {
-    padding: var(--sp-8);
     color: var(--ink-faint);
     font-size: var(--text-sm);
   }
