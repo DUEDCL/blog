@@ -1,6 +1,6 @@
 ---
 title: duchenlin.top
-description: 这个站本身。Astro 静态站，Markdown 写作，一条命令部署，全站不依赖境外 CDN。
+description: 这个站本身。Astro 静态站，Markdown 写作，一条命令部署，全站不依赖境外 CDN；站上还有个照我的知识库回答的 AI 分身。
 pubDate: 2026-08-16
 tags: ['Astro', 'Cloudflare Workers']
 link: 'https://duchenlin.top'
@@ -9,11 +9,15 @@ status: 'active'
 featured: true
 ---
 
-我的个人站点，也是第一个作品条目。
+我的个人站点，也是第一个上线的东西。
 
 ## 做了什么
 
 四个内容栏目：技术文章、随笔、摄影、作品。每类内容有各自的字段约束和排版 —— 文章走窄栏长阅读，摄影走宽幅网格，两者不共用一套布局。
+
+站上还有个 AI 版的我。我把自己的答案一条条写成 Markdown 放进仓库（现在 26 条），访客提问时先检索相关条目，再照着条目回答。它会说清自己是程序不是我本人，也会说清哪一条我没说过。
+
+另外两个不算栏目的东西：跨页不断的唱片机，和一个自己用的后台。
 
 ## 技术选择
 
