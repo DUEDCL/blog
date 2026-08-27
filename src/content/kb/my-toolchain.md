@@ -9,6 +9,6 @@ topic: 我
 
 主要靠 AI 编程软件干活 —— 我给方向和需求，它来写。
 
-编辑器还是 VS Code，我挺钟爱这个「微软大战代码」。系统 Windows，终端 PowerShell。
+编辑器还是 VS Code，我挺钟爱这个微软大战代码。系统 Windows，终端 PowerShell。
 
 常用的就这几个。

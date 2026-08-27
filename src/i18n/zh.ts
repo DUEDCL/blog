@@ -160,7 +160,7 @@ export const zh: Strings = {
     lead: '文章、随笔与作品合成一条时间线。',
     searchPlaceholder: '搜标题',
     hit: (n, total) => `命中 ${n} / ${total}`,
-    miss: (q) => `没有匹配「${q}」的标题`,
+    miss: (q) => `搜 ${q}，没有匹配的标题`,
     empty: '还没有内容。',
     count: (n) => `共 ${n} 篇`,
   },
@@ -275,7 +275,7 @@ export const zh: Strings = {
     modes: ['顺序播放', '列表循环', '单曲循环', '随机播放'],
     juke: {
       heading: '点歌',
-      lead: '挑个歌单，或者搜歌名、歌手。点一首就加到上面的曲目里，接着往下放；「全部播放」把整批都加进队列，从第一首开始。',
+      lead: '挑个歌单，或者搜歌名、歌手。点一首就加到上面的曲目里，接着往下放；全部播放那颗键把整批都加进队列，从第一首开始。',
       searchPlaceholder: '搜歌名或歌手',
       searchLabel: '搜索歌曲',
       searchGo: '搜',
@@ -289,8 +289,9 @@ export const zh: Strings = {
       offline: '网络没通，等会儿再试',
       unavailable: '这首现在拿不到，换一首',
       partial: '上游这首只有片段，能播多少算多少',
-      fetching: (title) => `正在取「${title}」…`,
-      quoted: (kw) => `「${kw}」`,
+      fetching: (title) => `正在取 ${title}…`,
+      /* 中文这一份故意不加引号 —— 他不用「」，而搜索词接在「正在取」后面本来就读得出来 */
+      quoted: (kw) => kw,
       charts: { mine: '沉麟推荐', hot: '热歌榜', original: '原创榜' },
       chartFallback: '歌单',
       requested: '点的歌',
@@ -360,7 +361,7 @@ export const zh: Strings = {
   portal: {
     title: (site) => `${site} · 入口`,
     description:
-      '对细节挑剔，对「差不多」没耐心。这里存放做过的东西，和把它们做对的过程。',
+      '对细节挑剔，对差不多没耐心。这里存放做过的东西，和把它们做对的过程。',
     enter: (site) => `进入 ${site} 的站内`,
   },
 

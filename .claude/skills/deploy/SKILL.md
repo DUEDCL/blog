@@ -39,7 +39,7 @@ git status -sb && git log --oneline -1 && git fetch --dry-run 2>&1 | tail -3
 npm run build
 ```
 
-判据：**`70 page(s) built`**（R32 删掉 /now 与两组占位相册、R35 加了 /admin 之后是 16；2026-08-26 补齐作品集与四篇技术文章之后 24；**R46 扩到三种语言之后是这个数** —— 22 个页面 × 3 种语言 ＋ /admin ＋ /start 跳转页 ＋ 根 404 ＋ 3 份 RSS）。页数变了先弄清为什么（本轮是否真的增删了页面、或增删了语言），别往下走。
+判据：**`73 page(s) built`**（R32 删掉 /now 与两组占位相册、R35 加了 /admin 之后是 16；2026-08-26 补齐作品集与四篇技术文章之后 24；R46 扩到三种语言之后 70 —— 22 个页面 × 3 种语言 ＋ /admin ＋ /start 跳转页 ＋ 根 404 ＋ 3 份 RSS；**2026-08-28 加了第七篇文章 orb-nine-revisions 之后 +3（一篇 × 三种语言）＝ 这个数**）。页数变了先弄清为什么（本轮是否真的增删了页面、或增删了语言），别往下走。加一篇文章就是 +3，加一种语言是 +23。
 
 **R41 起 `npm run build` 不只是 `astro build`**：它先跑 `scripts/gen-content.mjs`，
 把 `src/content/` 打成 `src/data/content.generated.ts`（后台读仓库内容用的，`.gitignore` 里）。

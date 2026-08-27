@@ -118,7 +118,7 @@ const TABS = [
         <h2 class="sub">分身的模型</h2>
         <label class="check check--off">
           <input type="checkbox" data-off />
-          <span>暂时关掉对话（访客会看到「今天先不聊了」）</span>
+          <span>暂时关掉对话（访客会看到一句今天先不聊了）</span>
         </label>
       </div>
       <p class="dim">
@@ -143,7 +143,7 @@ const TABS = [
       <p class="dim foot">
         兜底模型：<code data-fallback></code> —— 上面这些全失效时走它（Workers AI，零密钥）。
         <strong>Amazon Bedrock 不支持</strong>：它每个请求要按 AWS SigV4 签名、端点还按区域走，
-        与「一个端点 + 一个密钥」这套配置对不上。要用它就在前面挂一层 OpenAI 兼容的转发。
+        与一个端点加一个密钥这套配置对不上。要用它就在前面挂一层 OpenAI 兼容的转发。
       </p>
     </section>
     {/* ---- 聊天记录 ------------------------------------------------------ */}
@@ -156,7 +156,7 @@ const TABS = [
         列表每 5 秒自动重拉，打开的会话每 3 秒增量追加 —— 不用守着刷新键。
         这一片会显示访客的 IP 与原话，所以整页在登录后面，接口也各自校验 cookie。
         <strong>一条会话＝一个 IP</strong>（R42）：同一个人换标签、刷新、关掉再回来都还是这一条；
-        同一个 IP 后面有多个人时，靠每条消息上的「窗口」区分。
+        同一个 IP 后面有多个人时，靠每条消息上标的窗口区分。
       </p>
       <div class="row">
         <button class="key key--quiet2 is-on" type="button" data-log-filter="all">全部</button>
@@ -183,23 +183,23 @@ const TABS = [
         25 秒内没回就退回模型 —— 访客不会空手，也不知道刚才有人在旁边。
       </p>
       <p class="dim">
-        <strong>这个开关可以放心一直开着</strong>：接管只在「你此刻正开着这一页」时才真的生效
-        （这一页每 3 秒刷一次列表，那就是「你还在」的信号）。
+        <strong>这个开关可以放心一直开着</strong>：接管只在你此刻正开着这一页的时候才真的生效
+        （这一页每 3 秒刷一次列表，那就是你还在的信号）。
         离开超过 90 秒之后访客不会再白等，直接交给模型。
       </p>
       <p class="dim">
         <strong>你也可以主动开口</strong>（R43）：访客只要开着对话框，就有一条连接挂在服务端 ——
         你按发送他立刻收到，不必等他先问。对话框关着、或者开着但十几分钟没动的时候，
-        这句话会存下来，他一打开或一发问就看到。发送键旁边写着「发给窗口 xxxxxx」，
+        这句话会存下来，他一打开或一发问就看到。发送键旁边写着发给窗口 xxxxxx，
         那就是这次发给谁。
       </p>
       <p class="dim">
         <strong>一条会话＝一个 IP</strong>（R42）。同一个 IP 后面可能有好几个人
-        —— 学校、公司、运营商 NAT，手机的 CGNAT 更是常态，所以每条消息都标了「窗口」。
+        —— 学校、公司、运营商 NAT，手机的 CGNAT 更是常态，所以每条消息都标了窗口。
         喂给模型的上下文按窗口分开；你发的话也按窗口投递，不会串到隔壁那个人那儿。
       </p>
       <div class="row">
-        <span class="dim">左边那列，「有人在等」的排最前。</span>
+        <span class="dim">左边那列，有人在等的排最前。</span>
       </div>
       <div class="split">
         <div class="split__side" data-live-list></div>

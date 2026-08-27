@@ -243,7 +243,10 @@ export interface Strings {
       partial: string;
       /** 正在取某一首的直链 */
       fetching: (title: string) => string;
-      /** 搜索关键词在状态行里的引号形式 */
+      /**
+       * 搜索关键词在状态行里的形式。每种语言自己决定要不要加引号 ——
+       * 中文那一份原样返回（他不用直角引号），日语加 `「」`，英文加 `“”`。
+       */
       quoted: (kw: string) => string;
       /**
        * 三个歌单 chip 上的字。**是标签不是实体名** —— 「沉麟推荐」不是那个歌单在
