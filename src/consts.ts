@@ -20,23 +20,26 @@ export const AUTHOR = SITE_TITLE;
 export const PAGE_SIZE = 10;
 
 /**
- * 顶栏，六项（'/home' 那项被 Header.astro 滤掉，站名自己承担回首页）。
+ * 顶栏，八项（'/home' 那项被 Header.astro 滤掉，站名自己承担回首页；访客看见七项）。
  *
- * R12 起不再是「只放栏目」：`/music` 是页面不是栏目，但它是站上唯一的常驻功能，
+ * R12 起不再是「只放栏目」：`/music` 是页面不是栏目，但它是站上常驻功能，
  * 需求原文要它「跟文章随笔作品并行」。
  *
  * **R29 加回第六项「名片」**（原话「添加『名片』栏」）：`/about` 那一页的自我介绍与
  * 建站说明都删掉了，剩下的就是名片，于是它值得一个顶栏入口 —— 头像仍然指向同一页，
  * 但那是个没有文字的入口，找不找得到全靠猜。
  *
- * 窄屏（≤46rem）nav 折成整行、`repeat(3, 1fr)` 的网格：五项时是 3+2 的破行，
- * 六项正好 3+3 —— 加这一项在窄屏上反而更齐。再加第七项前先回去看 Header.astro 那段。
+ * **「工具」** 与音乐同类：不是内容栏目，是站上常驻的功能入口。刷步数那类小工具
+ * 挂在 `/tools` 下面，账号与自动规则在后台。
+ *
+ * 窄屏（≤46rem）nav 折成整行。六项时是 `repeat(3, 1fr)` 的 3+3；加「工具」后
+ * 访客可见七项，改走 `repeat(4, 1fr)` 的 4+3（Header.astro 里有算过的账）。
  *
  * R14 阶段⑥ 把首页那项从 '/' 改成 '/home'：根路径现在是起始页。
  * 这一项仍然被 Header.astro 滤掉，留着是因为它还有两个用户 ——
  * 语义上「首页在哪」这件事写在这里，以及首页项的 label 供别处引用。
  *
- * 标签在 `i18n/*.ts` 的 `nav` 里（六项两字等宽那条约束也记在那儿）。
+ * 标签在 `i18n/*.ts` 的 `nav` 里（中文两字等宽那条约束也记在那儿）。
  * `href` 是**不带语言前缀**的站内路径，加前缀由 `i18n/index.ts` 的 `localePath()` 做。
  */
 export const NAV = [
@@ -46,6 +49,7 @@ export const NAV = [
   { key: 'projects', href: '/projects' },
   { key: 'music', href: '/music' },
   { key: 'photos', href: '/photos' },
+  { key: 'tools', href: '/tools' },
   { key: 'about', href: '/about' },
 ] as const;
 

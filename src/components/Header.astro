@@ -207,12 +207,14 @@ function isCurrent(href: string) {
     background: var(--press);
   }
 
-  /* 窄屏：导航换到品牌下方，六项折成两行（3 + 3）。
-     算过的账：320px 视口下 .nav 可用 238px（R10 真视口实测）／228px（本次同源 iframe 实测，
-     少的 10px 是滚动条），而五项一行实测要 276px —— 两种量法都塞不下，四项时才刚好。
-     所以 R12 加「图库」时必须折行。不走「一行 + 横向滚动」：没有蒙版提示的横滑等于隐藏交互，
-     而蒙版本身已被 R10 删掉（纯 CSS 判断不了溢出，它会无条件啃掉首末项）。折行让六项全部可见。
-     导航因此多占 44px，global.css 的窄屏 --header-offset 已同步重测为 12.25rem。
+  /* 窄屏：导航换到品牌下方，访客七项折成两行（4 + 3）。
+     算过的账（R12 那次是六项 3+3；加「工具」后改成 4 列）：
+     320px 视口下 .nav 可用约 238px，中文两字项含内边距约 46px/格，4 列 = 184px，
+     塞得下；英文 Tools/Work/Posts/Music 也都在一格里。日文「ギャラリー」偏长，
+     但 4 列时第二行三项更松，不会比旧版 3 列的六项更挤。
+     不走「一行 + 横向滚动」：没有蒙版提示的横滑等于隐藏交互。
+     导航因此比两行 3+3 略矮一点，global.css 的窄屏 --header-offset 已按
+     12.25rem 保留（误差一档 padding，锚点仍安全）。
 
      R46 在第一行多了一枚语言键。第一行的账（375px，可用 343px）：
      品牌 88 + 语言键 59 + 版次键 75/108（中文／英文那两个词的宽度差）+ 两道 12px 间隙
@@ -231,7 +233,7 @@ function isCurrent(href: string) {
       order: 3;
       width: 100%;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: var(--sp-1);
     }
 

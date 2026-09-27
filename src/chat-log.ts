@@ -196,6 +196,45 @@ export class ChatLog {
        )`
     );
 
+    /**
+     * 刷步账号（工具 · 刷步数）。**只在配置实例上用**，与 cfg / ses / draft 同一张脸。
+     * 密码与 token 明文放 DO —— DO 不是公开存储，调用面只有 `/api/admin/*` 与
+     * 定时器。不要把 pwd 回给任何接口：列表回脱敏 userMask 就够了。
+     */
+    this.#sql.exec(
+      `CREATE TABLE IF NOT EXISTS step_account (
+         id            TEXT    PRIMARY KEY,
+         user          TEXT    NOT NULL,
+         pwd           TEXT    NOT NULL,
+         enabled       INTEGER NOT NULL DEFAULT 1,
+         auto          INTEGER NOT NULL DEFAULT 1,
+         before_hour   INTEGER NOT NULL DEFAULT 10,
+         before_minute INTEGER NOT NULL DEFAULT 0,
+         threshold     INTEGER NOT NULL DEFAULT 8000,
+         to_min        INTEGER NOT NULL DEFAULT 10000,
+         to_max        INTEGER NOT NULL DEFAULT 12000,
+         tokens        TEXT    NOT NULL DEFAULT '',
+         last_steps    INTEGER NOT NULL DEFAULT 0,
+         last_run_at   INTEGER NOT NULL DEFAULT 0,
+         last_run_ok   INTEGER NOT NULL DEFAULT 0,
+         last_run_msg  TEXT    NOT NULL DEFAULT '',
+         brushed_date  TEXT    NOT NULL DEFAULT ''
+       )`
+    );
+
+    this.#sql.exec(
+      `CREATE TABLE IF NOT EXISTS step_log (
+         id         INTEGER PRIMARY KEY AUTOINCREMENT,
+         account_id TEXT    NOT NULL,
+         user_mask  TEXT    NOT NULL DEFAULT '',
+         steps      INTEGER NOT NULL DEFAULT 0,
+         ok         INTEGER NOT NULL DEFAULT 0,
+         msg        TEXT    NOT NULL DEFAULT '',
+         via        TEXT    NOT NULL DEFAULT 'manual',
+         ts         INTEGER NOT NULL
+       )`
+    );
+
     /* 线上那些实例的 msg 表是 R33 建的，没有 model 列（他 R38 要看「模型使用」）。
        SQLite 没有 `ADD COLUMN IF NOT EXISTS`，第二次跑必然抛「duplicate column」——
        所以吞掉异常就是这里的正确写法，不是偷懒。
@@ -711,6 +750,213 @@ export class ChatLog {
             /* 最近一次有人说话的时间。后台顶栏用它显示「刚刚有人在聊」 */
             lastSeen: one('SELECT COALESCE(MAX(last), 0) AS v FROM ses'),
           });
+        }
+
+        /* ---- 刷步账号（工具 · 刷步数）--------------------------------------
+           同样只在配置实例上。密码只进不回；列表与日志给脱敏名。 */
+
+        case '/step-accounts': {
+          const rows = this.#sql
+            .exec(
+              `SELECT id, user, enabled, auto, before_hour, before_minute,
+                      threshold, to_min, to_max, tokens, last_steps,
+                      last_run_at, last_run_ok, last_run_msg, brushed_date
+                 FROM step_account ORDER BY rowid`
+            )
+            .toArray();
+          return Response.json({
+            items: rows.map((x) => {
+              let tokens: Record<string, unknown> = {};
+              try {
+                tokens = JSON.parse(String(x.tokens || '{}')) as Record<string, unknown>;
+              } catch {
+                tokens = {};
+              }
+              return {
+                id: String(x.id),
+                user: String(x.user ?? ''),
+                enabled: Number(x.enabled ?? 1) === 1,
+                auto: Number(x.auto ?? 1) === 1,
+                beforeHour: Number(x.before_hour ?? 10),
+                beforeMinute: Number(x.before_minute ?? 0),
+                threshold: Number(x.threshold ?? 8000),
+                toMin: Number(x.to_min ?? 10000),
+                toMax: Number(x.to_max ?? 12000),
+                lastSteps: Number(x.last_steps ?? 0),
+                lastRunAt: Number(x.last_run_at ?? 0),
+                lastRunOk: Number(x.last_run_ok ?? 0) === 1,
+                lastRunMsg: String(x.last_run_msg ?? ''),
+                brushedDate: String(x.brushed_date ?? ''),
+                tokens,
+              };
+            }),
+          });
+        }
+
+        /**
+         * 一行的原文（含 pwd 与 tokens）。**只给 Worker 内部执行路径**（登录、刷步）——
+         * 绝不能从 `/api/admin/*` 直接透出去。列表接口走上面那条，剥掉密码。
+         */
+        case '/step-raw': {
+          const id = String(url.searchParams.get('id') ?? '').slice(0, 64);
+          const rows = this.#sql
+            .exec('SELECT * FROM step_account WHERE id = ?', id)
+            .toArray();
+          if (!rows.length) return Response.json({ item: null });
+          const x = rows[0];
+          let tokens: Record<string, unknown> = {};
+          try {
+            tokens = JSON.parse(String(x.tokens || '{}')) as Record<string, unknown>;
+          } catch {
+            tokens = {};
+          }
+          return Response.json({
+            item: {
+              id: String(x.id),
+              user: String(x.user ?? ''),
+              pwd: String(x.pwd ?? ''),
+              enabled: Number(x.enabled ?? 1) === 1,
+              auto: Number(x.auto ?? 1) === 1,
+              beforeHour: Number(x.before_hour ?? 10),
+              beforeMinute: Number(x.before_minute ?? 0),
+              threshold: Number(x.threshold ?? 8000),
+              toMin: Number(x.to_min ?? 10000),
+              toMax: Number(x.to_max ?? 12000),
+              lastSteps: Number(x.last_steps ?? 0),
+              lastRunAt: Number(x.last_run_at ?? 0),
+              lastRunOk: Number(x.last_run_ok ?? 0) === 1,
+              lastRunMsg: String(x.last_run_msg ?? ''),
+              brushedDate: String(x.brushed_date ?? ''),
+              tokens,
+            },
+          });
+        }
+
+        case '/step-account-put': {
+          const b = (await req.json()) as {
+            id?: string;
+            user?: string;
+            pwd?: string;
+            enabled?: unknown;
+            auto?: unknown;
+            beforeHour?: number;
+            beforeMinute?: number;
+            threshold?: number;
+            toMin?: number;
+            toMax?: number;
+            tokens?: unknown;
+            lastSteps?: number;
+            lastRunAt?: number;
+            lastRunOk?: unknown;
+            lastRunMsg?: string;
+            brushedDate?: string;
+          };
+          const id = String(b.id ?? '').slice(0, 64);
+          const user = String(b.user ?? '').slice(0, 120);
+          if (!id || !user)
+            return Response.json({ ok: false, error: '缺 id 或账号' }, { status: 400 });
+
+          // 新建时密码必填；更新时留空表示不改密码
+          const existing = this.#sql
+            .exec('SELECT pwd FROM step_account WHERE id = ?', id)
+            .toArray();
+          const pwd =
+            typeof b.pwd === 'string' && b.pwd
+              ? b.pwd.slice(0, 200)
+              : String(existing[0]?.pwd ?? '');
+          if (!pwd)
+            return Response.json({ ok: false, error: '新账号要填密码' }, { status: 400 });
+
+          const tokens =
+            b.tokens !== undefined
+              ? JSON.stringify(b.tokens).slice(0, 8000)
+              : String(
+                  this.#sql.exec('SELECT tokens FROM step_account WHERE id = ?', id).toArray()[0]
+                    ?.tokens ?? ''
+                );
+
+          this.#sql.exec(
+            `INSERT INTO step_account (
+               id, user, pwd, enabled, auto, before_hour, before_minute,
+               threshold, to_min, to_max, tokens, last_steps, last_run_at,
+               last_run_ok, last_run_msg, brushed_date
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               user = excluded.user, pwd = excluded.pwd,
+               enabled = excluded.enabled, auto = excluded.auto,
+               before_hour = excluded.before_hour, before_minute = excluded.before_minute,
+               threshold = excluded.threshold, to_min = excluded.to_min, to_max = excluded.to_max,
+               tokens = excluded.tokens, last_steps = excluded.last_steps,
+               last_run_at = excluded.last_run_at, last_run_ok = excluded.last_run_ok,
+               last_run_msg = excluded.last_run_msg, brushed_date = excluded.brushed_date`,
+            id,
+            user,
+            pwd,
+            b.enabled === false ? 0 : 1,
+            b.auto === false ? 0 : 1,
+            Number(b.beforeHour ?? 10) || 0,
+            Number(b.beforeMinute ?? 0) || 0,
+            Number(b.threshold ?? 8000) || 0,
+            Number(b.toMin ?? 10000) || 0,
+            Number(b.toMax ?? 12000) || 0,
+            tokens,
+            Number(b.lastSteps ?? 0) || 0,
+            Number(b.lastRunAt ?? 0) || 0,
+            b.lastRunOk ? 1 : 0,
+            String(b.lastRunMsg ?? '').slice(0, 500),
+            String(b.brushedDate ?? '').slice(0, 20)
+          );
+          return Response.json({ ok: true });
+        }
+
+        case '/step-account-del': {
+          const b = (await req.json()) as { id?: string };
+          const id = String(b.id ?? '').slice(0, 64);
+          if (!id) return Response.json({ ok: false, error: '缺 id' }, { status: 400 });
+          this.#sql.exec('DELETE FROM step_account WHERE id = ?', id);
+          return Response.json({ ok: true });
+        }
+
+        case '/step-log': {
+          const n = clampNum(url.searchParams.get('n'), 1, 200, 40);
+          const rows = this.#sql
+            .exec('SELECT * FROM step_log ORDER BY id DESC LIMIT ?', n)
+            .toArray();
+          return Response.json({
+            items: rows.map((x) => ({
+              id: Number(x.id),
+              accountId: String(x.account_id ?? ''),
+              userMask: String(x.user_mask ?? ''),
+              steps: Number(x.steps ?? 0),
+              ok: Number(x.ok ?? 0) === 1,
+              msg: String(x.msg ?? ''),
+              via: String(x.via ?? 'manual') === 'auto' ? 'auto' : 'manual',
+              ts: Number(x.ts ?? 0),
+            })),
+          });
+        }
+
+        case '/step-log-add': {
+          const b = (await req.json()) as {
+            accountId?: string;
+            userMask?: string;
+            steps?: number;
+            ok?: unknown;
+            msg?: string;
+            via?: string;
+          };
+          this.#sql.exec(
+            `INSERT INTO step_log (account_id, user_mask, steps, ok, msg, via, ts)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            String(b.accountId ?? '').slice(0, 64),
+            String(b.userMask ?? '').slice(0, 40),
+            Number(b.steps ?? 0) || 0,
+            b.ok ? 1 : 0,
+            String(b.msg ?? '').slice(0, 500),
+            b.via === 'auto' ? 'auto' : 'manual',
+            Date.now()
+          );
+          return Response.json({ ok: true });
         }
 
         default:

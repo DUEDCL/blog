@@ -48,6 +48,8 @@ import { CONTROLS } from './data/providers';
  * （一句话：`dist/` 全是公开可取的，而草稿正文不该有 URL）。
  */
 import { CONTENT } from './data/content.generated';
+/** 刷步数工具的管理与定时执行 */
+import * as steps from './steps';
 
 /** DO 类必须从入口文件导出，`wrangler.toml` 的 `[exports.ChatLog]` 才找得到它 */
 export { ChatLog } from './chat-log';
@@ -1949,6 +1951,25 @@ async function admin(req: Request, env: Env): Promise<Response> {
     }
   }
 
+  /* 刷步数（工具）的两个只读口。写操作在 adminWrite 里（POST） */
+  if (path === 'steps-list') {
+    try {
+      const items = await steps.listAccounts(env);
+      return json({ ok: true, items }, CACHE.none);
+    } catch {
+      return fail(502, '账号列表读不出来');
+    }
+  }
+
+  if (path === 'steps-log') {
+    try {
+      const items = await steps.listLog(env);
+      return json({ ok: true, items }, CACHE.none);
+    } catch {
+      return fail(502, '日志读不出来');
+    }
+  }
+
   /** 一份草稿的全文 */
   if (path === 'draft') {
     const id = new URL(req.url).searchParams.get('id') ?? '';
@@ -2330,6 +2351,46 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
     return json({ ok: true, kbCount: kb.length, results }, CACHE.none);
   }
 
+  /* ---- 刷步数（工具）----------------------------------------------------
+     账号与规则在这里改；执行在 `steps.ts`。密码与 token 不在响应里出现。
+     两个只读口（steps-list / steps-log）在 admin() 的 GET 段。 */
+
+  if (path === 'steps-put') {
+    const r = await steps.putAccount(env, b as Record<string, unknown>);
+    if (!r.ok) return json({ ok: false, error: r.error }, CACHE.none, 400);
+    return json({ ok: true, id: r.id }, CACHE.none);
+  }
+
+  if (path === 'steps-del') {
+    const id = str(b.id);
+    if (!id) return fail(400, '缺 id');
+    await steps.delAccount(env, id);
+    return json({ ok: true }, CACHE.none);
+  }
+
+  if (path === 'steps-run') {
+    const id = str(b.id);
+    if (!id) return fail(400, '缺 id');
+    try {
+      const r = await steps.runOne(env, id, {
+        force: true,
+        via: 'manual',
+        steps:
+          b.steps === undefined || b.steps === null || b.steps === ''
+            ? undefined
+            : Number(b.steps),
+      });
+      if (!r.ok) return json({ ok: false, error: r.error }, CACHE.none, 502);
+      return json({ ok: true, steps: r.steps ?? 0 }, CACHE.none);
+    } catch (e) {
+      return json(
+        { ok: false, error: e instanceof Error ? e.message : String(e) },
+        CACHE.none,
+        502
+      );
+    }
+  }
+
   return fail(404, '没有这个接口');
 }
 
@@ -2399,6 +2460,17 @@ export default {
       ctx.waitUntil(edge.put(request, res.clone()));
     }
     return res;
+  },
+
+  /**
+   * Cron：全自动刷步（工具）。
+   * `wrangler.toml` 的 `[triggers] crons` 每小时打一次；条件句自己判该不该刷
+   * （见 `data/steps.ts` 的 `shouldBrush`）。失败不抛 —— 定时器抛了也无人接。
+   */
+  async scheduled(_event: unknown, env: Env, ctx: Ctx): Promise<void> {
+    ctx.waitUntil(
+      steps.runAuto(env).catch(() => ({ ran: 0, skipped: 0 }))
+    );
   },
 };
 

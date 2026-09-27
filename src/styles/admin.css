@@ -746,6 +746,88 @@
   color: var(--ink);
 }
 
+/* ---- 刷步面板（工具） ---------------------------------------------------- */
+
+.in--num {
+  width: 5.5rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.steps-form {
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.steps-form .lab {
+  flex-shrink: 0;
+}
+
+.acc {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--glass-bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+}
+
+.acc__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.acc .chip {
+  display: inline-flex;
+  padding: 0.15em 0.5em;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-full);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+.acc .chip.is-on {
+  color: var(--ink);
+  border-color: var(--seal);
+}
+
+/* 条件句：数字压一道朱红下划线，和工具页同一种「填空」 */
+.acc .rule {
+  margin: var(--sp-2) 0;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  line-height: var(--leading-normal);
+}
+
+.logh {
+  margin-top: var(--sp-8);
+  margin-bottom: var(--sp-3);
+}
+
+.logrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+}
+
+.logrow .ok {
+  color: var(--ink);
+}
+
+.logrow .bad {
+  color: var(--seal);
+}
+
 @media (max-width: 46rem) {
   .pane {
     padding: var(--sp-5);

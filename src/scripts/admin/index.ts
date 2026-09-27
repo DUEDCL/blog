@@ -17,8 +17,9 @@ import { wireLogs } from './logs';
 import { wireLive } from './live';
 import { wireWrite } from './write-tools';
 import { wireGallery } from './gallery';
+import { wireSteps } from './steps';
 
-const TABS = ['models', 'logs', 'live', 'write', 'gallery'] as const;
+const TABS = ['models', 'logs', 'live', 'write', 'gallery', 'steps'] as const;
 type Tab = (typeof TABS)[number];
 
 const views = {
@@ -66,6 +67,7 @@ function wireOnce() {
   wireLive();
   wireWrite();
   wireGallery();
+  wireSteps();
   for (const t of TABS) {
     q('[data-tab="' + t + '"]').addEventListener('click', () => setTab(t));
   }

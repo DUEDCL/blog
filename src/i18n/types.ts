@@ -25,8 +25,16 @@ export type Locale = 'zh' | 'en' | 'ja';
 /** 四个内容栏目。与 `content.config.ts` 的集合名、`utils/content.ts` 的 Section 一致 */
 export type Section = 'posts' | 'notes' | 'photos' | 'projects';
 
-/** 顶栏七项的键。与 `consts.ts` 的 NAV 逐项对应（'home' 那项被 Header 滤掉） */
-export type NavKey = 'home' | 'posts' | 'notes' | 'projects' | 'music' | 'photos' | 'about';
+/** 顶栏八项的键。与 `consts.ts` 的 NAV 逐项对应（'home' 那项被 Header 滤掉） */
+export type NavKey =
+  | 'home'
+  | 'posts'
+  | 'notes'
+  | 'projects'
+  | 'music'
+  | 'photos'
+  | 'tools'
+  | 'about';
 
 /** 首页底部那排目录条。'portal' 是根路径那道门 */
 export type PortalKey = 'archive' | 'tags' | 'photos' | 'portal';
@@ -193,6 +201,56 @@ export interface Strings {
       ContactKey,
       { label: string; action?: string; copy?: string; note: string }
     >;
+  };
+
+  /** 工具栏（站上常驻功能的目录） */
+  tools: {
+    title: string;
+    description: string;
+    note: string;
+    heading: string;
+    /** 目录里各张卡 */
+    lead: string;
+    /** 一张工具卡：名字、一句话、状态 */
+    cardSteps: { title: string; blurb: string; go: string };
+    /** 状态字 */
+    statusReady: string;
+    statusAdmin: string;
+  };
+
+  /** 刷步数工具页 */
+  stepsTool: {
+    title: string;
+    description: string;
+    note: string;
+    heading: string;
+    /** 公开说明 */
+    lead: string;
+    how: string;
+    warn: string;
+    /** 未登录时 */
+    needAdmin: string;
+    goAdmin: string;
+    /** 登录后的面板 */
+    panel: string;
+    accounts: string;
+    noAccounts: string;
+    addHint: string;
+    ruleLabel: string;
+    statusOn: string;
+    statusOff: string;
+    statusAuto: string;
+    statusManual: string;
+    lastRun: string;
+    never: string;
+    runNow: string;
+    running: string;
+    ranOk: (steps: number) => string;
+    ranFail: (msg: string) => string;
+    refresh: string;
+    log: string;
+    logEmpty: string;
+    currentSteps: (n: number | string) => string;
   };
 
   music: {

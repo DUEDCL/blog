@@ -1,0 +1,144 @@
+---
+/**
+ * 工具 —— 站上常驻功能的目录。
+ *
+ * 与音乐同类：不是内容栏目，是入口。目前一件工具（刷步数），
+ * 但版面按「以后还会加」来排：一条条索引，不是一张大卡把整页吃掉。
+ *
+ * 三条与全站一致的约束：
+ * ① 纸面直角 + 细线，玻璃只留给真的浮层；
+ * ② 交互色是黄铜，签名朱红只做标记；
+ * ③ 无 JS 也能读完 —— 状态芯片是装饰，不是唯一信息通道。
+ */
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { LOCALE_PARAMS, localePath, t, toLocale } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+const s = strings.tools;
+const stepsHref = localePath(locale, '/tools/steps');
+---
+
+<BaseLayout title={s.title} description={s.description} footerNote={s.note}>
+  <header class="head rise rise-1">
+    <div class="head__row">
+      <span class="vlabel">{s.heading}</span>
+      <h1 class="head__title">{s.title}</h1>
+    </div>
+    <div class="pressrule"></div>
+    <p class="head__desc">{s.lead}</p>
+  </header>
+
+  <ul class="briefs rise rise-2">
+    <li class="brief">
+      <a href={stepsHref}>
+        <span class="brief__main">
+          <span class="brief__title">{s.cardSteps.title}</span>
+          <span class="brief__blurb">{s.cardSteps.blurb}</span>
+        </span>
+        <span class="brief__side">
+          <span class="chip">{s.statusReady}</span>
+          <span class="meta go">{s.cardSteps.go} →</span>
+        </span>
+      </a>
+    </li>
+  </ul>
+</BaseLayout>
+
+<style>
+  .head {
+    padding-top: var(--sp-8);
+    margin-bottom: var(--sp-8);
+  }
+
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+  }
+
+  .head__title {
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  .pressrule {
+    margin-top: var(--sp-5);
+  }
+
+  .head__desc {
+    margin-top: var(--sp-4);
+    color: var(--ink-soft);
+    font-size: var(--text-base);
+    max-width: var(--measure-prose);
+  }
+
+  /* 目录条目：标题左、一句话跟在下面、状态与入口靠右。
+     不用照片栏那套网格 —— 工具没有图，硬排卡片会空出半页。 */
+  .brief > a {
+    align-items: flex-start;
+  }
+
+  .brief__main {
+    display: grid;
+    gap: var(--sp-2);
+    min-width: 0;
+  }
+
+  .brief__blurb {
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+  }
+
+  .brief__side {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-shrink: 0;
+    padding-top: 0.15em;
+  }
+
+  /* 状态芯片：方框而不是药丸 —— 与标签页同一条语汇 */
+  .chip {
+    display: inline-flex;
+    padding: 0.25em 0.65em;
+    border: var(--rule-w) solid var(--rule-strong);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+  }
+
+  .go {
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+    transition: color 0.18s ease;
+  }
+
+  .brief > a:hover .go {
+    color: var(--ink);
+  }
+
+  .brief > a:hover .brief__title {
+    color: var(--seal);
+  }
+
+  @media (max-width: 46rem) {
+    .brief > a {
+      flex-direction: column;
+      gap: var(--sp-3);
+    }
+
+    .brief__side {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+</style>

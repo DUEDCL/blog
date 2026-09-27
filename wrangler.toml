@@ -74,6 +74,13 @@ class_name = "ChatLog"
 type = "durable-object"
 storage = "sqlite"
 
+# 全自动刷步（工具）的定时器。每小时一次，条件句自己判该不该刷
+# （「每天 10:00 前，若不足 8000 步，刷到 10000–12000」见 src/data/steps.ts）。
+# cron 是 UTC；一小时一档够用：10 点前的窗口里最多空转几次，
+# shouldBrush 会在刷过之后当天不再动手。
+[triggers]
+crons = ["0 * * * *"]
+
 # 裸域直接指向本 Worker。Cloudflare 会自动创建 DNS 记录并签发证书，
 # 不需要手工加 A/CNAME 记录（裸域按 DNS 规范不能用 CNAME，这里由 Cloudflare 内部解决）
 #

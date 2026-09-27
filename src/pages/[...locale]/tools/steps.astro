@@ -1,0 +1,539 @@
+---
+/**
+ * 刷步数 —— 往 Zepp Life 写步数，微信运动从那儿同步。
+ *
+ * 分工（与后台那条边界一致）：
+ * - **这一页**：说明、条件句、登录后的状态与「立刻刷一次」。
+ * - **后台「刷步」**：账号增删改、密码、自动规则的字段。
+ *
+ * 密码永不进这一页的 HTML（它是边缘缓存的公开页）。
+ * 账号列表也只在登录后由 fetch 填，构建期只出骨架。
+ *
+ * 签名一刻是那条**条件句**：表单字段多，人读得懂的规格是
+ * 「每天 10:00 前，若不足 8000 步，刷到 10000–12000」。
+ */
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { LOCALE_PARAMS, t, toLocale } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LOCALE_PARAMS.map((params) => ({ params }));
+}
+
+const locale = toLocale(Astro.params.locale);
+const strings = t(locale);
+const s = strings.stepsTool;
+---
+
+<BaseLayout title={s.title} description={s.description} footerNote={s.note}>
+  <header class="head rise rise-1">
+    <div class="head__row">
+      <span class="vlabel">{s.heading}</span>
+      <h1 class="head__title">{s.title}</h1>
+    </div>
+    <div class="pressrule"></div>
+    <p class="head__desc">{s.lead}</p>
+  </header>
+
+  <section class="sheet note rise rise-2">
+    <p>{s.how}</p>
+    <p class="dim">{s.warn}</p>
+  </section>
+
+  {/* 未登录：只说清边界，给后台入口。登录后的面板整块由脚本揭开 */}
+  <section class="gate rise rise-2" data-gate>
+    <p class="dim">{s.needAdmin}</p>
+    <a class="keylike" href="/admin">{s.goAdmin} →</a>
+  </section>
+
+  <section class="panel rise rise-3" data-panel hidden>
+    <div class="panel__head">
+      <h2 class="sub">{s.panel}</h2>
+      <button class="keylike keylike--quiet" type="button" data-refresh>{s.refresh}</button>
+    </div>
+
+    <ul class="accounts" data-accounts></ul>
+    <p class="dim empty" data-empty hidden>{s.noAccounts} {s.addHint}</p>
+
+    <h2 class="sub loghead">{s.log}</h2>
+    <ol class="log" data-log></ol>
+    <p class="dim empty" data-log-empty hidden>{s.logEmpty}</p>
+  </section>
+</BaseLayout>
+
+<style>
+  .head {
+    padding-top: var(--sp-8);
+    margin-bottom: var(--sp-6);
+  }
+
+  .head__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+  }
+
+  .head__title {
+    font-size: var(--text-3xl);
+    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  .pressrule {
+    margin-top: var(--sp-5);
+  }
+
+  .head__desc {
+    margin-top: var(--sp-4);
+    color: var(--ink-soft);
+    font-size: var(--text-base);
+    max-width: var(--measure-prose);
+    line-height: var(--leading-normal);
+  }
+
+  .note {
+    padding: var(--sp-5) var(--sp-6);
+    margin-bottom: var(--sp-6);
+  }
+
+  .note p {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--ink-soft);
+    max-width: var(--measure-prose);
+  }
+
+  .note p:last-child {
+    margin-bottom: 0;
+  }
+
+  .dim {
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+  }
+
+  .gate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-5) 0;
+    border-top: var(--rule-w) solid var(--rule);
+    border-bottom: var(--rule-w) solid var(--rule);
+    margin-bottom: var(--sp-8);
+  }
+
+  .gate p {
+    margin: 0;
+  }
+
+  /* 可点的方键：黄铜描边。全站圆角只给浮层，这里是直角 */
+  .keylike {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 0.45em 1em;
+    border: var(--rule-w) solid var(--rule-strong);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    cursor: pointer;
+    background: transparent;
+    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+  }
+
+  .keylike:hover {
+    border-color: var(--link, var(--seal));
+    color: var(--ink);
+    background: var(--seal-wash, transparent);
+  }
+
+  .keylike--quiet {
+    color: var(--ink-soft);
+    border-color: var(--rule);
+  }
+
+  .panel__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+
+  .sub {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    font-variation-settings: 'opsz' 18, 'SOFT' 0, 'WONK' 0;
+    margin: 0;
+  }
+
+  /* 账号条：条件句是主视觉，步数用等宽大号 */
+  .accounts {
+    list-style: none;
+    margin: 0 0 var(--sp-8);
+    padding: 0;
+    border-top: var(--rule-w) solid var(--rule-strong);
+  }
+
+  .account {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--sp-3) var(--sp-5);
+    padding: var(--sp-5) 0;
+    border-bottom: var(--rule-w) solid var(--rule);
+  }
+
+  .account__user {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: 0.04em;
+    color: var(--ink);
+  }
+
+  .account__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    justify-content: flex-end;
+    align-items: start;
+  }
+
+  .badge {
+    display: inline-flex;
+    padding: 0.2em 0.55em;
+    border: var(--rule-w) solid var(--rule-strong);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+
+  .badge--on {
+    border-color: var(--link, var(--seal));
+    color: var(--ink);
+  }
+
+  /* 条件句 —— 这一页的签名。数字用等宽，句子用正文字体，整行像填空题的标准答案 */
+  .rule {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: var(--sp-3) 0 0;
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    color: var(--ink);
+  }
+
+  .rule b {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid var(--press);
+    padding-bottom: 1px;
+  }
+
+  .account__meta {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3) var(--sp-4);
+    margin-top: var(--sp-1);
+  }
+
+  .steps-now {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xl);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    color: var(--ink);
+  }
+
+  .last {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    letter-spacing: 0.06em;
+  }
+
+  /* 指定步数：等宽、方框，与条件句里的数字同一套语汇 */
+  .steps-in {
+    width: 7.5rem;
+    padding: 0.4em 0.55em;
+    border: var(--rule-w) solid var(--rule-strong);
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+
+  .steps-in::placeholder {
+    color: var(--ink-faint);
+    letter-spacing: 0.02em;
+  }
+
+  .steps-in:focus {
+    outline: none;
+    border-color: var(--seal);
+  }
+
+  .loghead {
+    margin-top: var(--sp-4);
+    margin-bottom: var(--sp-3);
+  }
+
+  .log {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: var(--rule-w) solid var(--rule);
+  }
+
+  .log li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-4);
+    padding: var(--sp-3) 0;
+    border-bottom: var(--rule-w) solid var(--rule);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+
+  .log .ok {
+    color: var(--ink);
+  }
+
+  .log .bad {
+    color: var(--seal);
+  }
+
+  .empty {
+    margin: var(--sp-4) 0;
+  }
+
+  @media (max-width: 46rem) {
+    .account {
+      grid-template-columns: 1fr;
+    }
+
+    .account__badges {
+      justify-content: flex-start;
+    }
+
+    .steps-now {
+      font-size: var(--text-xl);
+    }
+  }
+</style>
+
+<script>
+  /**
+   * 状态面板：先问后台有没有登录，登录了才拉账号与记录。
+   * 密码永远不经过这一页 —— 接口只回脱敏账号与条件。
+   */
+  type Account = {
+    id: string;
+    userMask: string;
+    enabled: boolean;
+    auto: boolean;
+    beforeHour: number;
+    beforeMinute: number;
+    threshold: number;
+    toMin: number;
+    toMax: number;
+    lastSteps: number;
+    lastRunAt: number;
+    lastRunMsg: string;
+    lastRunOk: boolean;
+  };
+
+  type LogRow = {
+    id: number;
+    userMask: string;
+    steps: number;
+    ok: boolean;
+    msg: string;
+    ts: number;
+    via: string;
+  };
+
+  const gate = document.querySelector<HTMLElement>('[data-gate]');
+  const panel = document.querySelector<HTMLElement>('[data-panel]');
+  const accountsEl = document.querySelector<HTMLElement>('[data-accounts]');
+  const emptyEl = document.querySelector<HTMLElement>('[data-empty]');
+  const logEl = document.querySelector<HTMLElement>('[data-log]');
+  const logEmpty = document.querySelector<HTMLElement>('[data-log-empty]');
+
+  function ruleSentence(a: Account): string {
+    const hh = String(a.beforeHour).padStart(2, '0');
+    const mm = String(a.beforeMinute).padStart(2, '0');
+    return `每天 ${hh}:${mm} 前，若不足 ${a.threshold} 步，刷到 ${a.toMin}–${a.toMax}`;
+  }
+
+  function when(ms: number): string {
+    if (!ms) return '';
+    return new Date(ms).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+  }
+
+  async function api(path: string, body?: unknown) {
+    const res = await fetch('/api/admin/' + path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: 'no-store',
+    });
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      /* 非 JSON 当失败 */
+    }
+    return { ok: res.ok, data };
+  }
+
+  function paintAccounts(items: Account[]) {
+    if (!accountsEl) return;
+    accountsEl.textContent = '';
+    if (emptyEl) emptyEl.hidden = items.length > 0;
+    for (const a of items) {
+      const li = document.createElement('li');
+      li.className = 'account';
+
+      const user = document.createElement('div');
+      user.className = 'account__user';
+      user.textContent = a.userMask;
+
+      const badges = document.createElement('div');
+      badges.className = 'account__badges';
+      for (const [txt, on] of [
+        [a.enabled ? '启用' : '停用', a.enabled],
+        [a.auto ? '自动' : '仅手动', a.auto],
+      ] as const) {
+        const b = document.createElement('span');
+        b.className = 'badge' + (on ? ' badge--on' : '');
+        b.textContent = txt;
+        badges.appendChild(b);
+      }
+
+      const rule = document.createElement('p');
+      rule.className = 'rule';
+      rule.innerHTML = ruleSentence(a).replace(
+        /(\d{2}:\d{2}|\d+)/g,
+        '<b>$1</b>'
+      );
+
+      const meta = document.createElement('div');
+      meta.className = 'account__meta';
+
+      const steps = document.createElement('span');
+      steps.className = 'steps-now';
+      steps.textContent = String(a.lastSteps || 0);
+
+      const last = document.createElement('span');
+      last.className = 'last';
+      last.textContent = a.lastRunAt
+        ? `上次 ${when(a.lastRunAt)} · ${a.lastRunOk ? a.lastRunMsg : a.lastRunMsg}`
+        : '还没跑过';
+
+      // 指定步数：填了就按填的刷，留空走条件句的目标区间随机
+      const num = document.createElement('input');
+      num.type = 'number';
+      num.min = '0';
+      num.max = '98000';
+      num.placeholder = '指定步数';
+      num.className = 'steps-in';
+      num.setAttribute('aria-label', '指定步数');
+
+      const run = document.createElement('button');
+      run.type = 'button';
+      run.className = 'keylike';
+      run.textContent = '刷步';
+      run.addEventListener('click', async () => {
+        const custom = num.value.trim();
+        const payload: Record<string, unknown> = { id: a.id };
+        if (custom !== '') {
+          const n = Number(custom);
+          if (!Number.isFinite(n) || n < 0) {
+            run.textContent = '步数不对';
+            setTimeout(() => {
+              run.textContent = '刷步';
+            }, 1200);
+            return;
+          }
+          payload.steps = Math.trunc(n);
+        }
+        run.textContent = '正在刷…';
+        run.setAttribute('disabled', '');
+        const r = await api('steps-run', payload);
+        run.removeAttribute('disabled');
+        if (r.ok && r.data.ok) {
+          run.textContent = `已刷到 ${String(r.data.steps ?? '')} 步`;
+        } else {
+          run.textContent = `没刷成：${String(r.data.error ?? '')}`;
+        }
+        setTimeout(() => {
+          run.textContent = '刷步';
+          void load();
+        }, 1600);
+      });
+
+      meta.append(steps, last, num, run);
+      li.append(user, badges, rule, meta);
+      accountsEl.appendChild(li);
+    }
+  }
+
+  function paintLog(rows: LogRow[]) {
+    if (!logEl) return;
+    logEl.textContent = '';
+    if (logEmpty) logEmpty.hidden = rows.length > 0;
+    for (const r of rows.slice(0, 20)) {
+      const li = document.createElement('li');
+      const ok = document.createElement('span');
+      ok.className = r.ok ? 'ok' : 'bad';
+      ok.textContent = r.ok ? `✓ ${r.steps}` : '✗';
+      const who = document.createElement('span');
+      who.textContent = r.userMask;
+      const via = document.createElement('span');
+      via.textContent = r.via === 'auto' ? '自动' : '手动';
+      const msg = document.createElement('span');
+      msg.textContent = r.msg;
+      const ts = document.createElement('span');
+      ts.textContent = when(r.ts);
+      li.append(ok, who, via, msg, ts);
+      logEl.appendChild(li);
+    }
+  }
+
+  async function load() {
+    const st = await api('state');
+    if (!st.ok || !st.data.logged) {
+      if (gate) gate.hidden = false;
+      if (panel) panel.hidden = true;
+      return;
+    }
+    if (gate) gate.hidden = true;
+    if (panel) panel.hidden = false;
+
+    const acc = await api('steps-list');
+    paintAccounts(((acc.data.items as Account[]) ?? []) as Account[]);
+
+    const lg = await api('steps-log');
+    paintLog(((lg.data.items as LogRow[]) ?? []) as LogRow[]);
+  }
+
+  document.querySelector('[data-refresh]')?.addEventListener('click', () => void load());
+  document.addEventListener('astro:page-load', () => void load());
+  void load();
+</script>

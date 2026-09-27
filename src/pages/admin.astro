@@ -42,6 +42,7 @@ const TABS = [
   { id: 'live', label: '聊天实时接管', badge: 'live' },
   { id: 'write', label: '文章编辑', badge: 'write' },
   { id: 'gallery', label: '图库管理' },
+  { id: 'steps', label: '刷步' },
 ] as const;
 ---
 
@@ -297,6 +298,56 @@ const TABS = [
         <button class="key key--quiet" type="button" data-gallery-refresh>立刻刷新</button>
       </div>
       <div data-gallery></div>
+    </section>
+
+    {/* ---- 刷步（工具）----------------------------------------------------
+        账号、条件句、手动跑都在这儿。密码只进不回；条件句是人读的规格。 */}
+    <section class="pane glass" data-panel="steps" hidden>
+      <div class="pane__head">
+        <h2 class="sub">刷步</h2>
+        <span class="dim" data-steps-sum></span>
+      </div>
+      <p class="dim">
+        小米运动（Zepp Life）账号，手机号或邮箱。刷完微信运动从那儿同步。
+        <strong>密码只存在服务端</strong>，这一页保存之后就再也看不到明文；改密码时填新值，留空就是不改。
+        自动规则每小时扫一遍，条件满足才动手，一天最多成功刷一次。
+      </p>
+
+      <div class="row">
+        <button class="key" type="button" data-steps-new>加账号</button>
+        <button class="key key--quiet" type="button" data-steps-refresh>刷新</button>
+      </div>
+
+      <div class="row steps-form" data-steps-form hidden>
+        <input class="in in--q" data-s-user placeholder="手机号或邮箱" aria-label="账号" />
+        <input class="in in--q" data-s-pwd type="password" placeholder="密码（新建必填）" aria-label="密码" />
+        <label class="check"><input type="checkbox" data-s-enabled checked /><span>启用</span></label>
+        <label class="check"><input type="checkbox" data-s-auto checked /><span>自动</span></label>
+      </div>
+      <div class="row steps-form" data-steps-form2 hidden>
+        <span class="dim lab">条件句：</span>
+        <span class="dim">每天</span>
+        <input class="in in--num" data-s-hh type="number" min="0" max="23" value="10" aria-label="截止小时" />
+        <span class="dim">:</span>
+        <input class="in in--num" data-s-mm type="number" min="0" max="59" value="0" aria-label="截止分钟" />
+        <span class="dim">前，若不足</span>
+        <input class="in in--num" data-s-th type="number" min="0" value="8000" aria-label="阈值" />
+        <span class="dim">步，刷到</span>
+        <input class="in in--num" data-s-min type="number" min="0" value="10000" aria-label="目标下限" />
+        <span class="dim">–</span>
+        <input class="in in--num" data-s-max type="number" min="0" value="12000" aria-label="目标上限" />
+      </div>
+      <div class="row" data-steps-form3 hidden>
+        <button class="key" type="button" data-s-save>保存</button>
+        <button class="key key--quiet2" type="button" data-s-cancel>取消</button>
+        <button class="key key--quiet" type="button" data-s-del>删除</button>
+        <p class="dim" data-s-msg hidden></p>
+      </div>
+
+      <div data-steps-list></div>
+
+      <h3 class="sub logh">最近记录</h3>
+      <div data-steps-log></div>
     </section>
   </div>
 </BaseLayout>
