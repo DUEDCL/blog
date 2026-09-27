@@ -48,8 +48,12 @@ const s = strings.stepsTool;
   <section class="panel rise rise-3" data-panel hidden>
     <div class="panel__head">
       <h2 class="sub">{s.panel}</h2>
-      <button class="keylike keylike--quiet" type="button" data-refresh>{s.refresh}</button>
+      <div class="panel__acts">
+        <button class="keylike keylike--quiet" type="button" data-run-auto>执行自动规则</button>
+        <button class="keylike keylike--quiet" type="button" data-refresh>{s.refresh}</button>
+      </div>
     </div>
+    <p class="dim heartbeat" data-heartbeat></p>
 
     <ul class="accounts" data-accounts></ul>
     <p class="dim empty" data-empty hidden>{s.noAccounts} {s.addHint}</p>
@@ -161,7 +165,20 @@ const s = strings.stepsTool;
     align-items: baseline;
     justify-content: space-between;
     gap: var(--sp-4);
-    margin-bottom: var(--sp-4);
+    margin-bottom: var(--sp-2);
+  }
+
+  .panel__acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+
+  .heartbeat {
+    margin: 0 0 var(--sp-4);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.04em;
   }
 
   .sub {
@@ -529,11 +546,41 @@ const s = strings.stepsTool;
     const acc = await api('steps-list');
     paintAccounts(((acc.data.items as Account[]) ?? []) as Account[]);
 
+    const hb = document.querySelector<HTMLElement>('[data-heartbeat]');
+    if (hb) {
+      const at = Number(acc.data.lastAutoAt || 0);
+      hb.textContent = at
+        ? `上次自动扫描：${when(at)}`
+        : '自动扫描还没有跑过 —— 点「执行自动规则」立刻跑一遍（cron 每小时一次，过点会补刷）';
+    }
+
     const lg = await api('steps-log');
     paintLog(((lg.data.items as LogRow[]) ?? []) as LogRow[]);
   }
 
   document.querySelector('[data-refresh]')?.addEventListener('click', () => void load());
+  document.querySelector('[data-run-auto]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    btn.textContent = '执行中…';
+    btn.setAttribute('disabled', '');
+    const r = await api('steps-run-auto', {});
+    btn.removeAttribute('disabled');
+    if (r.ok) {
+      const rows = (r.data.rows as { reason?: string; ran?: boolean; error?: string }[]) ?? [];
+      const ran = Number(r.data.ran || 0);
+      btn.textContent = ran ? `已刷 ${ran} 个` : '已评估，见记录';
+      void load();
+      setTimeout(() => {
+        btn.textContent = '执行自动规则';
+      }, 2000);
+      void rows;
+    } else {
+      btn.textContent = `失败：${String(r.data.error ?? '')}`;
+      setTimeout(() => {
+        btn.textContent = '执行自动规则';
+      }, 2400);
+    }
+  });
   document.addEventListener('astro:page-load', () => void load());
   void load();
 </script>

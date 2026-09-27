@@ -1,8 +1,13 @@
 /**
  * 刷步数工具的共享类型与默认条件。
  *
- * 页面、后台、Worker 三处共用这一份 —— 条件的语义只在这里定义一次：
- * 「在 deadline 之前，若当前步数低于 threshold，就刷到 toMin~toMax 的随机值」。
+ * 页面、后台、Worker 三处共用这一份 —— 条件的语义只在这里定义一次。
+ *
+ * 规则（R47 修订）：
+ * 「每天 hh:mm 前，若不足 threshold 步，刷到 toMin~toMax」——
+ * **过了 hh:mm 仍会补刷**（今天还没刷过且仍不足就动手）。
+ * 原因：用户要的是「当天步数到一万」，不是「只准在十点前提交」；
+ * 原先过了 deadline 就静默跳过且不落日志，正是「没提交记录也没有刷」的根因。
  *
  * 账号与规则本体存在 Durable Object（`chat-log.ts` 的 step_* 表），
  * 这里只放形状、默认值与纯函数，不碰 I/O。
@@ -17,7 +22,7 @@ export interface StepAccount {
   enabled: boolean;
   /** 是否走全自动规则 */
   auto: boolean;
-  /** 条件：每天这个时刻之前（北京时间） */
+  /** 条件：每天这个时刻之前（北京时间）是「正点窗口」 */
   beforeHour: number;
   beforeMinute: number;
   /** 条件：当前步数低于这个数才刷 */
@@ -30,7 +35,7 @@ export interface StepAccount {
   lastRunAt: number;
   lastRunOk: boolean;
   lastRunMsg: string;
-  /** 今天是否已经刷过（自动规则一天最多主动刷一次成功） */
+  /** 今天是否已经刷过（自动规则一天最多成功刷一次） */
   brushedDate: string;
 }
 
@@ -42,7 +47,7 @@ export interface StepRunLog {
   ok: boolean;
   msg: string;
   ts: number;
-  /** auto = 定时规则触发，manual = 后台手动 */
+  /** auto = 定时/自动规则，manual = 后台手动 */
   via: 'auto' | 'manual';
 }
 
@@ -87,9 +92,14 @@ export function maskUser(user: string): string {
   return `${user.slice(0, 3)}****${user.slice(-4)}`;
 }
 
+/** 这串看起来像脱敏名（含 *），不能当真实账号写回去 */
+export function looksMasked(user: string): boolean {
+  return user.includes('*');
+}
+
 /**
- * 读条件句：「每天 10:00 前，若不足 8000 步，刷到 10000–12000」。
- * 后台与工具页共用这一句 —— 表单字段多，这句话才是人读得懂的规格。
+ * 读条件句：「每天 10:00 前，若不足 8000 步，刷到 10000–12000；
+ * 过点未刷则补刷」。后台与工具页共用这一句。
  */
 export function ruleSentence(r: {
   beforeHour: number;
@@ -100,7 +110,7 @@ export function ruleSentence(r: {
 }): string {
   const hh = String(r.beforeHour).padStart(2, '0');
   const mm = String(r.beforeMinute).padStart(2, '0');
-  return `每天 ${hh}:${mm} 前，若不足 ${r.threshold} 步，刷到 ${r.toMin}–${r.toMax}`;
+  return `每天 ${hh}:${mm} 前，若不足 ${r.threshold} 步，刷到 ${r.toMin}–${r.toMax}；过点未刷则补刷`;
 }
 
 /** 北京时间（UTC+8）的「今天」YYYY-MM-DD */
@@ -118,30 +128,71 @@ export function beijingParts(ms = Date.now()): { hour: number; minute: number; d
   };
 }
 
+/** 规则判定的结果 —— 带原因，方便落日志与在页面上说清「为什么没跑」 */
+export interface BrushDecision {
+  brush: boolean;
+  reason: string;
+  /** true 表示已经过了 hh:mm，属于补刷 */
+  catchUp: boolean;
+}
+
 /**
  * 自动规则该不该刷。
  *
- * 返回 true 表示该刷。判据三条，缺一不可：
- * ① 总开关与 auto 都开着；
- * ② 现在还没过 deadline（过了就来不及「10 点前」，留给明天）；
- * ③ 今天还没成功刷过，且（当前步数 < threshold）。
- *
- * 「今天已经刷过」用 brushedDate 记账，不靠步数反推 —— 刷到 10000 之后
- * 条件自然不成立，但记账还能挡住「刷完又掉回 9000」时的重复提交。
+ * 判据顺序（前者命中就返回）：
+ * ① 未启用 / 未开 auto；
+ * ② 今天已经成功刷过；
+ * ③ 今日步数已达标（≥ threshold）；
+ * ④ 窗口内且不足 → 刷；
+ * ⑤ 已过窗口但今天还没刷且仍不足 → **补刷**（原先这里直接 false，导致晚上测试永远没动作）。
  */
-export function shouldBrush(
+export function evalBrush(
   a: Pick<
     StepAccount,
     'enabled' | 'auto' | 'beforeHour' | 'beforeMinute' | 'threshold' | 'brushedDate'
   >,
   now: number,
   currentSteps: number
-): boolean {
-  if (!a.enabled || !a.auto) return false;
+): BrushDecision {
+  if (!a.enabled) return { brush: false, reason: '未启用', catchUp: false };
+  if (!a.auto) return { brush: false, reason: '仅手动', catchUp: false };
+
   const p = beijingParts(now);
-  if (a.brushedDate === p.date) return false;
+  if (a.brushedDate === p.date) {
+    return { brush: false, reason: '今天已刷过', catchUp: false };
+  }
+  if (currentSteps >= a.threshold) {
+    return {
+      brush: false,
+      reason: `今日已有 ${currentSteps} 步（≥${a.threshold}），不必刷`,
+      catchUp: false,
+    };
+  }
+
+  const hh = String(a.beforeHour).padStart(2, '0');
+  const mm = String(a.beforeMinute).padStart(2, '0');
   const deadline = a.beforeHour * 60 + a.beforeMinute;
   const nowMin = p.hour * 60 + p.minute;
-  if (nowMin >= deadline) return false;
-  return currentSteps < a.threshold;
+
+  if (nowMin < deadline) {
+    return {
+      brush: true,
+      reason: `${hh}:${mm} 前且不足 ${a.threshold} 步（现 ${currentSteps}）`,
+      catchUp: false,
+    };
+  }
+  return {
+    brush: true,
+    reason: `已过 ${hh}:${mm} 仍不足 ${a.threshold} 步（现 ${currentSteps}），补刷`,
+    catchUp: true,
+  };
+}
+
+/** 兼容旧调用：只关心刷不刷 */
+export function shouldBrush(
+  a: Parameters<typeof evalBrush>[0],
+  now: number,
+  currentSteps: number
+): boolean {
+  return evalBrush(a, now, currentSteps).brush;
 }

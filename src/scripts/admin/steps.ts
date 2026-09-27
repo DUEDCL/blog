@@ -152,9 +152,10 @@ async function load() {
 
 async function save() {
   const f = formEls();
+  // 只在新建时送真实账号；编辑时送 id，user 带 * 会被服务端忽略（防脱敏名写回）
   const body: Record<string, unknown> = {
     id: editing ?? '',
-    user: f.user.value.trim(),
+    user: editing ? f.user.value.trim() : f.user.value.trim(),
     pwd: f.pwd.value,
     enabled: f.enabled.checked,
     auto: f.auto.checked,
@@ -179,6 +180,16 @@ async function save() {
 export function wireSteps() {
   q('[data-steps-new]').addEventListener('click', () => fillForm());
   q('[data-steps-refresh]').addEventListener('click', () => void load());
+  q('[data-steps-auto]').addEventListener('click', async () => {
+    const btn = q<HTMLElement>('[data-steps-auto]');
+    btn.textContent = '执行中…';
+    const r = await api('steps-run-auto', {});
+    btn.textContent = r.ok ? `已评估（刷了 ${Number(r.data.ran || 0)} 个）` : `失败：${String(r.data.error ?? '')}`;
+    void load();
+    setTimeout(() => {
+      btn.textContent = '执行自动规则';
+    }, 2200);
+  });
   q('[data-s-save]').addEventListener('click', () => void save());
   q('[data-s-cancel]').addEventListener('click', () => showForm(false));
   q('[data-s-del]').addEventListener('click', async () => {

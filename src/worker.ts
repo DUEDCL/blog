@@ -1955,7 +1955,7 @@ async function admin(req: Request, env: Env): Promise<Response> {
   if (path === 'steps-list') {
     try {
       const items = await steps.listAccounts(env);
-      return json({ ok: true, items }, CACHE.none);
+      return json({ ok: true, items, lastAutoAt: await steps.lastAutoAt(env) }, CACHE.none);
     } catch {
       return fail(502, '账号列表读不出来');
     }
@@ -2391,6 +2391,21 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
     }
   }
 
+  /* 手动触发自动规则（工具页 / 后台的「执行自动规则」）。
+     `dry: true` 只评估不提交，用来回答「为什么没刷」。 */
+  if (path === 'steps-run-auto') {
+    try {
+      const r = await steps.runAuto(env, { dryRun: b.dry === true });
+      return json({ ok: true, ...r }, CACHE.none);
+    } catch (e) {
+      return json(
+        { ok: false, error: e instanceof Error ? e.message : String(e) },
+        CACHE.none,
+        502
+      );
+    }
+  }
+
   return fail(404, '没有这个接口');
 }
 
@@ -2465,11 +2480,12 @@ export default {
   /**
    * Cron：全自动刷步（工具）。
    * `wrangler.toml` 的 `[triggers] crons` 每小时打一次；条件句自己判该不该刷
-   * （见 `data/steps.ts` 的 `shouldBrush`）。失败不抛 —— 定时器抛了也无人接。
+   * （见 `data/steps.ts` 的 `evalBrush` —— 过点会补刷，不再静默跳过）。
+   * 失败不抛 —— 定时器抛了也无人接。
    */
   async scheduled(_event: unknown, env: Env, ctx: Ctx): Promise<void> {
     ctx.waitUntil(
-      steps.runAuto(env).catch(() => ({ ran: 0, skipped: 0 }))
+      steps.runAuto(env).catch(() => ({ ran: 0, skipped: 0, rows: [], at: Date.now() }))
     );
   },
 };
