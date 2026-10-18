@@ -324,6 +324,13 @@
   gap: var(--sp-2);
 }
 
+/* 行内的数字输入（主要是自动任务的「时:分」）不要占满整行：
+   `.bs-input` 是 width:100%，在 flex 里会把冒号挤到下一行。 */
+.bs-row > .bs-input {
+  flex: 0 0 5.5rem;
+  width: 5.5rem;
+}
+
 .bs-actions {
   display: flex;
   flex-wrap: wrap;
