@@ -50,9 +50,12 @@ import { CONTROLS } from './data/providers';
 import { CONTENT } from './data/content.generated';
 /** 刷步数工具的管理与定时执行 */
 import * as steps from './steps';
+/** 步数管家（多用户商用版）：独立 AppDB、独立 API（R48） */
+import { appApi, appAutoTick, adminAppGet, adminAppPost } from './app';
 
-/** DO 类必须从入口文件导出，`wrangler.toml` 的 `[exports.ChatLog]` 才找得到它 */
+/** DO 类必须从入口文件导出，`wrangler.toml` 的 `[exports.*]` 才找得到它们 */
 export { ChatLog } from './chat-log';
+export { AppDB } from './app-db';
 
 /**
  * 只声明用得到的绑定。**刻意不引 `@cloudflare/workers-types`** ——
@@ -65,6 +68,14 @@ interface Env {
   AI: { run(model: string, input: Record<string, unknown>): Promise<unknown> };
   /** 对话落库。一个会话一个 DO 实例，名字就是会话 id */
   CHAT: {
+    idFromName(name: string): unknown;
+    get(id: unknown): { fetch(req: Request): Promise<Response> };
+  };
+  /**
+   * 步数管家（多用户商用版）的用户库。与 CHAT 分开的两个 DO：
+   * 一套业务一个库，改哪边都不牵连另一边（R48）。
+   */
+  APP: {
     idFromName(name: string): unknown;
     get(id: unknown): { fetch(req: Request): Promise<Response> };
   };
@@ -1970,6 +1981,12 @@ async function admin(req: Request, env: Env): Promise<Response> {
     }
   }
 
+  /* 步数管家（多用户版）的后台只读接口。真正的存储与校验在 app.ts + AppDB 里 */
+  {
+    const res = await adminAppGet(env, path, new URL(req.url));
+    if (res) return res;
+  }
+
   /** 一份草稿的全文 */
   if (path === 'draft') {
     const id = new URL(req.url).searchParams.get('id') ?? '';
@@ -2406,6 +2423,12 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
     }
   }
 
+  /* 步数管家（多用户版）：用户管理 / 卡密 / 配置 / 手动触发自动任务 */
+  {
+    const res = await adminAppPost(env, path, b);
+    if (res) return res;
+  }
+
   return fail(404, '没有这个接口');
 }
 
@@ -2443,6 +2466,16 @@ export default {
         return await admin(request, env);
       } catch {
         return fail(500, '后台这边出了点问题');
+      }
+    }
+
+    /* 步数管家的公开接口。它有自己的 cookie（bs_sess）与更细的频率限制，
+       所以从这里分出去，不经过点歌台那套 GET-only 逻辑。 */
+    if (url.pathname.startsWith('/api/app/')) {
+      try {
+        return await appApi(request, env);
+      } catch {
+        return fail(500, '步数管家这边出了点问题');
       }
     }
 
@@ -2484,9 +2517,15 @@ export default {
    * 失败不抛 —— 定时器抛了也无人接。
    */
   async scheduled(_event: unknown, env: Env, ctx: Ctx): Promise<void> {
-    ctx.waitUntil(
-      steps.runAuto(env).catch(() => ({ ran: 0, skipped: 0, rows: [], at: Date.now() }))
-    );
+    /* 单人版刷步（工具页那套）仍是每小时扫一次，条件句与原逻辑不变。
+       多用户版（VIP 自动任务）每分钟取一批到期账号 ——
+       500 人的量必须摊开跑，见 app.ts 的 nextRunAt / appAutoTick 注释。 */
+    if (new Date().getUTCMinutes() === 0) {
+      ctx.waitUntil(
+        steps.runAuto(env).catch(() => ({ ran: 0, skipped: 0, rows: [], at: Date.now() }))
+      );
+    }
+    ctx.waitUntil(appAutoTick(env).catch(() => ({ ran: 0, skipped: 0 })));
   },
 };
 

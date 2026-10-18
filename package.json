@@ -8,6 +8,7 @@
   "scripts": {
     "gen": "node scripts/gen-content.mjs",
     "dev": "npm run gen && astro dev",
+    "dev:local": "npm run build && wrangler dev --port 8788",
     "build": "npm run gen && astro build",
     "preview": "astro preview",
     "astro": "astro"

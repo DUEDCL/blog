@@ -2,13 +2,8 @@
 /**
  * 工具 —— 站上常驻功能的目录。
  *
- * 与音乐同类：不是内容栏目，是入口。目前一件工具（刷步数），
- * 但版面按「以后还会加」来排：一条条索引，不是一张大卡把整页吃掉。
- *
- * 三条与全站一致的约束：
- * ① 纸面直角 + 细线，玻璃只留给真的浮层；
- * ② 交互色是黄铜，签名朱红只做标记；
- * ③ 无 JS 也能读完 —— 状态芯片是装饰，不是唯一信息通道。
+ * 与音乐同类：不是内容栏目，是入口。版面走报纸分类的「服务台」：
+ * 页头 + 报头线 + 一条条索引（以后还会加）。
  */
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { LOCALE_PARAMS, localePath, t, toLocale } from '../../../i18n';
@@ -46,13 +41,31 @@ const stepsHref = localePath(locale, '/tools/steps');
         </span>
       </a>
     </li>
+    {/* 步数管家（多用户商用版，R48）。www 站只有中文形态；英文/日文页不挂入口，
+        避免把用户送进一页看不懂的界面。 */}
+    {locale === 'zh' && (
+      <li class="brief">
+        <a href="/bushu">
+          <span class="brief__main">
+            <span class="brief__title">步数管家</span>
+            <span class="brief__blurb">
+              绑定 Zepp Life，手动刷步免费、目标不限；VIP 每天自动补步。卡密开通。
+            </span>
+          </span>
+          <span class="brief__side">
+            <span class="chip">免费 + VIP</span>
+            <span class="meta go">进入 →</span>
+          </span>
+        </a>
+      </li>
+    )}
   </ul>
 </BaseLayout>
 
 <style>
   .head {
     padding-top: var(--sp-8);
-    margin-bottom: var(--sp-8);
+    margin-bottom: var(--sp-10);
   }
 
   .head__row {
@@ -66,6 +79,7 @@ const stepsHref = localePath(locale, '/tools/steps');
     font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: 0.04em;
     line-height: 1;
+    margin-right: auto;
   }
 
   .pressrule {
@@ -77,12 +91,18 @@ const stepsHref = localePath(locale, '/tools/steps');
     color: var(--ink-soft);
     font-size: var(--text-base);
     max-width: var(--measure-prose);
+    line-height: var(--leading-normal);
   }
 
   /* 目录条目：标题左、一句话跟在下面、状态与入口靠右。
-     不用照片栏那套网格 —— 工具没有图，硬排卡片会空出半页。 */
+     顶上不再另画朱红 —— 页头的 pressrule 已经是那一笔，再来一道会变成双线。 */
+  .briefs {
+    border-top: var(--rule-w) solid var(--rule-strong);
+  }
+
   .brief > a {
     align-items: flex-start;
+    padding: var(--sp-6) 0;
   }
 
   .brief__main {
@@ -91,33 +111,41 @@ const stepsHref = localePath(locale, '/tools/steps');
     min-width: 0;
   }
 
+  .brief__title {
+    font-size: var(--text-xl);
+    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
+  }
+
   .brief__blurb {
     color: var(--ink-soft);
     font-size: var(--text-sm);
     line-height: var(--leading-normal);
+    max-width: 36rem;
   }
 
   .brief__side {
     display: inline-flex;
     align-items: center;
-    gap: var(--sp-3);
+    gap: var(--sp-4);
     flex-shrink: 0;
-    padding-top: 0.15em;
+    padding-top: 0.35em;
   }
 
   /* 状态芯片：方框而不是药丸 —— 与标签页同一条语汇 */
   .chip {
     display: inline-flex;
-    padding: 0.25em 0.65em;
-    border: var(--rule-w) solid var(--rule-strong);
+    padding: 0.28em 0.7em;
+    border: var(--rule-w) solid var(--seal);
+    background: var(--seal-wash);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    color: var(--ink-soft);
+    letter-spacing: 0.12em;
+    color: var(--ink);
+    text-transform: uppercase;
   }
 
   .go {
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     color: var(--ink-faint);
     transition: color 0.18s ease;
   }

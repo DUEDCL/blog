@@ -45,12 +45,19 @@ async function doFetch(env: EnvLike, path: string, body?: unknown): Promise<Reco
   return (await res.json()) as Record<string, unknown>;
 }
 
-type RawAccount = StepAccount & { pwd?: string; tokens?: ZeppTokens | Record<string, unknown> };
+type RawAccount = StepAccount & {
+  note?: string;
+  pwd?: string;
+  tokens?: ZeppTokens | Record<string, unknown>;
+};
 
 function toView(a: RawAccount) {
   return {
     id: a.id,
     userMask: maskUser(a.user),
+    /** 主页只显示备注；没备注才退回脱敏名 */
+    label: (a.note || '').trim() || maskUser(a.user),
+    note: (a.note || '').trim(),
     enabled: a.enabled,
     auto: a.auto,
     beforeHour: a.beforeHour,
@@ -121,6 +128,7 @@ export async function putAccount(
     id: newId,
     user,
     pwd: typeof body.pwd === 'string' && body.pwd ? body.pwd : '',
+    note: String(body.note ?? prev?.note ?? '').slice(0, 120),
     enabled: body.enabled !== false,
     auto: body.auto !== false,
     beforeHour: asInt(body.beforeHour, STEP_DEFAULTS.beforeHour),
@@ -153,7 +161,7 @@ function pickTarget(min: number, max: number): number {
 
 async function writeRun(
   env: EnvLike,
-  a: { id: string; user: string },
+  a: { id: string; user: string; note?: string },
   steps: number,
   ok: boolean,
   msg: string,
@@ -161,12 +169,13 @@ async function writeRun(
   tokens?: ZeppTokens,
   brushedDate?: string
 ) {
-  const mask = maskUser(a.user);
+  // 日志上的名字：备注优先，没有才脱敏账号
+  const label = (a.note || '').trim() || maskUser(a.user);
   // 先落日志 —— 即使后面的账号回写失败，也得留下痕迹
   try {
     await doFetch(env, '/step-log-add', {
       accountId: a.id,
-      userMask: mask,
+      userMask: label,
       steps,
       ok,
       msg,
@@ -184,6 +193,7 @@ async function writeRun(
       id: me.id,
       // 用真实 user（列表里就是原文），绝不用 mask
       user: me.user,
+      note: me.note ?? '',
       enabled: me.enabled,
       auto: me.auto,
       beforeHour: me.beforeHour,

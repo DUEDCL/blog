@@ -1,0 +1,898 @@
+---
+/**
+ * 步数管家（/bushu）—— 面向用户的商用页面。
+ *
+ * 与 `/tools/steps` 的关系：那一页是**单人工具**（后台自己的账号、自己看状态）；
+ * 这一页是**多用户版**：注册、绑定自己的 Zepp Life、手动刷步（免费、目标不限）、
+ * 卡密兑换 VIP、VIP 每日自动补步。两套数据分别在两个 DO 里，互不影响。
+ *
+ * 这一页是公开静态 HTML，里面一个字的敏感内容都没有：
+ * 登录态、账号、步数、日志全部由 `/api/app/*` 在浏览器里取。
+ * 密码只提交给 Worker，Worker 加密后才写进 AppDB；这一页不存也不显示。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import '../styles/bushu.css';
+---
+
+<BaseLayout
+  title="步数管家 · 沉麟"
+  description="绑定 Zepp Life，手动刷步免费、目标不限；VIP 每天自动检测并补步。卡密开通。"
+  footerNote="步数是给人看的，路还是自己走。"
+>
+  <div class="bs" data-bs>
+    <header class="bs-head">
+      <div class="bs-head__row">
+        <span class="bs-kicker">工具 · 步数管家</span>
+        <span class="bs-kicker">Zepp Life → 微信运动</span>
+      </div>
+      <h1 class="bs-title">步数管家<em>.</em></h1>
+      <p class="bs-lead">
+        绑定 Zepp Life，微信运动从那儿同步。手动刷步免费、目标不限；VIP 每天到点自动检测，不够就补上。
+      </p>
+      <div class="bs-meta">
+        <span>手动免费</span>
+        <span>·</span>
+        <span>VIP 卡密开通</span>
+        <span>·</span>
+        <span><b data-user-count>—</b> / <span data-max-users>500</span> 人</span>
+        <span>·</span>
+        <span data-open-state>名额开放中</span>
+      </div>
+    </header>
+
+    <p class="bs-dim" data-loading>正在读取状态…</p>
+
+    {/* ---- 未登录：登录 / 注册 -------------------------------------------- */}
+    <section class="bs-card" data-auth hidden>
+      <div class="bs-card__head">
+        <h2 class="bs-card__title" data-auth-title>登录</h2>
+        <span class="bs-card__no">01 / ACCOUNT</span>
+      </div>
+
+      <div class="bs-row" style="margin-bottom: var(--sp-4)">
+        <button class="bs-btn bs-btn--small" type="button" data-auth-tab="login">登录</button>
+        <button class="bs-btn bs-btn--small" type="button" data-auth-tab="register">注册</button>
+      </div>
+
+      <form class="bs-form" data-auth-form>
+        <div class="bs-grid2">
+          <label class="bs-field">
+            <span>账号（邮箱或用户名）</span>
+            <input class="bs-input" name="account" autocomplete="username" placeholder="you@example.com" required />
+          </label>
+          <label class="bs-field">
+            <span>密码</span>
+            <input class="bs-input" name="pass" type="password" autocomplete="current-password" placeholder="至少 6 位" minlength="6" required />
+          </label>
+        </div>
+        <label class="bs-field" data-reg-nick hidden>
+          <span>昵称（可选）</span>
+          <input class="bs-input" name="nick" maxlength="20" placeholder="随便起一个，不填就用账号前缀" />
+        </label>
+        <div class="bs-actions">
+          <button class="bs-btn bs-btn--primary" type="submit" data-auth-submit>登录</button>
+          <span class="bs-msg" data-auth-msg></span>
+        </div>
+      </form>
+
+      <p class="bs-note">
+        注册即表示同意：本工具仅用于**个人运动数据管理**，禁止用于保险、积分、企业考核等场景。
+        账号与 Zepp 密码只用于同步，密码在服务端加密保存，可随时解绑删除。
+      </p>
+    </section>
+
+    {/* ---- 已登录 ---------------------------------------------------------- */}
+    <div data-app hidden>
+      <section class="bs-card bs-userbar">
+        <span class="bs-chip bs-chip--on" data-user-vip hidden>VIP</span>
+        <span class="bs-userbar__name" data-user-name>—</span>
+        <span class="bs-userbar__account" data-user-account></span>
+        <div class="bs-userbar__acts">
+          <button class="bs-btn bs-btn--small" type="button" data-refresh>刷新</button>
+          <button class="bs-btn bs-btn--small" type="button" data-logout>退出</button>
+        </div>
+      </section>
+
+      <section class="bs-card">
+        <div class="bs-card__head">
+          <h2 class="bs-card__title">今日状态</h2>
+          <span class="bs-card__no">SYNC</span>
+        </div>
+        <div class="bs-hero">
+          <div>
+            <div class="bs-hero__label">上次同步的步数</div>
+            <div class="bs-hero__num"><span data-big-steps>—</span><small>步</small></div>
+          </div>
+          <div class="bs-hero__side">
+            <span class="bs-chip" data-bind-chip>未绑定</span>
+            <span class="bs-chip" data-vip-chip>非 VIP</span>
+            <span class="bs-hero__when" data-last-run>还没有记录</span>
+            <button class="bs-btn bs-btn--small" type="button" data-sync>刷新当前步数</button>
+          </div>
+          <div class="bs-hero__bar"><i data-hero-bar></i></div>
+        </div>
+        <p class="bs-msg" data-sync-msg style="margin-top: var(--sp-3)"></p>
+      </section>
+
+      {/* 01 绑定 ------------------------------------------------------------ */}
+      <section class="bs-card">
+        <div class="bs-card__head">
+          <h2 class="bs-card__title">绑定 Zepp Life</h2>
+          <span class="bs-card__no">01 / BIND</span>
+        </div>
+
+        <div data-bind-form>
+          <p class="bs-dim">
+            账号是 <b>Zepp Life</b>（原小米运动）的邮箱或手机号，不是小米账号。手机号可以带 +86。
+          </p>
+          <div class="bs-grid2">
+            <label class="bs-field">
+              <span>Zepp Life 账号</span>
+              <input class="bs-input" data-zepp-user autocomplete="username" placeholder="邮箱或手机号" />
+            </label>
+            <label class="bs-field">
+              <span>密码</span>
+              <input class="bs-input" data-zepp-pwd type="password" autocomplete="current-password" placeholder="只在服务端加密保存" />
+            </label>
+          </div>
+          <div class="bs-actions">
+            <button class="bs-btn bs-btn--primary" type="button" data-bind>绑定</button>
+            <span class="bs-msg" data-bind-msg></span>
+          </div>
+          <ol class="bs-guide">
+            <li>安装并登录 <b>Zepp Life</b>；新账号建议用邮箱注册。</li>
+            <li>在 Zepp Life 里 <b>我的 → 第三方接入 → 微信</b> 完成绑定。</li>
+            <li>新注册、没绑过手环的账号，需要先在 Zepp Life 里绑一次手环，微信才会同步。</li>
+          </ol>
+        </div>
+
+        <div data-bound hidden>
+          <div class="bs-bound">
+            <div class="bs-bound__who">
+              <span class="bs-dim">已绑定</span>
+              <span class="bs-bound__id" data-bound-id>—</span>
+            </div>
+            <div class="bs-actions">
+              <button class="bs-btn bs-btn--small" type="button" data-rebind>换绑</button>
+              <button class="bs-btn bs-btn--small" type="button" data-unbind>解绑</button>
+            </div>
+          </div>
+        </div>
+        <p class="bs-note">
+          微信运动侧偶尔有同步延迟，通常几分钟内出现；一直不同步时，可在 Zepp Life 里重新绑定一次微信。
+        </p>
+      </section>
+
+      {/* 02 手动刷步 -------------------------------------------------------- */}
+      <section class="bs-card">
+        <div class="bs-card__head">
+          <h2 class="bs-card__title">手动刷步</h2>
+          <span class="bs-card__no">FREE · 目标不限</span>
+        </div>
+        <p class="bs-dim">
+          免费版不限目标步数；每 <b data-free-interval>60</b> 秒可刷 1 次，每天最多
+          <b data-free-daily>50</b> 次。微信运动会从 Zepp Life 同步过去。
+        </p>
+        <div class="bs-row" style="margin: var(--sp-3) 0">
+          <button class="bs-preset" type="button" data-preset="10000">10,000</button>
+          <button class="bs-preset" type="button" data-preset="15000">15,000</button>
+          <button class="bs-preset" type="button" data-preset="20000">20,000</button>
+          <button class="bs-preset" type="button" data-preset="30000">30,000</button>
+          <button class="bs-preset" type="button" data-preset="98000">98,000</button>
+        </div>
+        <div class="bs-grid2">
+          <label class="bs-field">
+            <span>目标步数（0–98,000）</span>
+            <input class="bs-input bs-input--num" type="number" min="0" max="98000" step="1" value="15000" data-target />
+          </label>
+          <label class="bs-field">
+            <span>提交后</span>
+            <span class="bs-dim">Zepp Life 写入 → 微信运动同步（几分钟内）</span>
+          </label>
+        </div>
+        <div class="bs-actions" style="margin-top: var(--sp-4)">
+          <button class="bs-btn bs-btn--primary" type="button" data-brush disabled>先绑定 Zepp 账号</button>
+          <span class="bs-msg" data-brush-msg></span>
+        </div>
+        <p class="bs-note">
+          建议步数落在合理范围（比如 8,000–30,000）；突然改到很高容易显得异常。数据后果由使用者自负。
+        </p>
+      </section>
+
+      {/* 03 VIP 与卡密 ------------------------------------------------------ */}
+      <section class="bs-card" data-vip-anchor>
+        <div class="bs-card__head">
+          <h2 class="bs-card__title">VIP 与卡密</h2>
+          <span class="bs-card__no">02 / VIP</span>
+        </div>
+        <div class="bs-vip">
+          <div class="bs-vip__status">
+            <span class="bs-chip" data-vip-state>未开通</span>
+            <span class="bs-vip__until" data-vip-until></span>
+          </div>
+          <p class="bs-dim">
+            VIP = 每天到点自动检测步数，不足才补。手动刷步始终免费，不开 VIP 也能一直用。
+          </p>
+          <form class="bs-redeem" data-redeem-form>
+            <input class="bs-input" data-card-code placeholder="输入卡密，如 ABCD-EFGH-JKLM-NPQ" autocomplete="off" spellcheck="false" />
+            <button class="bs-btn" type="submit">兑换</button>
+          </form>
+          <p class="bs-msg" data-redeem-msg></p>
+          <p class="bs-dim" data-buy-note></p>
+        </div>
+      </section>
+
+      {/* 04 自动任务 -------------------------------------------------------- */}
+      <section class="bs-card">
+        <div class="bs-card__head">
+          <h2 class="bs-card__title">每日自动任务</h2>
+          <span class="bs-card__no">03 / AUTO</span>
+        </div>
+
+        <div class="bs-auto-lock" data-auto-lock hidden>
+          <p data-auto-lock-text>自动任务需要 VIP，且要先绑定 Zepp 账号。</p>
+          <div class="bs-actions">
+            <a class="bs-btn" href="/bushu#vip" data-goto-vip>去兑换卡密</a>
+          </div>
+        </div>
+
+        <div data-auto-body hidden>
+          <form class="bs-form" data-auto-form>
+            <label class="bs-switch">
+              <input type="checkbox" data-auto-enabled />
+              <span>开启每日自动补步（VIP）</span>
+            </label>
+            <div class="bs-grid2">
+              <label class="bs-field">
+                <span>执行时间（北京时间，前后会错峰几分钟）</span>
+                <div class="bs-row">
+                  <input class="bs-input bs-input--num" type="number" min="0" max="23" data-auto-hh />
+                  <span class="bs-dim">:</span>
+                  <input class="bs-input bs-input--num" type="number" min="0" max="59" data-auto-mm />
+                </div>
+              </label>
+              <label class="bs-field">
+                <span>低于多少步才补</span>
+                <input class="bs-input bs-input--num" type="number" min="0" max="98000" data-auto-threshold />
+              </label>
+            </div>
+            <div class="bs-grid2">
+              <label class="bs-field">
+                <span>补到（下限）</span>
+                <input class="bs-input bs-input--num" type="number" min="0" max="98000" data-auto-min />
+              </label>
+              <label class="bs-field">
+                <span>补到（上限）</span>
+                <input class="bs-input bs-input--num" type="number" min="0" max="98000" data-auto-max />
+              </label>
+            </div>
+            <div class="bs-actions">
+              <button class="bs-btn bs-btn--primary" type="button" data-auto-save>保存自动任务</button>
+              <button class="bs-btn" type="button" data-auto-test>立即测试一次</button>
+            </div>
+          </form>
+          <p class="bs-msg" data-auto-msg style="margin-top: var(--sp-3)"></p>
+          <p class="bs-next" data-auto-next></p>
+        </div>
+
+        <p class="bs-note">
+          自动任务每天最多成功补一次；若当天已刷过或步数已达标则跳过。所有执行都会记在「最近记录」里。
+        </p>
+      </section>
+
+      {/* 05 记录 ------------------------------------------------------------ */}
+      <section class="bs-card">
+        <div class="bs-card__head">
+          <h2 class="bs-card__title">最近记录</h2>
+          <button class="bs-btn bs-btn--small" type="button" data-logs-refresh>刷新</button>
+        </div>
+        <ul class="bs-logs" data-logs></ul>
+        <p class="bs-empty" data-logs-empty hidden>还没有记录。绑定账号后刷一次就有。</p>
+      </section>
+
+      <p class="bs-fine">
+        本工具只做「往 Zepp Life 写入步数」这一件事，不接触微信账号与密码。微信运动是否同步由 Zepp Life 决定。
+        数据仅用于个人展示与记录，请勿用于任何需要真实运动数据的商业、保险或考核场景。账号密码在服务端加密保存，
+        可随时解绑删除。
+      </p>
+    </div>
+
+    <div class="bs-toast" data-toast hidden></div>
+  </div>
+</BaseLayout>
+
+<script>
+  /**
+   * 页面的全部交互。写法按全站约定：
+   * - DOM 绑定放在 `astro:page-load` 里（全站 SPA 路由，模块脚本只执行一次）；
+   * - 不往 window 上挂监听；
+   * - 登录态与数据全部走 `/api/app/*`，这一页构建期不含任何用户数据。
+   */
+  type Pub = {
+    maxUsers: number;
+    userCount: number;
+    open: boolean;
+    buyNote: string;
+    freeDaily: number;
+    freeInterval: number;
+  };
+
+  type User = {
+    account: string;
+    nick: string;
+    vipUntil: number;
+    isVip: boolean;
+  };
+
+  type Account = {
+    zeppUser: string;
+    enabled: boolean;
+    auto: boolean;
+    beforeHour: number;
+    beforeMinute: number;
+    threshold: number;
+    toMin: number;
+    toMax: number;
+    lastSteps: number;
+    lastRunAt: number;
+    lastRunOk: boolean;
+    lastRunMsg: string;
+    brushedDate: string;
+    nextRunAt: number;
+  };
+
+  type LogRow = {
+    id: number;
+    steps: number;
+    ok: boolean;
+    msg: string;
+    via: string;
+    ts: number;
+  };
+
+  type Res = { ok: boolean; status: number; data: Record<string, unknown> };
+
+  type AuthMode = 'login' | 'register';
+
+  const $ = <T extends HTMLElement>(sel: string): T => document.querySelector<T>(sel)!;
+  const $all = <T extends HTMLElement>(sel: string): T[] =>
+    Array.from(document.querySelectorAll<T>(sel));
+
+  const api = async (path: string, body?: unknown): Promise<Res> => {
+    let res: Response;
+    try {
+      res = await fetch('/api/app/' + path, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+    } catch {
+      return { ok: false, status: 0, data: { error: '连不上服务器' } };
+    }
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      data = {};
+    }
+    return { ok: res.ok, status: res.status, data };
+  };
+
+  const str = (v: unknown) => (typeof v === 'string' ? v : '');
+  const numv = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+  function fmt(ms: number): string {
+    if (!ms) return '';
+    return new Date(ms).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+  }
+
+  function setMsg(node: HTMLElement | null, text: string, kind: 'ok' | 'bad' | 'dim' = 'dim') {
+    if (!node) return;
+    node.textContent = text;
+    node.classList.toggle('bs-msg--good', kind === 'ok');
+    node.classList.toggle('bs-msg--bad', kind === 'bad');
+  }
+
+  let toastTimer = 0;
+  function toast(text: string, bad = false) {
+    const node = $('[data-toast]') as HTMLElement | null;
+    if (!node) return;
+    node.textContent = text;
+    node.hidden = false;
+    node.classList.toggle('bs-toast--bad', bad);
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+      node.hidden = true;
+    }, 2600);
+  }
+
+  /* ---- 渲染 -------------------------------------------------------------- */
+
+  let pub: Pub = { maxUsers: 500, userCount: 0, open: true, buyNote: '', freeDaily: 50, freeInterval: 60 };
+  let user: User | null = null;
+  let account: Account | null = null;
+  let authMode: AuthMode = 'login';
+  let busy = false;
+
+  function renderPublic() {
+    const count = $('[data-user-count]');
+    if (count) count.textContent = String(pub.userCount);
+    const max = $('[data-max-users]');
+    if (max) max.textContent = String(pub.maxUsers);
+    const open = $('[data-open-state]');
+    if (open) {
+      open.textContent = pub.open
+        ? pub.userCount >= pub.maxUsers
+          ? '名额已满'
+          : '名额开放中'
+        : '注册暂未开放';
+    }
+    const fi = $('[data-free-interval]');
+    if (fi) fi.textContent = String(pub.freeInterval);
+    const fd = $('[data-free-daily]');
+    if (fd) fd.textContent = String(pub.freeDaily);
+    const buy = $('[data-buy-note]');
+    if (buy) {
+      buy.innerHTML = '';
+      buy.append(
+        pub.buyNote
+          ? pub.buyNote
+          : '卡密购买请联系站长（微信 / QQ 见「名片」页），付款后把卡密发给对方即可。'
+      );
+    }
+  }
+
+  function showAuth(on: boolean) {
+    const loading = $('[data-loading]');
+    if (loading) loading.hidden = true;
+    const auth = $('[data-auth]');
+    if (auth) auth.hidden = !on;
+    const app = $('[data-app]');
+    if (app) app.hidden = on;
+  }
+
+  function setAuthMode(mode: AuthMode) {
+    authMode = mode;
+    const title = $('[data-auth-title]');
+    if (title) title.textContent = mode === 'login' ? '登录' : '注册';
+    const submit = $('[data-auth-submit]');
+    if (submit) submit.textContent = mode === 'login' ? '登录' : '注册';
+    const nick = $('[data-reg-nick]');
+    if (nick) nick.hidden = mode !== 'register';
+    const pass = document.querySelector<HTMLInputElement>('[data-auth-form] input[name="pass"]');
+    if (pass) pass.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+    setMsg($('[data-auth-msg]'), '');
+  }
+
+  function renderUser() {
+    const name = $('[data-user-name]');
+    if (name) name.textContent = user?.nick || user?.account || '—';
+    const acc = $('[data-user-account]');
+    if (acc) acc.textContent = user?.account ?? '';
+    const chip = $('[data-user-vip]');
+    if (chip) chip.hidden = !user?.isVip;
+  }
+
+  function renderAccount() {
+    const bound = !!account;
+    const bindForm = $('[data-bind-form]');
+    const boundBox = $('[data-bound]');
+    if (bindForm) bindForm.hidden = bound;
+    if (boundBox) boundBox.hidden = !bound;
+    const boundId = $('[data-bound-id]');
+    if (boundId) boundId.textContent = account?.zeppUser ?? '';
+
+    const bindChip = $('[data-bind-chip]');
+    if (bindChip) {
+      bindChip.textContent = bound ? '已绑定' : '未绑定';
+      bindChip.className = 'bs-chip' + (bound ? ' bs-chip--on' : ' bs-chip--off');
+    }
+    const vipChip = $('[data-vip-chip]');
+    if (vipChip) {
+      vipChip.textContent = user?.isVip ? 'VIP' : '非 VIP';
+      vipChip.className = 'bs-chip' + (user?.isVip ? ' bs-chip--on' : ' bs-chip--off');
+    }
+
+    const big = $('[data-big-steps]');
+    if (big) big.textContent = account ? String(account.lastSteps || 0) : '—';
+    const bar = $('[data-hero-bar]') as HTMLElement | null;
+    if (bar) {
+      const pct = account ? Math.max(0, Math.min(100, (account.lastSteps / 30000) * 100)) : 0;
+      bar.style.width = pct + '%';
+    }
+    const lastRun = $('[data-last-run]');
+    if (lastRun) {
+      lastRun.textContent = account?.lastRunAt
+        ? `上次 ${fmt(account.lastRunAt)} · ${account.lastRunOk ? '成功' : '失败'}`
+        : account
+          ? '还没有刷过'
+          : '绑定后开始记录';
+    }
+
+    const brush = $('[data-brush]') as HTMLButtonElement | null;
+    if (brush) {
+      brush.disabled = !bound || busy;
+      brush.textContent = bound ? '立即刷步' : '先绑定 Zepp 账号';
+    }
+    const sync = $('[data-sync]') as HTMLButtonElement | null;
+    if (sync) sync.disabled = !bound || busy;
+
+    // VIP 区
+    const vipState = $('[data-vip-state]');
+    if (vipState) {
+      vipState.textContent = user?.isVip ? 'VIP 已开通' : '未开通';
+      vipState.className = 'bs-chip' + (user?.isVip ? ' bs-chip--on' : ' bs-chip--off');
+    }
+    const vipUntil = $('[data-vip-until]');
+    if (vipUntil) vipUntil.textContent = user?.isVip ? `到期：${fmt(user.vipUntil)}` : '兑换后立即生效';
+
+    // 自动任务
+    const lock = $('[data-auto-lock]');
+    const body = $('[data-auto-body]');
+    const lockText = $('[data-auto-lock-text]');
+    const canAuto = bound && !!user?.isVip;
+    if (lock) lock.hidden = canAuto;
+    if (body) body.hidden = !canAuto;
+    if (lockText) {
+      lockText.textContent = !bound
+        ? '先在上方绑定 Zepp 账号，再开自动任务。'
+        : '自动任务需要 VIP（卡密兑换后生效）。手动刷步仍然免费。';
+    }
+    const gotoVip = $('[data-goto-vip]');
+    if (gotoVip) {
+      gotoVip.textContent = bound ? '去兑换卡密' : '先绑定账号';
+    }
+
+    if (canAuto && account) {
+      const set = (sel: string, v: string) => {
+        const n = document.querySelector<HTMLInputElement>(sel);
+        if (n && document.activeElement !== n) n.value = v;
+      };
+      set('[data-auto-hh]', String(account.beforeHour));
+      set('[data-auto-mm]', String(account.beforeMinute));
+      set('[data-auto-threshold]', String(account.threshold));
+      set('[data-auto-min]', String(account.toMin));
+      set('[data-auto-max]', String(account.toMax));
+      const enabled = document.querySelector<HTMLInputElement>('[data-auto-enabled]');
+      if (enabled) enabled.checked = account.auto;
+      const next = $('[data-auto-next]');
+      if (next) {
+        next.textContent = account.auto
+          ? account.nextRunAt
+            ? `自动任务已开启 · 下次执行：${fmt(account.nextRunAt)}`
+            : '自动任务已开启 · 等待排期'
+          : '自动任务已暂停';
+      }
+      setMsg(
+        $('[data-auto-msg]'),
+        account.lastRunMsg ? `上次：${fmt(account.lastRunAt)} · ${account.lastRunMsg}` : ''
+      );
+    }
+  }
+
+  function renderLogs(rows: LogRow[]) {
+    const box = $('[data-logs]');
+    if (!box) return;
+    box.textContent = '';
+    const empty = $('[data-logs-empty]');
+    if (empty) empty.hidden = rows.length > 0;
+    for (const r of rows.slice(0, 20)) {
+      const li = document.createElement('li');
+      const ok = document.createElement('span');
+      ok.className = r.ok ? 'ok' : 'bad';
+      ok.textContent = r.ok ? `✓ ${r.steps}` : '✗';
+      const via = document.createElement('span');
+      via.className = 'via';
+      via.textContent = r.via === 'auto' ? '自动' : '手动';
+      const msg = document.createElement('span');
+      msg.className = 'msg';
+      msg.textContent = r.msg;
+      const when = document.createElement('span');
+      when.className = 'when';
+      when.textContent = fmt(r.ts);
+      li.append(ok, via, msg, when);
+      box.appendChild(li);
+    }
+  }
+
+  function renderAll(payload: Record<string, unknown>) {
+    user = payload.user as User;
+    account = (payload.account as Account | null) ?? null;
+    const p = payload.public as Pub | undefined;
+    if (p) pub = p;
+    renderPublic();
+    renderUser();
+    renderAccount();
+    renderLogs((payload.logs as LogRow[]) ?? []);
+    showAuth(false);
+  }
+
+  /* ---- 加载 -------------------------------------------------------------- */
+
+  async function loadOverview() {
+    const ov = await api('overview');
+    if (!ov.ok) {
+      toast(str(ov.data.error) || '读取失败', true);
+      return false;
+    }
+    renderAll(ov.data);
+    return true;
+  }
+
+  async function boot() {
+    const loading = $('[data-loading]');
+    if (loading) loading.hidden = false;
+    const st = await api('state');
+    if (!st.ok) {
+      if (loading) loading.textContent = '读取状态失败，刷新页面试试';
+      return;
+    }
+    pub = st.data.public as Pub;
+    renderPublic();
+    if (!st.data.logged) {
+      user = null;
+      account = null;
+      showAuth(true);
+      return;
+    }
+    user = st.data.user as User;
+    const ok = await loadOverview();
+    if (!ok) showAuth(true);
+  }
+
+  /* ---- 动作 -------------------------------------------------------------- */
+
+  async function doAuth(form: HTMLFormElement) {
+    if (busy) return;
+    busy = true;
+    const msg = $('[data-auth-msg]');
+    const submit = $('[data-auth-submit]') as HTMLButtonElement;
+    const fd = new FormData(form);
+    const accountName = String(fd.get('account') ?? '').trim();
+    const pass = String(fd.get('pass') ?? '');
+    const nick = String(fd.get('nick') ?? '').trim();
+    if (!accountName || !pass) {
+      setMsg(msg, '账号和密码都要填', 'bad');
+      busy = false;
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = authMode === 'login' ? '登录中…' : '注册中…';
+    const r = await api(authMode, { account: accountName, pass, nick });
+    submit.disabled = false;
+    submit.textContent = authMode === 'login' ? '登录' : '注册';
+    busy = false;
+    if (!r.ok) {
+      setMsg(msg, str(r.data.error) || '失败了，再试一次', 'bad');
+      return;
+    }
+    form.reset();
+    setMsg(msg, '');
+    toast(authMode === 'login' ? '登录成功' : '注册成功');
+    await boot();
+  }
+
+  async function doBind() {
+    if (busy || !user) return;
+    const userEl = document.querySelector<HTMLInputElement>('[data-zepp-user]');
+    const pwdEl = document.querySelector<HTMLInputElement>('[data-zepp-pwd]');
+    const msg = $('[data-bind-msg]');
+    const btn = $('[data-bind]') as HTMLButtonElement;
+    const zeppUser = userEl?.value.trim() ?? '';
+    const pwd = pwdEl?.value ?? '';
+    if (!zeppUser || !pwd) {
+      setMsg(msg, 'Zepp 账号和密码都要填', 'bad');
+      return;
+    }
+    busy = true;
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '正在登录 Zepp…';
+    setMsg(msg, '正在验证账号，可能要几秒…');
+    const r = await api('bind', { zeppUser, pwd });
+    btn.disabled = false;
+    btn.textContent = old;
+    busy = false;
+    if (!r.ok) {
+      setMsg(msg, str(r.data.error) || '绑定失败', 'bad');
+      return;
+    }
+    if (pwdEl) pwdEl.value = '';
+    setMsg($('[data-bind-msg]'), '');
+    toast('绑定成功');
+    await loadOverview();
+  }
+
+  async function doBrush() {
+    if (busy || !account) return;
+    const input = document.querySelector<HTMLInputElement>('[data-target]');
+    const n = Number(input?.value ?? '');
+    if (!Number.isFinite(n) || n < 0 || n > 98000) {
+      setMsg($('[data-brush-msg]'), '步数要在 0–98,000 之间', 'bad');
+      return;
+    }
+    const msg = $('[data-brush-msg]');
+    const btn = $('[data-brush]') as HTMLButtonElement;
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = '正在刷…';
+    setMsg(msg, '正在提交，等几秒…');
+    const r = await api('brush', { steps: Math.trunc(n) });
+    busy = false;
+    btn.disabled = false;
+    btn.textContent = '立即刷步';
+    if (!r.ok) {
+      const text = str(r.data.error) || '刷步失败';
+      setMsg(msg, text, 'bad');
+      toast(text, true);
+      await loadOverview();
+      return;
+    }
+    setMsg(msg, `已刷到 ${numv(r.data.steps)} 步${numv(r.data.todayBefore) ? `（刷前 ${numv(r.data.todayBefore)}）` : ''}`, 'ok');
+    toast('刷步成功，微信运动稍后同步');
+    await loadOverview();
+  }
+
+  async function doSync() {
+    if (busy || !account) return;
+    const btn = $('[data-sync]') as HTMLButtonElement;
+    const msg = $('[data-sync-msg]');
+    busy = true;
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '读取中…';
+    setMsg(msg, '正在读 Zepp 今日步数…');
+    const r = await api('sync');
+    btn.disabled = false;
+    btn.textContent = old;
+    busy = false;
+    if (!r.ok) {
+      setMsg(msg, str(r.data.error) || '读取失败', 'bad');
+      return;
+    }
+    if (r.data.stale) {
+      setMsg(msg, str(r.data.note) || '暂时读不到今日步数，显示上次记录', 'dim');
+    } else {
+      setMsg(msg, `今日 ${numv(r.data.steps)} 步`, 'ok');
+    }
+    await loadOverview();
+  }
+
+  async function doRedeem() {
+    const input = document.querySelector<HTMLInputElement>('[data-card-code]');
+    const code = input?.value.trim() ?? '';
+    if (!code) {
+      setMsg($('[data-redeem-msg]'), '先填卡密', 'bad');
+      return;
+    }
+    const msg = $('[data-redeem-msg]');
+    setMsg(msg, '正在兑换…');
+    const r = await api('redeem', { code });
+    if (!r.ok) {
+      setMsg(msg, str(r.data.error) || '兑换失败', 'bad');
+      return;
+    }
+    if (input) input.value = '';
+    setMsg(msg, `兑换成功，+${numv(r.data.days)} 天`, 'ok');
+    toast(`VIP 已开通至 ${fmt(numv(r.data.vipUntil))}`);
+    await boot();
+  }
+
+  async function doAutoSave() {
+    const get = (sel: string) => {
+      const n = document.querySelector<HTMLInputElement>(sel);
+      return n ? Number(n.value) : NaN;
+    };
+    const enabled = document.querySelector<HTMLInputElement>('[data-auto-enabled]')?.checked ?? false;
+    const body = {
+      auto: enabled,
+      beforeHour: get('[data-auto-hh]'),
+      beforeMinute: get('[data-auto-mm]'),
+      threshold: get('[data-auto-threshold]'),
+      toMin: get('[data-auto-min]'),
+      toMax: get('[data-auto-max]'),
+    };
+    const msg = $('[data-auto-msg]');
+    if ([body.beforeHour, body.beforeMinute, body.threshold, body.toMin, body.toMax].some((n) => !Number.isFinite(n))) {
+      setMsg(msg, '时间与步数都要填', 'bad');
+      return;
+    }
+    setMsg(msg, '保存中…');
+    const r = await api('auto-config', body);
+    if (!r.ok) {
+      setMsg(msg, str(r.data.error) || '保存失败', 'bad');
+      return;
+    }
+    setMsg(msg, enabled ? '已保存，自动任务生效' : '已保存，自动任务已暂停', 'ok');
+    toast(enabled ? '自动任务已开启' : '自动任务已暂停');
+    await loadOverview();
+  }
+
+  async function doAutoTest() {
+    const msg = $('[data-auto-msg]');
+    const btn = $('[data-auto-test]') as HTMLButtonElement;
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '执行中…';
+    setMsg(msg, '正在按当前规则跑一次…');
+    const r = await api('auto-test');
+    btn.disabled = false;
+    btn.textContent = old;
+    if (!r.ok) {
+      setMsg(msg, str(r.data.error) || '执行失败', 'bad');
+      return;
+    }
+    setMsg(msg, str(r.data.msg) || (r.data.skipped ? '已跳过' : '执行完成'), 'ok');
+    toast('自动任务测试完成');
+    await loadOverview();
+  }
+
+  async function doUnbind() {
+    if (!window.confirm('解绑后不再自动同步，确定吗？')) return;
+    const r = await api('unbind');
+    if (!r.ok) {
+      toast(str(r.data.error) || '解绑失败', true);
+      return;
+    }
+    toast('已解绑');
+    await boot();
+  }
+
+  /* ---- 初始化 ------------------------------------------------------------ */
+
+  function init() {
+    const root = document.querySelector<HTMLElement>('[data-bs]');
+    if (!root || root.dataset.bsInit) return;
+    root.dataset.bsInit = '1';
+
+    for (const tab of $all<HTMLButtonElement>('[data-auth-tab]')) {
+      tab.addEventListener('click', () => setAuthMode(tab.dataset.authTab === 'register' ? 'register' : 'login'));
+    }
+    $('[data-auth-form]')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void doAuth(e.currentTarget as HTMLFormElement);
+    });
+    $('[data-refresh]')?.addEventListener('click', () => void boot());
+    $('[data-logout]')?.addEventListener('click', async () => {
+      await api('logout');
+      user = null;
+      account = null;
+      await boot();
+    });
+    $('[data-rebind]')?.addEventListener('click', () => {
+      const form = $('[data-bind-form]');
+      const bound = $('[data-bound]');
+      if (form) form.hidden = false;
+      if (bound) bound.hidden = true;
+      setMsg($('[data-bind-msg]'), '填写新的 Zepp 账号会覆盖旧绑定');
+    });
+    $('[data-bind]')?.addEventListener('click', () => void doBind());
+    $('[data-unbind]')?.addEventListener('click', () => void doUnbind());
+    $('[data-brush]')?.addEventListener('click', () => void doBrush());
+    $('[data-sync]')?.addEventListener('click', () => void doSync());
+    $('[data-redeem-form]')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void doRedeem();
+    });
+    $('[data-auto-save]')?.addEventListener('click', () => void doAutoSave());
+    $('[data-auto-test]')?.addEventListener('click', () => void doAutoTest());
+    $('[data-logs-refresh]')?.addEventListener('click', () => void loadOverview());
+    for (const b of $all<HTMLButtonElement>('[data-preset]')) {
+      b.addEventListener('click', () => {
+        const input = document.querySelector<HTMLInputElement>('[data-target]');
+        if (input) input.value = b.dataset.preset ?? '';
+      });
+    }
+    $('[data-goto-vip]')?.addEventListener('click', () => {
+      document.querySelector('[data-vip-anchor]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    void boot();
+  }
+
+  document.addEventListener('astro:page-load', init);
+  document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState !== 'loading') init();
+</script>

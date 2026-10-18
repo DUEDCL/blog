@@ -206,6 +206,7 @@ export class ChatLog {
          id            TEXT    PRIMARY KEY,
          user          TEXT    NOT NULL,
          pwd           TEXT    NOT NULL,
+         note          TEXT    NOT NULL DEFAULT '',
          enabled       INTEGER NOT NULL DEFAULT 1,
          auto          INTEGER NOT NULL DEFAULT 1,
          before_hour   INTEGER NOT NULL DEFAULT 10,
@@ -247,6 +248,7 @@ export class ChatLog {
       "ALTER TABLE msg ADD COLUMN tab TEXT NOT NULL DEFAULT ''",
       'ALTER TABLE ses ADD COLUMN takeover INTEGER NOT NULL DEFAULT 0',
       'ALTER TABLE ses ADD COLUMN wait INTEGER NOT NULL DEFAULT 0',
+      "ALTER TABLE step_account ADD COLUMN note TEXT NOT NULL DEFAULT ''",
     ]) {
       try {
         this.#sql.exec(sql);
@@ -758,7 +760,7 @@ export class ChatLog {
         case '/step-accounts': {
           const rows = this.#sql
             .exec(
-              `SELECT id, user, enabled, auto, before_hour, before_minute,
+              `SELECT id, user, note, enabled, auto, before_hour, before_minute,
                       threshold, to_min, to_max, tokens, last_steps,
                       last_run_at, last_run_ok, last_run_msg, brushed_date
                  FROM step_account ORDER BY rowid`
@@ -775,6 +777,7 @@ export class ChatLog {
               return {
                 id: String(x.id),
                 user: String(x.user ?? ''),
+                note: String(x.note ?? ''),
                 enabled: Number(x.enabled ?? 1) === 1,
                 auto: Number(x.auto ?? 1) === 1,
                 beforeHour: Number(x.before_hour ?? 10),
@@ -815,6 +818,7 @@ export class ChatLog {
               id: String(x.id),
               user: String(x.user ?? ''),
               pwd: String(x.pwd ?? ''),
+              note: String(x.note ?? ''),
               enabled: Number(x.enabled ?? 1) === 1,
               auto: Number(x.auto ?? 1) === 1,
               beforeHour: Number(x.before_hour ?? 10),
@@ -837,6 +841,7 @@ export class ChatLog {
             id?: string;
             user?: string;
             pwd?: string;
+            note?: string;
             enabled?: unknown;
             auto?: unknown;
             beforeHour?: number;
@@ -875,14 +880,16 @@ export class ChatLog {
                     ?.tokens ?? ''
                 );
 
+          const note = String(b.note ?? '').slice(0, 120);
+
           this.#sql.exec(
             `INSERT INTO step_account (
-               id, user, pwd, enabled, auto, before_hour, before_minute,
+               id, user, pwd, note, enabled, auto, before_hour, before_minute,
                threshold, to_min, to_max, tokens, last_steps, last_run_at,
                last_run_ok, last_run_msg, brushed_date
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
-               user = excluded.user, pwd = excluded.pwd,
+               user = excluded.user, pwd = excluded.pwd, note = excluded.note,
                enabled = excluded.enabled, auto = excluded.auto,
                before_hour = excluded.before_hour, before_minute = excluded.before_minute,
                threshold = excluded.threshold, to_min = excluded.to_min, to_max = excluded.to_max,
@@ -892,6 +899,7 @@ export class ChatLog {
             id,
             user,
             pwd,
+            note,
             b.enabled === false ? 0 : 1,
             b.auto === false ? 0 : 1,
             Number(b.beforeHour ?? 10) || 0,

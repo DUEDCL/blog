@@ -9,6 +9,8 @@ import { api, every, q, el, when } from './core';
 interface Acc {
   id: string;
   userMask: string;
+  label?: string;
+  note?: string;
   enabled: boolean;
   auto: boolean;
   beforeHour: number;
@@ -42,6 +44,7 @@ function formEls() {
     box3: q('[data-steps-form3]'),
     user: q<HTMLInputElement>('[data-s-user]'),
     pwd: q<HTMLInputElement>('[data-s-pwd]'),
+    note: q<HTMLInputElement>('[data-s-note]'),
     enabled: q<HTMLInputElement>('[data-s-enabled]'),
     auto: q<HTMLInputElement>('[data-s-auto]'),
     hh: q<HTMLInputElement>('[data-s-hh]'),
@@ -67,6 +70,7 @@ function fillForm(a?: Acc) {
   f.user.readOnly = !!a; // 列表只回脱敏名；改账号名请删了重建
   f.pwd.value = '';
   f.pwd.placeholder = a ? '留空不改密码' : '密码（必填）';
+  f.note.value = a?.note ?? '';
   f.enabled.checked = a ? a.enabled : true;
   f.auto.checked = a ? a.auto : true;
   f.hh.value = String(a?.beforeHour ?? 10);
@@ -88,7 +92,9 @@ function paintList(items: Acc[]) {
   for (const a of items) {
     const box = el('div', 'acc');
     const head = el('div', 'acc__head');
-    head.appendChild(el('code', 'mono', a.userMask));
+    // 后台同时露备注与脱敏账号，方便对账
+    const title = el('code', 'mono', a.note ? `${a.note} · ${a.userMask}` : a.userMask);
+    head.appendChild(title);
     for (const [txt, on] of [
       [a.enabled ? '启用' : '停用', a.enabled],
       [a.auto ? '自动' : '仅手动', a.auto],
@@ -155,7 +161,8 @@ async function save() {
   // 只在新建时送真实账号；编辑时送 id，user 带 * 会被服务端忽略（防脱敏名写回）
   const body: Record<string, unknown> = {
     id: editing ?? '',
-    user: editing ? f.user.value.trim() : f.user.value.trim(),
+    user: f.user.value.trim(),
+    note: f.note.value.trim(),
     pwd: f.pwd.value,
     enabled: f.enabled.checked,
     auto: f.auto.checked,

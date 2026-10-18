@@ -49,7 +49,7 @@ not_found_handling = "404-page"
 binding = "ASSETS"
 # 只有这些路径先进 Worker，其余请求连 Worker 都不唤起（省调用数，也少一个故障点）。
 # 数组形式要 wrangler >= 4.20.0（官方 changelog 确认），本项目 ^4.124.0 满足
-run_worker_first = [ "/api/music/*", "/api/chat", "/api/admin/*" ]
+run_worker_first = [ "/api/music/*", "/api/chat", "/api/admin/*", "/api/app/*" ]
 
 # 「AI 版沉麟」的**兜底**推理（R6 阶段②）。免费档 10,000 neurons/天，超额直接报错、不自动计费。
 # 兜底模型与它的账记在 src/data/chat.ts 顶部：@cf/qwen/qwen3-30b-a3b-fp8，约每天 196 次对话。
@@ -66,6 +66,12 @@ binding = "AI"
 name = "CHAT"
 class_name = "ChatLog"
 
+# 步数管家（多用户商用版）的用户库（R48）。与 CHAT 分开：
+# 用户、会话、卡密、绑定的 Zepp 账号、任务日志都在这里，单人版刷步数据不受影响。
+[[durable_objects.bindings]]
+name = "APP"
+class_name = "AppDB"
+
 # `storage = "sqlite"` 不是可选项：**Workers Free 只支持 SQLite 后端的 DO**
 # （KV 后端要 Paid，官方 pricing 页原文）。这一行写错就等于要为对话功能升级付费档。
 # 用的是新的 [exports] 写法而不是 legacy 的 [[migrations]] + new_sqlite_classes ——
@@ -74,12 +80,17 @@ class_name = "ChatLog"
 type = "durable-object"
 storage = "sqlite"
 
-# 全自动刷步（工具）的定时器。每小时一次，条件句自己判该不该刷
-# （「每天 10:00 前，若不足 8000 步，刷到 10000–12000」见 src/data/steps.ts）。
-# cron 是 UTC；一小时一档够用：10 点前的窗口里最多空转几次，
-# shouldBrush 会在刷过之后当天不再动手。
+# 步数管家的用户库。同样声明成 SQLite 后端的 DO（Workers Free 只支持这个）。
+[exports.AppDB]
+type = "durable-object"
+storage = "sqlite"
+
+# 全自动刷步（工具）的定时器（R47 起每小时一次，条件句自己判该不该刷）。
+# R48 起改成每分钟一次：单人版仍在整点跑；多用户版（VIP 自动任务）每分钟取
+# 一批到期账号（免费档 subrequest 50，一批最多 6 个，见 src/app.ts）。
+# cron 是 UTC，整点那一档对北京时间也是整点。
 [triggers]
-crons = ["0 * * * *"]
+crons = ["* * * * *"]
 
 # 裸域直接指向本 Worker。Cloudflare 会自动创建 DNS 记录并签发证书，
 # 不需要手工加 A/CNAME 记录（裸域按 DNS 规范不能用 CNAME，这里由 Cloudflare 内部解决）

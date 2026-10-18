@@ -43,6 +43,8 @@ const TABS = [
   { id: 'write', label: '文章编辑', badge: 'write' },
   { id: 'gallery', label: '图库管理' },
   { id: 'steps', label: '刷步' },
+  { id: 'users', label: '用户' },
+  { id: 'cards', label: '卡密' },
 ] as const;
 ---
 
@@ -322,6 +324,7 @@ const TABS = [
       <div class="row steps-form" data-steps-form hidden>
         <input class="in in--q" data-s-user placeholder="手机号或邮箱" aria-label="账号" />
         <input class="in in--q" data-s-pwd type="password" placeholder="密码（新建必填）" aria-label="密码" />
+        <input class="in in--q" data-s-note placeholder="备注（主页只显示这个）" aria-label="备注" />
         <label class="check"><input type="checkbox" data-s-enabled checked /><span>启用</span></label>
         <label class="check"><input type="checkbox" data-s-auto checked /><span>自动</span></label>
       </div>
@@ -349,6 +352,70 @@ const TABS = [
 
       <h3 class="sub logh">最近记录</h3>
       <div data-steps-log></div>
+    </section>
+
+    {/* ---- 步数管家：用户（R48）------------------------------------------
+        多用户商用版。与上面「刷步」的单人账号分开：这里管注册用户、VIP 天数与封禁，
+        绑定的 Zepp 账号、自动任务与日志在用户自己的 /bushu 页里看。 */}
+    <section class="pane glass" data-panel="users" hidden>
+      <div class="pane__head">
+        <h2 class="sub">步数管家 · 用户</h2>
+        <span class="dim" data-users-sum></span>
+      </div>
+      <p class="dim">
+        手动刷步免费；VIP 才有每日自动任务。卡密在右侧「卡密」面板生成。
+        这一页可以加 VIP 天数、封禁、删除账号。
+      </p>
+
+      <div class="row">
+        <input class="in in--q" data-users-q placeholder="搜账号或昵称" aria-label="搜索用户" />
+        <button class="key" type="button" data-users-search>搜索</button>
+        <button class="key key--quiet" type="button" data-users-refresh>刷新</button>
+        <button class="key key--quiet2" type="button" data-app-auto>跑一次自动任务</button>
+        <span class="dim" data-users-msg></span>
+      </div>
+
+      <div data-users-list></div>
+
+      <h3 class="sub logh">步数管家设置</h3>
+      <div class="row">
+        <span class="dim lab">用户上限</span>
+        <input class="in in--num" data-cfg-max type="number" min="1" max="5000" aria-label="用户上限" />
+        <span class="dim lab">手动间隔(秒)</span>
+        <input class="in in--num" data-cfg-int type="number" min="10" max="600" aria-label="手动间隔" />
+        <span class="dim lab">每日次数</span>
+        <input class="in in--num" data-cfg-daily type="number" min="1" max="500" aria-label="每日次数" />
+        <label class="check"><input type="checkbox" data-cfg-open /><span>开放注册</span></label>
+        <button class="key" type="button" data-cfg-save>保存设置</button>
+      </div>
+      <div class="row">
+        <span class="dim lab">购买说明</span>
+        <input class="in in--q" data-cfg-buy placeholder="显示在用户页 VIP 区的购买说明" aria-label="购买说明" />
+      </div>
+      <p class="dim" data-cfg-msg hidden></p>
+    </section>
+
+    {/* ---- 步数管家：卡密（R48）------------------------------------------ */}
+    <section class="pane glass" data-panel="cards" hidden>
+      <div class="pane__head">
+        <h2 class="sub">步数管家 · 卡密</h2>
+        <span class="dim" data-cards-sum></span>
+      </div>
+      <p class="dim">
+        生成后把卡密发给付款的用户，用户在「步数管家」的 VIP 区兑换。
+        一张卡只能用一次；未使用的可以删掉。
+      </p>
+      <div class="row">
+        <span class="dim lab">数量</span>
+        <input class="in in--num" data-card-count type="number" min="1" max="100" value="10" aria-label="生成数量" />
+        <span class="dim lab">天数</span>
+        <input class="in in--num" data-card-days type="number" min="1" max="3650" value="30" aria-label="卡密天数" />
+        <input class="in in--q" data-card-note placeholder="备注（可选）" aria-label="卡密备注" />
+        <button class="key" type="button" data-card-gen>生成</button>
+        <button class="key key--quiet" type="button" data-card-copy>复制全部未使用</button>
+        <span class="dim" data-cards-msg></span>
+      </div>
+      <div data-cards-list></div>
     </section>
   </div>
 </BaseLayout>

@@ -1,0 +1,644 @@
+/**
+ * 步数管家（/bushu）的样式。
+ *
+ * 为什么不写在页面 scoped `<style>` 里：这一页几乎每个节点都是脚本造/改的，
+ * scoped CSS 靠 `data-astro-cid-*` 生效，脚本新建的节点吃不到；而且它只被这一页
+ * import，单独一份文件不会进别页的产物。与 `styles/admin.css` 同一套做法。
+ *
+ * 视觉语言沿用全站的「纸面 + 细线 + 印章」，但做成产品页：
+ * 大数字、卡片分节、明确的动作层级。所有颜色都走 themes.css 的变量，
+ * 四套版次与深浅模式自动跟随。
+ */
+
+.bs {
+  --bs-gap: var(--sp-5);
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: var(--sp-8) 0 var(--sp-16);
+  display: grid;
+  gap: var(--bs-gap);
+}
+
+/* ---- 页头 ---------------------------------------------------------------- */
+
+.bs-head {
+  display: grid;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.bs-head__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.bs-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.bs-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 8vw, 4rem);
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.bs-title em {
+  font-style: normal;
+  color: var(--seal);
+}
+
+.bs-lead {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  max-width: 40rem;
+}
+
+.bs-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  padding-top: var(--sp-2);
+  border-top: var(--rule-w) solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.bs-meta b {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+/* ---- 卡片 ---------------------------------------------------------------- */
+
+.bs-card {
+  border: var(--rule-w) solid var(--rule-strong);
+  background: var(--paper-raised);
+  padding: var(--sp-5) var(--sp-5) var(--sp-5);
+}
+
+.bs-card--quiet {
+  background: transparent;
+}
+
+.bs-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.bs-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.bs-card__no {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+
+.bs-dim {
+  color: var(--ink-faint);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.bs-note {
+  margin: var(--sp-3) 0 0;
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+  line-height: 1.7;
+}
+
+.bs-note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- 状态条 -------------------------------------------------------------- */
+
+.bs-userbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.bs-userbar__name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.bs-userbar__account {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+
+.bs-userbar__acts {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* ---- 大数字 -------------------------------------------------------------- */
+
+.bs-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--sp-3) var(--sp-6);
+  align-items: end;
+}
+
+.bs-hero__label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.bs-hero__num {
+  font-family: var(--font-mono);
+  font-size: clamp(3.2rem, 12vw, 5.5rem);
+  font-weight: 500;
+  line-height: 0.85;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.bs-hero__num small {
+  font-size: var(--text-sm);
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  margin-left: 0.35em;
+}
+
+.bs-hero__side {
+  display: grid;
+  justify-items: end;
+  gap: var(--sp-2);
+  text-align: right;
+}
+
+.bs-hero__when {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: 1.6;
+}
+
+.bs-hero__bar {
+  grid-column: 1 / -1;
+  height: 2px;
+  background: var(--rule);
+  margin-top: var(--sp-3);
+  position: relative;
+}
+
+.bs-hero__bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--seal);
+  transition: width 0.5s ease;
+}
+
+/* ---- 芯片 ---------------------------------------------------------------- */
+
+.bs-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22em 0.62em;
+  border: var(--rule-w) solid var(--rule-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.bs-chip--on {
+  border-color: var(--seal);
+  background: var(--seal-wash);
+  color: var(--ink);
+}
+
+.bs-chip--off {
+  color: var(--ink-faint);
+}
+
+/* ---- 表单 ---------------------------------------------------------------- */
+
+.bs-form {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.bs-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+
+.bs-field {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.bs-field > span {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+}
+
+.bs-input {
+  width: 100%;
+  padding: 0.72em 0.8em;
+  border: var(--rule-w) solid var(--rule-strong);
+  background: var(--paper-sunken);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  border-radius: 0;
+  appearance: none;
+}
+
+.bs-input:focus {
+  outline: none;
+  border-color: var(--seal);
+}
+
+.bs-input--num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+
+.bs-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.bs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.bs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+/* ---- 按钮 ---------------------------------------------------------------- */
+
+.bs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 0.72em 1.15em;
+  border: var(--rule-w) solid var(--rule-strong);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.bs-btn:hover:not(:disabled) {
+  border-color: var(--seal);
+  background: var(--seal-wash);
+}
+
+.bs-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.bs-btn--primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.bs-btn--primary:hover:not(:disabled) {
+  background: var(--seal);
+  border-color: var(--seal);
+  color: var(--paper);
+}
+
+.bs-btn--small {
+  padding: 0.4em 0.7em;
+  font-size: var(--text-xs);
+}
+
+.bs-preset {
+  display: inline-flex;
+  padding: 0.38em 0.7em;
+  border: var(--rule-w) solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.bs-preset:hover {
+  border-color: var(--seal);
+  color: var(--ink);
+}
+
+/* ---- 提示与消息 ---------------------------------------------------------- */
+
+.bs-msg {
+  margin: 0;
+  min-height: 1.4em;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.bs-msg--bad {
+  color: var(--seal);
+}
+
+.bs-msg--good {
+  color: var(--ink);
+}
+
+.bs-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.6rem;
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: min(90vw, 34rem);
+  padding: 0.8em 1.1em;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
+}
+
+.bs-toast[hidden] {
+  display: none;
+}
+
+.bs-toast--bad {
+  background: var(--seal);
+  color: var(--paper);
+}
+
+/* ---- 绑定区 -------------------------------------------------------------- */
+
+.bs-guide {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+}
+
+.bs-guide b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.bs-bound {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  justify-content: space-between;
+}
+
+.bs-bound__who {
+  display: grid;
+  gap: 0.2em;
+}
+
+.bs-bound__id {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: 0.04em;
+}
+
+/* ---- 卡密 / VIP ---------------------------------------------------------- */
+
+.bs-vip {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.bs-vip__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.bs-vip__until {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.bs-redeem {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.bs-redeem .bs-input {
+  flex: 1 1 14rem;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+/* ---- 自动任务 ------------------------------------------------------------ */
+
+.bs-auto-lock {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: var(--rule-w) dashed var(--rule-strong);
+  background: transparent;
+}
+
+.bs-auto-lock p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+}
+
+.bs-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.bs-switch input {
+  width: 1em;
+  height: 1em;
+  accent-color: var(--seal);
+}
+
+.bs-next {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: 1.6;
+}
+
+/* ---- 日志 ---------------------------------------------------------------- */
+
+.bs-logs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--rule-w) solid var(--rule);
+}
+
+.bs-logs li {
+  display: grid;
+  grid-template-columns: 4.6rem 3.4rem 1fr auto;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: var(--rule-w) solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+  align-items: baseline;
+}
+
+.bs-logs .via {
+  color: var(--ink-faint);
+}
+
+.bs-logs .ok {
+  color: var(--ink);
+}
+
+.bs-logs .bad {
+  color: var(--seal);
+}
+
+.bs-logs .when {
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.bs-logs .msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-empty {
+  padding: var(--sp-4) 0;
+  color: var(--ink-faint);
+  font-size: var(--text-sm);
+}
+
+/* ---- 页脚小字 ------------------------------------------------------------ */
+
+.bs-fine {
+  margin: 0;
+  padding-top: var(--sp-4);
+  border-top: var(--rule-w) solid var(--rule);
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+  line-height: 1.8;
+}
+
+.bs-fine a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- 响应式 -------------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+  .bs {
+    padding-top: var(--sp-5);
+    gap: var(--sp-4);
+  }
+
+  .bs-card {
+    padding: var(--sp-4);
+  }
+
+  .bs-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .bs-hero__side {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .bs-grid2 {
+    grid-template-columns: 1fr;
+  }
+
+  .bs-logs li {
+    grid-template-columns: 3.8rem 1fr;
+  }
+
+  .bs-logs .msg {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+
+  .bs-logs .when {
+    grid-column: 2;
+    text-align: right;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-hero__bar i {
+    transition: none;
+  }
+}

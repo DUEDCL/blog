@@ -226,7 +226,9 @@ export interface Strings {
     heading: string;
     /** 公开说明 */
     lead: string;
+    howTitle: string;
     how: string;
+    warnTitle: string;
     warn: string;
     /** 未登录时 */
     needAdmin: string;
