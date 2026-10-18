@@ -19,6 +19,22 @@
   gap: var(--bs-gap);
 }
 
+/* 这一页的所有元素都按 border-box 算：`.bs-input` 是 width:100% + padding + 边线，
+   默认 content-box 会横向溢出（2026-10-18 线上截图里登录卡右侧被裁掉就是这个）。 */
+.bs,
+.bs *,
+.bs *::before,
+.bs *::after {
+  box-sizing: border-box;
+}
+
+/* `hidden` 属性优先级最低，会被 `.bs-field { display: grid }`、`.bs-chip { display: inline-flex }`
+   这类类样式盖掉 —— 于是「隐藏」的昵称输入框和 VIP 芯片还是会露出来。
+   这一页用属性控制显隐的地方很多，统一在这里兜底。 */
+.bs [hidden] {
+  display: none !important;
+}
+
 /* ---- 页头 ---------------------------------------------------------------- */
 
 .bs-head {
