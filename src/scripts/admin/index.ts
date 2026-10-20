@@ -21,7 +21,27 @@ import { wireSteps } from './steps';
 import { wireAppUsers } from './app-users';
 import { wireCards } from './cards';
 
-const TABS = ['models', 'logs', 'live', 'write', 'gallery', 'steps', 'users', 'cards'] as const;
+/**
+ * 分区 id 清单。
+ *
+ * ⚠️ **这份清单和 `src/pages/admin.astro` 里的 TABS 是两份，必须手动保持一致**：
+ * 页面那份决定「画出哪些 tab 与 pane」，这份决定「哪些 tab 绑点击、哪些 pane 参与显隐」。
+ * 只加页面那份的话，tab 会画出来但点了没反应、pane 永远不会取消 hidden
+ * ——站点的「站点账号」分区第一次就是这么点不开的。
+ *
+ * 这里加 `site` 时同步改了 admin.astro 的 TABS。
+ */
+const TABS = [
+  'models',
+  'logs',
+  'live',
+  'write',
+  'gallery',
+  'steps',
+  'users',
+  'cards',
+  'site',
+] as const;
 type Tab = (typeof TABS)[number];
 
 const views = {
