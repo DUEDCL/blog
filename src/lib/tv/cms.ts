@@ -75,6 +75,17 @@ export interface Candidate {
   hasHls: boolean;
   lineCount: number;
   episodeCount: number;
+  /**
+   * 首条可直连 HLS 线路的第一集地址（没有则为空串）。
+   *
+   * 为什么放进搜索结果：清晰度只能靠**实际读 master 播放列表里的 `RESOLUTION`** 来判断，
+   * 而资源站的 `ac=videolist` 响应本来就带 `vod_play_url`，所以这里就有地址可用。
+   * 前端拿到它就能直接去探测分辨率，**不必为每个候选源再发一次 detail 请求**
+   * （15 个候选 × 1 次 detail + 1 次 m3u8 = 30 个额外请求，太重）。
+   */
+  firstHlsUrl: string;
+  /** 该候选所有 HLS 线路的标签，用于展示（如 `ffm3u8`、`4K`） */
+  hlsLabels: string[];
 }
 
 export interface Group {
@@ -404,10 +415,20 @@ function scoreGroup(g: Group, q: string): number {
   return base + srcBonus + hlsBonus + picBonus + remarkBonus;
 }
 
+/** 线路标签里的清晰度线索。只作**展示与初排**用，真清晰度以 master 列表实测为准 */
+function qualityHint(labels: string[]): number {
+  const s = labels.join(' ').toLowerCase();
+  if (/4k|2160|uhd|原盘|remux|蓝光|bluray|hdr|杜比/.test(s)) return 3;
+  if (/1080|fhd|超清|蓝光/.test(s)) return 2;
+  if (/720|高清/.test(s)) return 1;
+  return 0;
+}
+
 function rankCandidates(cands: Candidate[]): Candidate[] {
   return cands.sort(
     (a, b) =>
       Number(b.hasHls) - Number(a.hasHls) ||
+      qualityHint(b.hlsLabels) - qualityHint(a.hlsLabels) ||
       b.lineCount - a.lineCount ||
       b.episodeCount - a.episodeCount ||
       a.sourceName.localeCompare(b.sourceName)
@@ -444,6 +465,7 @@ export function fuse(items: Vod[], q: string): Group[] {
 
     if (g.candidates.some((c) => c.sourceId === v.sourceId)) continue; // 同源同名只留第一条
 
+    const hlsLines = v.lines.filter((l) => l.kind === 'hls');
     g.candidates.push({
       sourceId: v.sourceId,
       sourceName: v.sourceName,
@@ -452,6 +474,8 @@ export function fuse(items: Vod[], q: string): Group[] {
       hasHls: v.lines.some((l) => l.kind === 'hls'),
       lineCount: v.lines.length,
       episodeCount: v.lines.reduce((n, l) => n + l.episodes.length, 0),
+      firstHlsUrl: hlsLines[0]?.episodes[0]?.url ?? '',
+      hlsLabels: hlsLines.map((l) => l.from),
     });
   }
 

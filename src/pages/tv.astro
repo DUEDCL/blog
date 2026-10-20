@@ -61,8 +61,14 @@ import '../styles/tv.css';
         <button class="tv-search__btn" type="submit">搜索</button>
       </form>
 
+      <!-- 搜索历史（本地保存，点一下直接再搜） -->
+      <div class="tv-qhist" data-tv-qhist hidden></div>
+
       <div class="tv-srcbar" data-tv-srcbar></div>
       <p class="tv-status" data-tv-status></p>
+
+      <!-- 继续观看（按本地播放记录） -->
+      <div class="tv-cont" data-tv-cont hidden></div>
 
       <div class="tv-hot" data-tv-hot></div>
 
@@ -112,6 +118,8 @@ import '../styles/tv.css';
   <div class="tv-player__top">
     <span class="tv-player__title" data-tv-ptitle>播放中</span>
     <span class="tv-player__line" data-tv-pline></span>
+    <!-- 清晰度切换：由 hls.js 的 levels 动态填充，只有多码率时才显示 -->
+    <span class="tv-quality" data-tv-quality hidden></span>
     <button class="tv-icon" data-tv-pprev title="上一集" aria-label="上一集">⏮</button>
     <button class="tv-icon" data-tv-pnext title="下一集" aria-label="下一集">⏭</button>
     <button class="tv-icon" data-tv-pclose title="关闭" aria-label="关闭">✕</button>
@@ -122,6 +130,8 @@ import '../styles/tv.css';
   </div>
   <div class="tv-player__eps" data-tv-peps></div>
 </div>
+
+<div class="tv-toast" data-tv-toast hidden></div>
 
 <script is:inline src="/tv/hls.min.js"></script>
 <script is:inline src="/tv/app.js"></script>
