@@ -1,0 +1,219 @@
+---
+/**
+ * 登录 / 注册（邀请码）。
+ *
+ * 位置：根路径、中文专属 —— 与 `/tv`、`/bushu` 同一条先例（只有中文形态，
+ * 不挂 en/ja 入口）。这一页是**纯静态壳**，一个字的账号数据都没有，
+ * 全部由 `/api/site/*` 在浏览器里取。
+ *
+ * 流程：
+ *   - 未登录：表单（登录 / 邀请码注册两个 tab）；
+ *   - 已登录：直接显示当前账号，并给「继续」按钮；
+ *   - 登录成功后回到 `?next=` 指的页面（准入跳转时带上的原地址），没有就回 `/tools`。
+ *
+ * `next` 做了**同源白名单**校验：只接受以单个 `/` 开头的站内路径。
+ * 不校验的话，`/login?next=https://evil.example` 就成了一个开放跳转器。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import '../styles/login.css';
+---
+
+<BaseLayout
+  title="登录 · 沉麟"
+  description="站点账号登录与邀请码注册。"
+  footerNote="工具与「问沉麟的分身」需要登录；文章等公开内容无需登录。"
+>
+  <div class="lg" data-lg>
+    <header class="lg-head">
+      <span class="lg-kicker">账号</span>
+      <h1 class="lg-title">登录<em>.</em></h1>
+      <p class="lg-lead">
+        工具与「问沉麟的分身」只对登录用户开放。注册需要邀请码 —— 由站主手动发放。
+      </p>
+      <div class="pressrule"></div>
+    </header>
+
+    <!-- 已登录 -->
+    <div class="lg-panel" data-panel="me" hidden>
+      <p class="lg-me">当前账号：<b data-me-account></b></p>
+      <div class="lg-actions">
+        <a class="lg-btn lg-btn--primary" data-me-next href="/tools">继续</a>
+        <button class="lg-btn" type="button" data-logout>退出登录</button>
+      </div>
+    </div>
+
+    <!-- 未登录 -->
+    <div class="lg-panel" data-panel="form" hidden>
+      <div class="lg-tabs" role="tablist">
+        <button class="lg-tab is-on" type="button" data-tab="login" role="tab">登录</button>
+        <button class="lg-tab" type="button" data-tab="register" role="tab">邀请码注册</button>
+      </div>
+
+      <!-- 登录 -->
+      <form class="lg-form" data-form="login" autocomplete="on">
+        <label class="lg-field">
+          <span class="lg-label">账号</span>
+          <input class="lg-input" name="account" type="text" autocomplete="username" required />
+        </label>
+        <label class="lg-field">
+          <span class="lg-label">密码</span>
+          <input class="lg-input" name="pass" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="lg-btn lg-btn--primary" type="submit">登录</button>
+      </form>
+
+      <!-- 注册 -->
+      <form class="lg-form" data-form="register" hidden autocomplete="off">
+        <label class="lg-field">
+          <span class="lg-label">邀请码</span>
+          <input class="lg-input" name="invite" type="text" placeholder="站主给你的那串码" required />
+        </label>
+        <label class="lg-field">
+          <span class="lg-label">账号</span>
+          <input class="lg-input" name="account" type="text" placeholder="3~24 位字母数字_-" required />
+        </label>
+        <label class="lg-field">
+          <span class="lg-label">昵称（可不填）</span>
+          <input class="lg-input" name="nick" type="text" />
+        </label>
+        <label class="lg-field">
+          <span class="lg-label">密码</span>
+          <input class="lg-input" name="pass" type="password" placeholder="至少 6 位" autocomplete="new-password" required />
+        </label>
+        <button class="lg-btn lg-btn--primary" type="submit">注册并登录</button>
+      </form>
+
+      <p class="lg-msg" data-msg hidden></p>
+    </div>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  (function () {
+    'use strict';
+    var root = document.querySelector('[data-lg]');
+    if (!root || root.dataset.ready === '1') return;
+    root.dataset.ready = '1';
+
+    function $(s) { return document.querySelector(s); }
+
+    /** 只接受站内相对路径：单个 `/` 开头（`//evil` 与 `https://…` 一律丢弃） */
+    function safeNext() {
+      try {
+        var n = new URLSearchParams(location.search).get('next') || '';
+        if (!n || n.charAt(0) !== '/' || n.charAt(1) === '/') return '/tools';
+        return n;
+      } catch (e) {
+        return '/tools';
+      }
+    }
+
+    function msg(text, isErr) {
+      var el = $('[data-msg]');
+      if (!el) return;
+      el.textContent = text;
+      el.classList.toggle('is-err', !!isErr);
+      el.hidden = false;
+    }
+    function clearMsg() {
+      var el = $('[data-msg]');
+      if (el) { el.hidden = true; el.textContent = ''; }
+    }
+
+    function post(path, body) {
+      return fetch('/api/site/' + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'same-origin',
+      }).then(function (r) {
+        return r.json().then(function (d) {
+          if (!r.ok || !d.ok) throw new Error((d && d.error) || '请求失败');
+          return d;
+        });
+      });
+    }
+
+    function enter(user) {
+      var next = safeNext();
+      var me = $('[data-me-account]');
+      if (me) me.textContent = user.nick || user.account;
+      var go = $('[data-me-next]');
+      if (go) go.setAttribute('href', next);
+      $('[data-panel="form"]').hidden = true;
+      $('[data-panel="me"]').hidden = false;
+      // 从准入跳转过来（带 next）就直接走，不用再点一次
+      var cameFromGate = new URLSearchParams(location.search).get('next');
+      if (cameFromGate) location.replace(next);
+    }
+
+    // 两个 tab
+    document.querySelectorAll('[data-tab]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var want = b.dataset.tab;
+        document.querySelectorAll('[data-tab]').forEach(function (x) {
+          x.classList.toggle('is-on', x === b);
+        });
+        $('[data-form="login"]').hidden = want !== 'login';
+        $('[data-form="register"]').hidden = want !== 'register';
+        clearMsg();
+      });
+    });
+
+    // 登录
+    $('[data-form="login"]').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = e.currentTarget;
+      clearMsg();
+      var btn = f.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      post('login', {
+        account: f.account.value.trim(),
+        pass: f.pass.value,
+      })
+        .then(enter)
+        .catch(function (err) { msg(err.message, true); })
+        .finally(function () { btn.disabled = false; });
+    });
+
+    // 注册
+    $('[data-form="register"]').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = e.currentTarget;
+      clearMsg();
+      var btn = f.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      post('register', {
+        invite: f.invite.value.trim(),
+        account: f.account.value.trim(),
+        nick: f.nick.value.trim(),
+        pass: f.pass.value,
+      })
+        .then(enter)
+        .catch(function (err) { msg(err.message, true); })
+        .finally(function () { btn.disabled = false; });
+    });
+
+    // 退出
+    var lo = document.querySelector('[data-logout]');
+    if (lo) {
+      lo.addEventListener('click', function () {
+        post('logout', {}).then(function () { location.reload(); });
+      });
+    }
+
+    // 首屏：已经登录就直接给「继续」
+    fetch('/api/site/me', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.ok && d.user) enter(d.user);
+        else {
+          $('[data-panel="form"]').hidden = false;
+          $('[data-panel="me"]').hidden = true;
+        }
+      })
+      .catch(function () {
+        $('[data-panel="form"]').hidden = false;
+      });
+  })();
+</script>

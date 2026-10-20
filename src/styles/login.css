@@ -1,0 +1,197 @@
+/**
+ * /login 与账号相关的样式。
+ *
+ * 与 tv.css 同一条规矩：**只用站点既有 CSS 变量**，不写死颜色 ——
+ * 四套版次（夜刊 / 晨版 / 胶片 / 霓虹）自动成立。
+ *
+ * `[hidden]` 那条同样不能省：`.lg-panel` 等如果将来加了 display，会被作者样式压过。
+ */
+[hidden] {
+  display: none !important;
+}
+
+.lg {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding-bottom: var(--sp-10, 4rem);
+}
+
+.lg-head {
+  padding-top: var(--sp-6, 1.5rem);
+  margin-bottom: var(--sp-6, 1.5rem);
+}
+
+.lg-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.lg-title {
+  margin: var(--sp-3, 0.75rem) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl, 2.25rem);
+  font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.lg-title em {
+  font-style: normal;
+  color: var(--seal);
+}
+
+.lg-lead {
+  margin: var(--sp-4, 1rem) 0 0;
+  font-size: var(--text-sm, 0.8125rem);
+  line-height: var(--leading-normal, 1.7);
+  color: var(--ink-soft);
+}
+
+.lg-panel {
+  border-top: var(--rule-w, 1px) solid var(--rule-strong);
+  padding-top: var(--sp-5, 1.25rem);
+}
+
+/* ── 已登录 ── */
+.lg-me {
+  margin: 0 0 var(--sp-4, 1rem);
+  font-size: var(--text-base, 1rem);
+  color: var(--ink-soft);
+}
+
+.lg-me b {
+  color: var(--ink);
+}
+
+.lg-actions {
+  display: flex;
+  gap: var(--sp-3, 0.75rem);
+  flex-wrap: wrap;
+}
+
+/* ── tabs ── */
+.lg-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--sp-5, 1.25rem);
+  border-bottom: var(--rule-w, 1px) solid var(--rule);
+}
+
+.lg-tab {
+  padding: 0.4rem 0.9rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm, 0.8125rem);
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+
+.lg-tab:hover {
+  color: var(--ink);
+}
+
+.lg-tab.is-on {
+  color: var(--seal);
+  border-bottom-color: var(--seal);
+}
+
+/* ── 表单 ── */
+.lg-form {
+  display: grid;
+  gap: var(--sp-4, 1rem);
+}
+
+.lg-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.lg-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+}
+
+.lg-input {
+  height: 2.5rem;
+  padding: 0 0.8rem;
+  border: var(--rule-w, 1px) solid var(--rule-strong);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base, 1rem);
+  outline: none;
+  transition: border-color 0.16s ease;
+}
+
+.lg-input:focus {
+  border-color: var(--seal);
+}
+
+.lg-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.lg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  padding: 0 1.2rem;
+  border: var(--rule-w, 1px) solid var(--rule-strong);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm, 0.8125rem);
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.lg-btn:hover {
+  color: var(--ink);
+  border-color: var(--seal);
+}
+
+.lg-btn--primary {
+  border-color: var(--seal);
+  background: var(--seal-wash);
+  color: var(--seal);
+  font-weight: 600;
+}
+
+.lg-btn--primary:hover {
+  background: var(--seal);
+  color: var(--paper);
+}
+
+.lg-btn[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── 提示 ── */
+.lg-msg {
+  margin: var(--sp-4, 1rem) 0 0;
+  padding: 0.6rem 0.8rem;
+  border-left: 2px solid var(--seal);
+  background: var(--seal-wash);
+  font-size: var(--text-sm, 0.8125rem);
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.lg-msg.is-err {
+  border-left-color: var(--seal);
+  color: var(--ink);
+}

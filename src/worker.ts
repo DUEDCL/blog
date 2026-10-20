@@ -54,10 +54,16 @@ import * as steps from './steps';
 import { appApi, appAutoTick, adminAppGet, adminAppPost } from './app';
 /** 影视聚合（/tv）：十来个采集站并发搜索 + HLS 播放列表改写 */
 import { tvApi } from './lib/tv';
+/** 站点账号（登录式）：/api/site/* 与准入判断 */
+import { loginRedirect, needsLogin, siteApi } from './lib/site-api';
+import { currentUser } from './lib/site-auth';
+/** 后台的站点账号管理（邀请码 / 用户） */
+import { adminSite } from './lib/site-admin';
 
 /** DO 类必须从入口文件导出，`wrangler.toml` 的 `[exports.*]` 才找得到它们 */
 export { ChatLog } from './chat-log';
 export { AppDB } from './app-db';
+export { SiteDB } from './site-db';
 
 /**
  * 只声明用得到的绑定。**刻意不引 `@cloudflare/workers-types`** ——
@@ -78,6 +84,15 @@ interface Env {
    * 一套业务一个库，改哪边都不牵连另一边（R48）。
    */
   APP: {
+    idFromName(name: string): unknown;
+    get(id: unknown): { fetch(req: Request): Promise<Response> };
+  };
+  /**
+   * 站点账号库（登录式）。与 CHAT／APP 三个 DO 各管一摊：
+   * 邀请码、站点用户、站点会话、每用户的影视搜索/播放记录都在这里。
+   * 单实例 `idFromName('site')` —— 「账号唯一」与「邀请码原子占用」必须落在同一个串行语义里。
+   */
+  SITE: {
     idFromName(name: string): unknown;
     get(id: unknown): { fetch(req: Request): Promise<Response> };
   };
@@ -1823,6 +1838,9 @@ async function admin(req: Request, env: Env): Promise<Response> {
 
   const logged = await cookieOk(env, req);
 
+  /* 站点的邀请码与用户管理。鉴权就是上面那步后台口令 cookie —— 走到这里说明已登录 */
+  if (path.startsWith('site-')) return adminSite(req, env, path);
+
   /* 这一条**未登录也能打**，因为登录框要靠它知道「口令设了没有」——
      但未登录时除了这两个布尔值，一个字的配置都不返回 */
   if (path === 'state') {
@@ -2438,6 +2456,36 @@ export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
     const url = new URL(request.url);
 
+    /* ── 站点准入（登录式）──────────────────────────────────────────────
+       站主要求：**工具页与「问沉麟的分身」只有登录用户可用，内容保持公开。**
+       判定集中在 `src/lib/site-api.ts` 的 `needsLogin()`，那里写清了为什么
+       `/tv` 的静态资源不拦、为什么 `/bushu` 不在这里拦。
+
+       这一段的两个分支：
+         - 接口 → 401 JSON（前端好判）；
+         - 页面 → 302 到 `/login?next=<原地址>`，登录后原路回跳。
+
+       放在最前面是有意的：它必须在 `env.ASSETS.fetch` 之前，
+       否则 HTML 已经发出去了，再想拦只能靠前端藏 DOM —— 那不叫准入。 */
+    if (needsLogin(url.pathname)) {
+      const me = await currentUser(env, request);
+      if (!me) {
+        if (url.pathname.startsWith('/api/')) {
+          return json({ ok: false, error: '需要登录' }, CACHE.none, 401);
+        }
+        return loginRedirect(request);
+      }
+    }
+
+    /* 站点账号接口。必须在下面「不是 /api/music/ 就交回静态资源」那条兜底之前 */
+    if (url.pathname.startsWith('/api/site/')) {
+      try {
+        return await siteApi(request, env, url);
+      } catch {
+        return fail(500, '账号这边出了点问题');
+      }
+    }
+
     /* 对话接口先分出去。它与下面那套点歌台的规则一条都不共用：POST 不是 GET、
        响应是流不是 JSON、而且**绝不能进边缘缓存**（缓存一次问答等于把一个人的
        回答发给下一个人）。同源检查这里自己做一遍。 */
@@ -2488,7 +2536,7 @@ export default {
       const from = request.headers.get('sec-fetch-site');
       if (from && from !== 'same-origin') return fail(403, '只服务本站页面');
       try {
-        return await tvApi(request, url);
+        return await tvApi(request, env, url);
       } catch {
         return fail(500, '影视聚合这边出了点问题');
       }

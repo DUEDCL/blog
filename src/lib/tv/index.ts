@@ -27,6 +27,7 @@ import {
 import { assertPublicUrl, fetchPlaylist, rewritePlaylist } from './hls';
 import { loadLivePlaylist, type LivePlaylistResult } from './live';
 import { LIVE_SOURCES, TV_TUNING, VOD_SOURCES, type VodSource } from './sources';
+import { currentUser, siteCall, type SiteEnv } from '../site-auth';
 
 /** 按 id 找点播源；拿不到就是 404，绝不把用户传来的东西直接当 api */
 function findSource(id: string | null): VodSource | null {
@@ -161,14 +162,83 @@ async function handleSegment(request: Request, url: URL): Promise<Response> {
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
+/**
+ * 每用户的影视记录（搜索关键词 + 播放进度）。
+ *
+ * GET  → 把该用户云端的记录全取回来（前端拿它和本地存量合并）
+ * POST → 写一条：`{ q }` 或 `{ prog: {...} }`
+ *
+ * **必须登录**：这里不做「匿名也能写」的兜底 —— 匿名用户的记录仍走浏览器
+ * localStorage（前端自己分得清），上云的一定是登录用户。
+ */
+async function handleHist(request: Request, env: SiteEnv, url: URL): Promise<Response> {
+  const me = await currentUser(env, request);
+  if (!me) return fail(401, '需要登录');
+
+  if (request.method === 'GET') {
+    const [qs, progs] = await Promise.all([
+      siteCall(env, '/tv-q-list?userId=' + encodeURIComponent(me.id)),
+      siteCall(env, '/tv-prog-list?userId=' + encodeURIComponent(me.id)),
+    ]);
+    return json(
+      { ok: true, q: qs.rows ?? [], prog: progs.rows ?? [] },
+      0
+    );
+  }
+
+  if (request.method !== 'POST') return fail(405, '只接 GET/POST');
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+  const now = Date.now();
+
+  if (typeof body.q === 'string' && body.q.trim()) {
+    await siteCall(env, '/tv-q-put', { userId: me.id, q: body.q, now });
+    return json({ ok: true }, 0);
+  }
+
+  const p = body.prog as Record<string, unknown> | undefined;
+  if (p && typeof p === 'object') {
+    const name = String(p.name ?? '');
+    const epName = String(p.epName ?? '');
+    if (!name || !epName) return fail(400, '记录缺少片名或集名');
+    await siteCall(env, '/tv-prog-put', {
+      userId: me.id,
+      k: name + '||' + epName,
+      name: name.slice(0, 120),
+      epName: epName.slice(0, 120),
+      t: p.t ?? 0,
+      d: p.d ?? 0,
+      srcId: p.srcId ?? '',
+      vodId: p.vodId ?? '',
+      srcName: p.srcName ?? '',
+      lineIdx: p.lineIdx ?? 0,
+      lineFrom: p.lineFrom ?? '',
+      now,
+    });
+    return json({ ok: true }, 0);
+  }
+
+  return fail(400, '没有要写的记录');
+}
+
 /** `/api/tv/*` 的总入口 */
-export async function tvApi(request: Request, url: URL): Promise<Response> {
+export async function tvApi(request: Request, env: SiteEnv, url: URL): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS });
   }
-  if (request.method !== 'GET') return fail(405, '只接 GET');
 
   const sub = url.pathname.slice('/api/tv/'.length).replace(/\/+$/, '');
+
+  /* 绝大多数接口是只读 GET；**只有 `hist` 允许 POST**（用户的搜索/播放记录要写）。
+     其余一律 405 —— 这条闸是有意的，别为了图省事放宽成「什么方法都收」。 */
+  if (request.method !== 'GET' && !(sub === 'hist' && request.method === 'POST')) {
+    return fail(405, '只接 GET');
+  }
 
   try {
     switch (sub) {
@@ -194,6 +264,8 @@ export async function tvApi(request: Request, url: URL): Promise<Response> {
         return await handleHls(url);
       case 'seg':
         return await handleSegment(request, url);
+      case 'hist':
+        return await handleHist(request, env, url);
       default:
         return fail(404, '没有这个接口');
     }

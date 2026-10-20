@@ -116,6 +116,15 @@
     list.unshift({ q: q, t: Date.now() });
     writeLS(LS.q, list.slice(0, MAX_Q_HIST));
     renderQueryHistory();
+    // 登录用户的记录同时上云（失败不影响本地可用）
+    if (authState.loggedIn) {
+      fetch(BASE + '/hist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ q: q }),
+      }).catch(function () {});
+    }
   }
   function clearQueryHistory() {
     writeLS(LS.q, []);
@@ -281,6 +290,9 @@
         renderSrcList();
         updateCount();
         renderContinue();
+
+        // 登录用户在云端有记录：合并进来（匿名时这里是 401，静默跳过）
+        syncHistory();
 
         try {
           var sp = new URLSearchParams(location.search);
@@ -912,7 +924,7 @@
     var v = $('[data-tv-video]');
     var c = state.cur;
     if (!v || !c || !v.duration || !isFinite(v.duration)) return;
-    saveProgress({
+    var rec = {
       name: c.name,
       epName: c.epName,
       t: Math.round(v.currentTime),
@@ -923,7 +935,75 @@
       srcName: c.srcName,
       lineIdx: state.lineIdx,
       lineFrom: c.lineFrom,
-    });
+    };
+    saveProgress(rec);
+    if (authState.loggedIn) {
+      fetch(BASE + '/hist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ prog: rec }),
+      }).catch(function () {});
+    }
+  }
+
+  /* ══════════════ 云端记录（登录用户） ══════════════ */
+
+  var authState = { loggedIn: false };
+
+  /**
+   * 拉云端记录并与本地合并。**本地不被覆盖丢数据**：
+   * 搜索历史按关键词去重、按时间排序取前 N；播放进度按 ts 取较新的那条。
+   * 未登录（401）时什么都不做 —— 匿名照旧用 localStorage。
+   */
+  function syncHistory() {
+    return fetch(BASE + '/hist', { credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.status === 401) return null;
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d || !d.ok) return;
+        authState.loggedIn = true;
+
+        // 搜索历史
+        var seen = {};
+        var merged = [];
+        (d.q || []).map(function (x) { return { q: x.q, t: Number(x.ts) || 0 }; })
+          .concat(getQueryHistory())
+          .forEach(function (x) {
+            if (!x.q || seen[x.q]) return;
+            seen[x.q] = 1;
+            merged.push(x);
+          });
+        merged.sort(function (a, b) { return b.t - a.t; });
+        writeLS(LS.q, merged.slice(0, MAX_Q_HIST));
+        renderQueryHistory();
+
+        // 播放进度
+        var all = getProgress();
+        (d.prog || []).forEach(function (r) {
+          var cur = all[r.k];
+          var ts = Number(r.ts) || 0;
+          if (!cur || ts > (cur.ts || 0)) {
+            all[r.k] = {
+              name: r.name,
+              epName: r.ep_name,
+              t: Number(r.t) || 0,
+              d: Number(r.d) || 0,
+              ts: ts,
+              srcId: r.src_id,
+              vodId: r.vod_id,
+              srcName: r.src_name,
+              lineIdx: Number(r.line_idx) || 0,
+              lineFrom: r.line_from,
+            };
+          }
+        });
+        writeLS(LS.prog, all);
+        renderContinue();
+      })
+      .catch(function () { /* 离线就只用本地 */ });
   }
 
   function playerMsg(html) {

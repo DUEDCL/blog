@@ -45,6 +45,7 @@ const TABS = [
   { id: 'steps', label: '刷步' },
   { id: 'users', label: '用户' },
   { id: 'cards', label: '卡密' },
+  { id: 'site', label: '站点账号' },
 ] as const;
 ---
 
@@ -417,9 +418,40 @@ const TABS = [
       </div>
       <div data-cards-list></div>
     </section>
+
+    {/* ---- 站点账号（登录式）：邀请码 + 用户 ------------------------------- */}
+    <section class="pane glass" data-panel="site" hidden>
+      <div class="pane__head">
+        <h2 class="sub">站点账号 · 邀请码</h2>
+        <span class="dim" data-site-sum></span>
+      </div>
+      <p class="dim">
+        邀请码用于注册站点账号（工具页与「问沉麟的分身」需要登录）。
+        「可用次数 0」= 不限次数，「有效天数 0」= 永不过期；生成后每一条都能手动改。
+      </p>
+      <div class="row">
+        <span class="dim lab">数量</span>
+        <input class="in in--num" data-inv-count type="number" min="1" max="50" value="1" aria-label="生成数量" />
+        <span class="dim lab">可用次数</span>
+        <input class="in in--num" data-inv-uses type="number" min="0" max="999" value="1" aria-label="可用次数" />
+        <span class="dim lab">有效天数</span>
+        <input class="in in--num" data-inv-days type="number" min="0" max="3650" value="7" aria-label="有效天数" />
+        <input class="in in--q" data-inv-note placeholder="备注（可选）" aria-label="邀请码备注" />
+        <button class="key" type="button" data-inv-gen>生成邀请码</button>
+        <span class="dim" data-inv-msg></span>
+      </div>
+      <div data-inv-list></div>
+
+      <div class="pane__head" style="margin-top: 1.5rem">
+        <h2 class="sub">站点账号 · 用户</h2>
+        <button class="key key--quiet" type="button" data-site-users-reload>刷新</button>
+      </div>
+      <div data-site-users-list></div>
+    </section>
   </div>
 </BaseLayout>
 
 <script>
   import '../scripts/admin/index';
+  import '../scripts/admin/site';
 </script>

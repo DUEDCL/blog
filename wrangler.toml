@@ -50,9 +50,23 @@ binding = "ASSETS"
 # 只有这些路径先进 Worker，其余请求连 Worker 都不唤起（省调用数，也少一个故障点）。
 # 数组形式要 wrangler >= 4.20.0（官方 changelog 确认），本项目 ^4.124.0 满足
 #
-# `/api/tv/*` 是影视聚合（/tv 页面）。注意**只加了接口前缀，没加 /tv** ——
-# 那一页本身是构建产物里的静态 HTML，交给 ASSETS 发比过一遍 Worker 更快。
-run_worker_first = [ "/api/music/*", "/api/chat", "/api/admin/*", "/api/app/*", "/api/tv/*" ]
+# `/api/tv/*` 是影视聚合的接口。
+#
+# **2026-10-20 起 /tools/* 与 /tv 也必须进 Worker**：站主要求工具页登录才能用，
+# 而准入判定（`src/lib/site-api.ts` 的 needsLogin）跑在 Worker 里 —— 请求不进 Worker，
+# 这一层就形同虚设。`/tv/*` 一并列上是因为 `/tv` 与 `/tv/` 两种写法都要覆盖；
+# 资源文件虽然也被唤起一次 Worker，但它不是 needsLogin 的目标，会立刻交回 ASSETS。
+run_worker_first = [
+  "/api/music/*",
+  "/api/chat",
+  "/api/admin/*",
+  "/api/app/*",
+  "/api/tv/*",
+  "/api/site/*",
+  "/tools/*",
+  "/tv",
+  "/tv/*",
+]
 
 # 「AI 版沉麟」的**兜底**推理（R6 阶段②）。免费档 10,000 neurons/天，超额直接报错、不自动计费。
 # 兜底模型与它的账记在 src/data/chat.ts 顶部：@cf/qwen/qwen3-30b-a3b-fp8，约每天 196 次对话。
@@ -75,6 +89,13 @@ class_name = "ChatLog"
 name = "APP"
 class_name = "AppDB"
 
+# 站点账号库（登录式）。邀请码 / 站点用户 / 会话 / 每用户的影视搜索与播放记录。
+# 与 CHAT、APP 分开是刻意的：改站点登录不该有机会动到步数管家的用户表。
+# 单实例（`idFromName('site')`）—— 「账号唯一」与「邀请码原子占用」要在同一个串行语义里。
+[[durable_objects.bindings]]
+name = "SITE"
+class_name = "SiteDB"
+
 # `storage = "sqlite"` 不是可选项：**Workers Free 只支持 SQLite 后端的 DO**
 # （KV 后端要 Paid，官方 pricing 页原文）。这一行写错就等于要为对话功能升级付费档。
 # 用的是新的 [exports] 写法而不是 legacy 的 [[migrations]] + new_sqlite_classes ——
@@ -85,6 +106,11 @@ storage = "sqlite"
 
 # 步数管家的用户库。同样声明成 SQLite 后端的 DO（Workers Free 只支持这个）。
 [exports.AppDB]
+type = "durable-object"
+storage = "sqlite"
+
+# 站点账号库。同样必须 SQLite 后端（Workers Free 只支持这个）。
+[exports.SiteDB]
 type = "durable-object"
 storage = "sqlite"
 
