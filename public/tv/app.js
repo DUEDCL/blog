@@ -36,7 +36,8 @@
     epIdx: -1,
     eps: [],
     hls: null,
-    proxyTried: false,
+    tryIdx: 0,          // 当前处于 TRIES 的第几级
+    pendingPlay: null,  // 本次播放的 { epUrl, api, epName }，供降级重试复用
   };
 
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
@@ -532,8 +533,30 @@
     );
   }
 
+  /**
+   * 播放三级降级链。顺序是实测定的，别凭直觉调换：
+   *
+   *   1. `direct`    —— 直接把上游 m3u8 交给 hls.js，一个字节都不经 Worker
+   *   2. `hlsProxy`  —— 经 /api/tv/hls 取播放列表并改写 URI（分片仍由浏览器直连）
+   *   3. `fullProxy` —— 连分片也经 /api/tv/seg 转发
+   *
+   * **为什么 direct 必须排第一**：2026-10 上线实测，15 个源里有 8 个的
+   * m3u8 CDN 会对 Cloudflare 机房出口 IP 直接回 403 / 404 / 530
+   * （本机家宽网络同一个地址却是 200）。也就是说 Worker 去取播放列表
+   * 这条路在边缘上天然不可靠，而**浏览器从访客自己的网络去取是通的** ——
+   * 而且这些 m3u8 大多带 `Access-Control-Allow-Origin: *`，跨域没问题。
+   *
+   * hls.js 拿到原始 m3u8 地址后，会以该地址为基准解析里面的相对路径，
+   * 所以直连时不需要我们改写任何 URI。改写只在第 2 级（走代理）时才必要。
+   */
+  var TRIES = ['direct', 'hlsProxy', 'fullProxy'];
+  var TRY_LABEL = {
+    direct: '直连',
+    hlsProxy: '改为经本站取播放列表',
+    fullProxy: '改为连分片也走本站代理',
+  };
+
   function playEp(vod, idx) {
-    var cand = state.detail.candidates || null;
     var g = state.groups[state.detail.gi];
     var c = g.candidates[state.candIdx];
     var src = srcById(c.sourceId);
@@ -544,10 +567,9 @@
     var ov = $('[data-tv-player]');
     ov.hidden = false;
     state.epIdx = idx;
-    state.proxyTried = false;
+    state.tryIdx = 0;
 
-    $('[data-tv-ptitle]').textContent =
-      (vod.name || g.name) + ' · ' + ep.name;
+    $('[data-tv-ptitle]').textContent = (vod.name || g.name) + ' · ' + ep.name;
     $('[data-tv-pline]').textContent = c.sourceName + ' / ' + line.from;
 
     // 底部剧集条
@@ -570,7 +592,6 @@
       b.classList.toggle('is-on', i === idx);
     });
 
-    void cand;
     if (line.kind === 'page') {
       playerMsg('<b>这条线路无法直连</b><br>「' + esc(line.from) +
         '」是资源站的网页播放器地址。<br><code>请换一条带 m3u8 的线路，或换一个源。</code>');
@@ -588,27 +609,48 @@
   }
 
   function startPlayback(epUrl, api, line, epName) {
-    var v = $('[data-tv-video]');
     teardownVideo();
-    playerMsg('正在解析播放地址…');
+    state.pendingPlay = { epUrl: epUrl, api: api, epName: epName };
+    tryPlayback(0);
+  }
 
-    var isHlsUrl = /\.m3u8(\?|#|$)/i.test(epUrl) || line.kind === 'hls';
+  /** 按 TRIES 顺序尝试；前一级失败才进下一级 */
+  function tryPlayback(i) {
+    var p = state.pendingPlay;
+    if (!p) return;
+    if (i >= TRIES.length) {
+      playerMsg('<b>三种方式都播不了</b><br>' + esc(p.epName) +
+        ' 可能已失效。<br><code>建议换一条线路，或换一个源。</code>');
+      return;
+    }
+    state.tryIdx = i;
+    var mode = TRIES[i];
+    var v = $('[data-tv-video]');
+    var isHls = /\.m3u8(\?|#|$)/i.test(p.epUrl);
 
-    if (isHlsUrl && window.Hls && window.Hls.isSupported()) {
-      attachHls(playlistUrl(epUrl, api, false), epUrl, api, v, epName);
+    if (isHls && window.Hls && window.Hls.isSupported()) {
+      attachHls(mode, v);
       return;
     }
 
-    // mp4 / 原生 HLS（Safari）
-    v.src = BASE + '/seg?u=' + encodeURIComponent(epUrl) + '&ref=' + encodeURIComponent(originOf(api));
-    playerMsg(null);
-    v.play().catch(function () { /* 自动播放被拦，等用户点 */ });
-    v.onerror = function () {
-      playerMsg('<b>无法播放该地址</b><br>' + esc(epName) + ' 可能已失效，换源试试。');
-    };
+    // mp4 / 原生 HLS（Safari）：直连优先，失败再走分片代理
+    if (mode === 'direct') {
+      v.src = p.epUrl;
+    } else {
+      v.src = BASE + '/seg?u=' + encodeURIComponent(p.epUrl) +
+        '&ref=' + encodeURIComponent(originOf(p.api));
+    }
+    playerMsg(mode === 'direct' ? null : '直连失败，' + TRY_LABEL[mode] + '…');
+    v.onerror = function () { tryPlayback(i + 1); };
+    v.play().catch(function () { /* 自动播放被拦，等用户手势 */ });
   }
 
-  function attachHls(playUrl, epUrl, api, video, epName) {
+  function attachHls(mode, video) {
+    var p = state.pendingPlay;
+    if (!p) return;
+
+    if (state.hls) { try { state.hls.destroy(); } catch (e) { /* ignore */ } }
+
     var hls = new window.Hls({
       enableWorker: true,
       lowLatencyMode: false,
@@ -626,33 +668,30 @@
 
     hls.on(window.Hls.Events.ERROR, function (_evt, data) {
       if (!data.fatal) return;
-
-      var netErr = data.type === window.Hls.ErrorTypes.NETWORK_ERROR;
-
-      // 分片/列表跨域失败：降级成「分片也走本站代理」重试一次
-      if (netErr && !state.proxyTried) {
-        state.proxyTried = true;
-        playerMsg('直连失败，正在改走代理重试…');
-        try { hls.destroy(); } catch (e) { /* ignore */ }
-        state.hls = null;
-        attachHls(playlistUrl(epUrl, api, true), epUrl, api, video, epName);
-        return;
-      }
-
-      if (netErr) {
-        playerMsg('<b>网络错误</b><br>这个源可能已失效或被限流。<br>' +
-          '<code>' + esc(data.details || '') + '</code>');
-        return;
-      }
       if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
         playerMsg('解码失败，正在尝试恢复…');
-        try { hls.recoverMediaError(); } catch (e) { playerMsg('<b>解码失败</b>，换源试试。'); }
+        try { hls.recoverMediaError(); } catch (e) { tryPlayback(state.tryIdx + 1); }
+        return;
+      }
+      // 网络类致命错误：交下一级兜底
+      var next = state.tryIdx + 1;
+      if (next < TRIES.length) {
+        playerMsg('播放失败，' + TRY_LABEL[TRIES[next]] + '…');
+        try { hls.destroy(); } catch (e) { /* ignore */ }
+        state.hls = null;
+        tryPlayback(next);
         return;
       }
       playerMsg('<b>播放失败</b><br><code>' + esc(data.details || '') + '</code>');
     });
 
-    hls.loadSource(playUrl);
+    // direct 给原始地址；代理两级才需要改写后的播放列表
+    var srcUrl =
+      mode === 'direct'
+        ? p.epUrl
+        : playlistUrl(p.epUrl, p.api, mode === 'fullProxy');
+
+    hls.loadSource(srcUrl);
     hls.attachMedia(video);
   }
 
@@ -762,48 +801,49 @@
     var v = $('[data-tv-video]');
     teardownVideo();
     playerMsg('正在连接直播流…');
-    state.proxyTried = false;
 
-    if (window.Hls && window.Hls.isSupported()) {
-      var hls = new window.Hls({
-        enableWorker: true,
-        liveSyncDurationCount: 3,
-        manifestLoadingTimeOut: 20000,
-        fragLoadingMaxRetry: 6,
-      });
-      state.hls = hls;
-      hls.on(window.Hls.Events.MANIFEST_PARSED, function () {
-        playerMsg(null);
-        v.play().catch(function () {});
-      });
-      hls.on(window.Hls.Events.ERROR, function (_e, data) {
-        if (!data.fatal) return;
-        if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR && !state.proxyTried) {
-          state.proxyTried = true;
+    // 直播同样直连优先：Worker 出口取不动的流，访客自己的网络往往能取
+    var attempts = [ch.url, playlistUrl(ch.url, '', true)];
+    var i = 0;
+
+    function tryLive() {
+      if (i >= attempts.length) {
+        playerMsg('<b>直播流不可用</b><br>换一个频道试试。');
+        return;
+      }
+      var url = attempts[i];
+      if (i > 0) playerMsg('直连失败，正在改走本站代理…');
+
+      if (window.Hls && window.Hls.isSupported()) {
+        if (state.hls) { try { state.hls.destroy(); } catch (e) { /* ignore */ } }
+        var hls = new window.Hls({
+          enableWorker: true,
+          liveSyncDurationCount: 3,
+          manifestLoadingTimeOut: 20000,
+          fragLoadingMaxRetry: 6,
+        });
+        state.hls = hls;
+        hls.on(window.Hls.Events.MANIFEST_PARSED, function () {
+          playerMsg(null);
+          v.play().catch(function () {});
+        });
+        hls.on(window.Hls.Events.ERROR, function (_e, data) {
+          if (!data.fatal) return;
           try { hls.destroy(); } catch (e) { /* ignore */ }
           state.hls = null;
-          playerMsg('直连失败，正在改走代理重试…');
-          var h2 = new window.Hls({ enableWorker: true, liveSyncDurationCount: 3 });
-          state.hls = h2;
-          h2.on(window.Hls.Events.MANIFEST_PARSED, function () {
-            playerMsg(null);
-            v.play().catch(function () {});
-          });
-          h2.on(window.Hls.Events.ERROR, function () {
-            playerMsg('<b>直播流不可用</b><br>换一个频道试试。');
-          });
-          h2.loadSource(playlistUrl(ch.url, '', true));
-          h2.attachMedia(v);
-          return;
-        }
-        playerMsg('<b>直播流不可用</b><br>换一个频道试试。');
-      });
-      hls.loadSource(playlistUrl(ch.url, '', false));
-      hls.attachMedia(v);
-    } else {
-      v.src = BASE + '/seg?u=' + encodeURIComponent(ch.url);
-      v.play().catch(function () {});
+          i++;
+          tryLive();
+        });
+        hls.loadSource(url);
+        hls.attachMedia(v);
+      } else {
+        v.src = url;
+        v.onerror = function () { i++; tryLive(); };
+        v.play().catch(function () {});
+      }
     }
+
+    tryLive();
   }
 
   /* ══════════════════ 源列表 ══════════════════ */
