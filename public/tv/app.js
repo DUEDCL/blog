@@ -1,26 +1,39 @@
 /**
- * /tv 影视聚合页的客户端逻辑。
+ * /tv 影视聚合页的客户端逻辑（v2）。
  *
  * 不参与构建（放在 public/ 里按原样发），所以这里不写 import —— 用全局的 Hls。
  *
- * 两个必须自己处理的环境事实：
- * 1. **ClientRouter（全站 SPA 换页）**。这一页被进来、离开、再进来，
- *    脚本不会重新执行。所以入口挂在 `astro:page-load` 上（首次加载和每次换页都会触发），
- *    并且用 `data-tv-ready` 防重复绑定。
- * 2. **播放地址是跨域的**。m3u8 与分片多数带 `Access-Control-Allow-Origin: *`，
- *    但**播放列表里的路径是相对的**，直接交给 hls.js 会以本站为基准解析而 404。
- *    所以播放列表一律先过 `/api/tv/hls` 换回绝对地址（只转发几 KB 文本），
- *    分片由浏览器直连 CDN —— 媒体字节不进 Worker 配额。
- *    只有 hls.js 报致命网络错误时才降级到 `&proxy=1`（分片也走代理），
- *    这条路是给「分片不带 CORS」的源兜底的。
+ * 环境事实（改之前必须知道）：
+ * 1. **ClientRouter（全站 SPA 换页）**。脚本只执行一次，入口挂 `astro:page-load`，
+ *    并用 `data-tv-ready` 防重复绑定。
+ * 2. **播放必须直连优先**。2026-10 上线实测：15 个源里 8 个的 m3u8 CDN 会拒绝
+ *    Cloudflare 机房出口 IP（403/404/530），但访客自己的网络取得到，且这些 m3u8
+ *    带 `ACAO: *`。所以播放走 `direct → hlsProxy → fullProxy` 三级降级。
+ * 3. **清晰度只能实测**。资源站 API 里没有分辨率字段，唯一可信来源是 master 播放列表的
+ *    `RESOLUTION=` / `BANDWIDTH=`。探测本身放在**浏览器**做（这些 CDN 对浏览器放行、
+ *    对 Worker 机房 IP 不放行），所以探测不必经过 /api/tv/*。
+ *
+ * 本文件三块新东西：
+ *   A. 清晰度探测 + 自动选源（最高清 → 最快）
+ *   B. 播放器内清晰度切换（hls.js 的 levels）
+ *   C. 本地记录：搜索历史、播放历史、断点续播
  */
 
 (function () {
   'use strict';
 
   var BASE = '/api/tv';
-  var LS_OFF = 'tv:off';        // 被访客手动关掉的源 id
-  var HOT = ['庆余年', '流浪地球', '繁花', '狂飙', '三体', '沙丘', '抓娃娃', '与凤行'];
+  var LS = {
+    off: 'tv:off',        // 访客关掉的源
+    q: 'tv:q',            // 搜索历史
+    prog: 'tv:prog',      // 播放进度 / 历史
+    qual: 'tv:qual',      // 清晰度探测缓存
+  };
+  var HOT = ['庆余年', '流浪地球', '繁花', '狂飙', '三体', '沙丘', '阿凡达', '抓娃娃'];
+  var MAX_Q_HIST = 12;
+  var MAX_PROG = 30;
+  var QUAL_TTL = 7 * 86400 * 1000;   // 清晰度缓存 7 天
+  var PROBE_TOP_N = 6;               // 最多探测前 N 个候选源，避免开详情页时发太多请求
 
   /** @type {any} */
   var state = {
@@ -36,23 +49,22 @@
     epIdx: -1,
     eps: [],
     hls: null,
-    tryIdx: 0,          // 当前处于 TRIES 的第几级
-    pendingPlay: null,  // 本次播放的 { epUrl, api, epName }，供降级重试复用
+    tryIdx: 0,
+    pendingPlay: null,
+    probe: {},            // `${srcId}:${vodId}` → {w,h,bw,ms} 本次会话的探测结果
+    autoPicked: false,    // 详情页是否已按探测结果自动换源
   };
 
-  var $ = function (sel, root) { return (root || document).querySelector(sel); };
-  var $$ = function (sel, root) {
-    return Array.prototype.slice.call((root || document).querySelectorAll(sel));
-  };
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-
-  function getJson(path) {
-    return fetch(path).then(function (r) {
+  function getJson(p) {
+    return fetch(p).then(function (r) {
       return r.json().then(function (d) {
         if (!r.ok) throw new Error((d && d.error) || 'HTTP ' + r.status);
         return d;
@@ -60,48 +72,191 @@
     });
   }
 
-  function loadOff() {
+  /* ══════════════ 本地存储 ══════════════ */
+
+  function readLS(key, fallback) {
     try {
-      var raw = localStorage.getItem(LS_OFF);
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function writeLS(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* 隐私模式忽略 */ }
+  }
+
+  function loadPrefs() {
+    try {
+      var raw = localStorage.getItem(LS.off);
       state.off = new Set(raw ? JSON.parse(raw) : []);
-    } catch (e) {
-      state.off = new Set();
-    }
+    } catch (e) { state.off = new Set(); }
+  }
+  function saveOff() { writeLS(LS.off, Array.from(state.off)); }
+
+  /** 搜索历史：[{q, t}] 新的在前 */
+  function getQueryHistory() { return readLS(LS.q, []); }
+  function pushQueryHistory(q) {
+    var list = getQueryHistory().filter(function (x) { return x.q !== q; });
+    list.unshift({ q: q, t: Date.now() });
+    writeLS(LS.q, list.slice(0, MAX_Q_HIST));
+    renderQueryHistory();
+  }
+  function clearQueryHistory() {
+    writeLS(LS.q, []);
+    renderQueryHistory();
   }
 
-  function saveOff() {
-    try {
-      localStorage.setItem(LS_OFF, JSON.stringify(Array.from(state.off)));
-    } catch (e) {
-      /* 隐私模式写不进去，不影响本次会话 */
-    }
+  /** 播放进度：{ [key]: {t,d,ts,name,epName,srcId,vodId,srcName,lineIdx,lineFrom} } */
+  function getProgress() { return readLS(LS.prog, {}); }
+  function progKey(name, epName) { return name + '||' + epName; }
+
+  function saveProgress(rec) {
+    var all = getProgress();
+    all[progKey(rec.name, rec.epName)] = rec;
+    // 按时间倒序截断
+    var keys = Object.keys(all).sort(function (a, b) { return (all[b].ts || 0) - (all[a].ts || 0); });
+    var out = {};
+    keys.slice(0, MAX_PROG).forEach(function (k) { out[k] = all[k]; });
+    writeLS(LS.prog, out);
+  }
+  function findProgress(name, epName) {
+    return getProgress()[progKey(name, epName)] || null;
+  }
+  /** 某部片最后一次看到第几集（用于详情页「继续观看」） */
+  function lastProgressOf(title) {
+    var all = getProgress();
+    var best = null;
+    Object.keys(all).forEach(function (k) {
+      var r = all[k];
+      if (r.name !== title) return;
+      if (!best || (r.ts || 0) > (best.ts || 0)) best = r;
+    });
+    return best;
   }
 
-  function enabledSources() {
-    return state.sources.filter(function (s) { return !state.off.has(s.id); });
-  }
+  /* ══════════════ 清晰度探测 ══════════════ */
 
-  function srcById(id) {
-    for (var i = 0; i < state.sources.length; i++) if (state.sources[i].id === id) return state.sources[i];
+  var QUAL_CACHE = readLS(LS.qual, {});
+
+  function cacheGet(srcId, vodId) {
+    var k = srcId + ':' + vodId;
+    var hit = QUAL_CACHE[k];
+    if (hit && Date.now() - (hit.ts || 0) < QUAL_TTL) return hit;
     return null;
   }
-
-  function originOf(api) {
-    try { return new URL(api).origin; } catch (e) { return ''; }
+  function cachePut(srcId, vodId, val) {
+    QUAL_CACHE[srcId + ':' + vodId] = Object.assign({ ts: Date.now() }, val);
+    // 简单裁剪，别让 localStorage 无限涨
+    var keys = Object.keys(QUAL_CACHE);
+    if (keys.length > 200) {
+      keys.sort(function (a, b) { return (QUAL_CACHE[a].ts || 0) - (QUAL_CACHE[b].ts || 0); })
+        .slice(0, keys.length - 200)
+        .forEach(function (k) { delete QUAL_CACHE[k]; });
+    }
+    writeLS(LS.qual, QUAL_CACHE);
   }
 
-  /* ══════════════════ 初始化 ══════════════════ */
+  /**
+   * 探测一个 m3u8 的清晰度与延迟。
+   * - 只有 master 列表（含 `#EXT-X-STREAM-INF`）才有 `RESOLUTION`，媒体列表拿不到分辨率，
+   *   此时把 width 记 0，由上层按「未知」处理。
+   * - 耗时用整段播放列表的下载时间当**测速代理**：播放列表只有几 KB，
+   *   这个时间约等于首字节延迟，比去拉一个分片轻得多。
+   */
+  function probeOne(url, timeoutMs) {
+    var started = performance.now();
+    var ac = new AbortController();
+    var timer = setTimeout(function () { ac.abort(); }, timeoutMs || 7000);
+    return fetch(url, { signal: ac.signal, cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (text) {
+        clearTimeout(timer);
+        var ms = Math.round(performance.now() - started);
+        var widths = [];
+        var heights = [];
+        var bws = [];
+        var re = /RESOLUTION=(\d+)x(\d+)/gi;
+        var m;
+        while ((m = re.exec(text)) !== null) {
+          widths.push(Number(m[1]));
+          heights.push(Number(m[2]));
+        }
+        var re2 = /BANDWIDTH=(\d+)/gi;
+        while ((m = re2.exec(text)) !== null) bws.push(Number(m[1]));
+        var master = /#EXT-X-STREAM-INF/i.test(text);
+        return {
+          ok: true,
+          master: master,
+          w: widths.length ? Math.max.apply(null, widths) : 0,
+          h: heights.length ? Math.max.apply(null, heights) : 0,
+          bw: bws.length ? Math.max.apply(null, bws) : 0,
+          ms: ms,
+        };
+      })
+      .catch(function (e) {
+        clearTimeout(timer);
+        return { ok: false, error: String(e && e.message || e) };
+      });
+  }
+
+  /** 并发探测前 N 个候选；有缓存的直接用 */
+  function probeCandidates(group) {
+    var cands = group.candidates.slice(0, PROBE_TOP_N);
+    var jobs = cands.map(function (c) {
+      var hit = cacheGet(c.sourceId, c.vodId);
+      if (hit) return Promise.resolve(hit);
+      if (!c.firstHlsUrl) return Promise.resolve({ ok: false, error: '无直连线路' });
+      return probeOne(c.firstHlsUrl).then(function (r) {
+        if (r.ok) cachePut(c.sourceId, c.vodId, r);
+        return r;
+      });
+    });
+    return Promise.all(jobs).then(function (results) {
+      cands.forEach(function (c, i) { state.probe[c.sourceId + ':' + c.vodId] = results[i]; });
+      return results;
+    });
+  }
+
+  /** 分辨率 → 展示标签 */
+  function qualLabel(p) {
+    if (!p || !p.ok) return '';
+    if (p.w >= 3800 || p.h >= 2100) return '4K';
+    if (p.w >= 2500 || p.h >= 1400) return '2K';
+    if (p.w >= 1900 || p.h >= 1000) return '1080P';
+    if (p.w >= 1200 || p.h >= 700) return '720P';
+    if (p.w > 0) return p.h + 'P';
+    return '未知清晰度';
+  }
+  /** 排序权重：分辨率优先，其次带宽，最后延迟（越小越好） */
+  function qualScore(p) {
+    if (!p || !p.ok) return -1;
+    return (p.w || 0) * 1e6 + (p.bw || 0) / 1e3 - (p.ms || 0);
+  }
+
+  function qualBadgeClass(p) {
+    if (!p || !p.ok) return '';
+    if (p.w >= 2500) return ' tv-qbadge--4k';
+    if (p.w >= 1900) return ' tv-qbadge--1080';
+    return '';
+  }
+
+  /* ══════════════ 初始化 ══════════════ */
 
   function init() {
     var root = $('[data-tv]');
     if (!root || root.dataset.tvReady === '1') return;
     root.dataset.tvReady = '1';
 
-    loadOff();
+    loadPrefs();
     bindTabs();
     bindSearch();
     bindPlayer();
     renderHot();
+    renderQueryHistory();
 
     getJson(BASE + '/sources')
       .then(function (d) {
@@ -110,36 +265,38 @@
         renderSrcBar();
         renderSrcList();
         updateCount();
+        renderContinue();
 
-        // 深链：/tv?q=片名 直接出结果（可分享）；?tab=live 直进直播
         try {
           var sp = new URLSearchParams(location.search);
           var q = (sp.get('q') || '').trim();
-          if (q) {
-            $('[data-tv-q]').value = q;
-            doSearch(q);
-          }
+          if (q) { $('[data-tv-q]').value = q; doSearch(q); }
           if (sp.get('tab') === 'live') {
             var lb = $('[data-tv-tab="live"]');
             if (lb) lb.click();
           }
-        } catch (e) {
-          /* 老浏览器没有 URLSearchParams，忽略 */
-        }
+        } catch (e) { /* 老浏览器忽略 */ }
       })
-      .catch(function (e) {
-        setStatus('读取源清单失败：' + e.message);
-      });
+      .catch(function (e) { setStatus('读取源清单失败：' + e.message); });
   }
 
   function updateCount() {
     var el = $('[data-tv-count]');
     if (el) el.textContent = enabledSources().length + ' 源';
   }
-
-  function setStatus(text) {
+  function setStatus(html) {
     var el = $('[data-tv-status]');
-    if (el) el.innerHTML = text;
+    if (el) el.innerHTML = html;
+  }
+  function enabledSources() {
+    return state.sources.filter(function (s) { return !state.off.has(s.id); });
+  }
+  function srcById(id) {
+    for (var i = 0; i < state.sources.length; i++) if (state.sources[i].id === id) return state.sources[i];
+    return null;
+  }
+  function originOf(api) {
+    try { return new URL(api).origin; } catch (e) { return ''; }
   }
 
   function bindTabs() {
@@ -163,6 +320,10 @@
       var q = $('[data-tv-q]').value.trim();
       if (q) doSearch(q);
     });
+
+    var input = $('[data-tv-q]');
+    // 聚焦时把历史摊开（有历史才开）
+    input.addEventListener('focus', renderQueryHistory);
   }
 
   function renderHot() {
@@ -174,15 +335,90 @@
       b.type = 'button';
       b.className = 'tv-chip';
       b.textContent = w;
-      b.addEventListener('click', function () {
-        $('[data-tv-q]').value = w;
-        doSearch(w);
-      });
+      b.addEventListener('click', function () { $('[data-tv-q]').value = w; doSearch(w); });
       box.appendChild(b);
     });
   }
 
-  /* ══════════════════ 源筛选 ══════════════════ */
+  /** 搜索框下方的历史条：点一下直接搜，右侧可清空 */
+  function renderQueryHistory() {
+    var box = $('[data-tv-qhist]');
+    if (!box) return;
+    var list = getQueryHistory();
+    box.innerHTML = '';
+    if (!list.length) { box.hidden = true; return; }
+    box.hidden = false;
+
+    var label = document.createElement('span');
+    label.className = 'tv-qhist__label';
+    label.textContent = '最近搜过';
+    box.appendChild(label);
+
+    list.forEach(function (item) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tv-qhist__item';
+      b.textContent = item.q;
+      b.title = '再搜一次：' + item.q;
+      b.addEventListener('click', function () {
+        $('[data-tv-q]').value = item.q;
+        doSearch(item.q);
+      });
+      box.appendChild(b);
+    });
+
+    var clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'tv-qhist__clear';
+    clear.textContent = '清空';
+    clear.addEventListener('click', clearQueryHistory);
+    box.appendChild(clear);
+  }
+
+  /** 继续观看：按播放历史列出最近看过的片子 */
+  function renderContinue() {
+    var box = $('[data-tv-cont]');
+    if (!box) return;
+    var all = getProgress();
+    var items = Object.keys(all).map(function (k) { return all[k]; })
+      .filter(function (r) { return r && r.name && (r.t || 0) > 5; })
+      .sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); })
+      .slice(0, 8);
+
+    box.innerHTML = '';
+    if (!items.length) { box.hidden = true; return; }
+    box.hidden = false;
+
+    var h = document.createElement('div');
+    h.className = 'tv-cont__h';
+    h.textContent = '继续观看';
+    box.appendChild(h);
+
+    var list = document.createElement('div');
+    list.className = 'tv-cont__list';
+    items.forEach(function (r) {
+      var pct = r.d > 0 ? Math.min(100, Math.round((r.t / r.d) * 100)) : 0;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tv-cont__item';
+      b.innerHTML =
+        '<span class="tv-cont__name">' + esc(r.name) + '</span>' +
+        '<span class="tv-cont__ep">' + esc(r.epName || '') +
+        (pct ? ' · 已看 ' + pct + '%' : '') + '</span>';
+      b.addEventListener('click', function () {
+        $('[data-tv-q]').value = r.name;
+        doSearch(r.name).then(function () {
+          // 找到同名分组后自动打开（不保证一定命中，命中才开）
+          var gi = state.groups.findIndex(function (g) { return g.name === r.name; });
+          if (gi >= 0) openDetail(gi);
+        });
+      });
+      list.appendChild(b);
+    });
+    box.appendChild(list);
+  }
+
+  /* ══════════════ 源筛选 ══════════════ */
 
   function renderSrcBar() {
     var bar = $('[data-tv-srcbar]');
@@ -191,7 +427,7 @@
 
     var all = document.createElement('button');
     all.type = 'button';
-    all.className = 'tv-chip is-on';
+    all.className = 'tv-chip' + (state.activeSrc === 'all' ? ' is-on' : '');
     all.textContent = '全部';
     all.addEventListener('click', function () {
       state.activeSrc = 'all';
@@ -203,7 +439,8 @@
     state.sources.forEach(function (s) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'tv-chip' + (state.off.has(s.id) ? '' : ' is-ok');
+      b.className = 'tv-chip' + (state.off.has(s.id) ? '' : ' is-ok') +
+        (state.activeSrc === s.id ? ' is-on' : '');
       b.dataset.srcId = s.id;
       b.innerHTML = '<span class="tv-chip__dot"></span>' + esc(s.name);
       b.addEventListener('click', function () {
@@ -222,13 +459,9 @@
       chip.classList.toggle('is-ok', !!r.ok);
       chip.classList.toggle('is-bad', !r.ok);
     });
-    $$('[data-tv-srcbar] .tv-chip').forEach(function (c) {
-      if (!c.dataset.srcId) return;
-      c.classList.toggle('is-on', state.activeSrc === c.dataset.srcId);
-    });
   }
 
-  /* ══════════════════ 搜索 ══════════════════ */
+  /* ══════════════ 搜索 ══════════════ */
 
   function skeletons(n) {
     var grid = $('[data-tv-grid]');
@@ -236,8 +469,7 @@
     for (var i = 0; i < n; i++) {
       var d = document.createElement('div');
       d.className = 'tv-card tv-card--sk';
-      d.innerHTML = '<div class="tv-card__poster"></div><div class="tv-card__title"></div>' +
-        '<div class="tv-card__meta"></div>';
+      d.innerHTML = '<div class="tv-card__poster"></div><div class="tv-card__title"></div><div class="tv-card__meta"></div>';
       grid.appendChild(d);
     }
   }
@@ -246,24 +478,25 @@
     state.lastQ = q;
     var empty = $('[data-tv-empty]');
     if (empty) empty.hidden = true;
+    var cont = $('[data-tv-cont]');
+    if (cont) cont.hidden = true;
     setStatus('正在并发搜索 <b>' + esc(q) + '</b> …');
     skeletons(12);
 
     var params = '?q=' + encodeURIComponent(q);
     if (state.activeSrc !== 'all') params += '&src=' + encodeURIComponent(state.activeSrc);
 
-    getJson(BASE + '/search' + params)
+    return getJson(BASE + '/search' + params)
       .then(function (d) {
         state.groups = d.groups || [];
+        pushQueryHistory(q);
         var okN = (d.sources || []).filter(function (s) { return s.ok; }).length;
         var allN = (d.sources || []).length;
         var fails = (d.sources || []).filter(function (s) { return !s.ok; });
         setStatus(
           '<b>' + okN + '/' + allN + '</b> 个源响应 · 共 <b>' + state.groups.length +
             '</b> 部 · ' + d.tookMs + 'ms' +
-            (fails.length
-              ? ' · 未响应：' + fails.map(function (f) { return esc(f.name); }).join('、')
-              : '')
+            (fails.length ? ' · 未响应：' + fails.map(function (f) { return esc(f.name); }).join('、') : '')
         );
         paintSrcHealth(d.sources);
         renderCards();
@@ -295,7 +528,8 @@
       card.style.animationDelay = Math.min(i * 16, 320) + 'ms';
 
       var n = g.candidates.length;
-      var inner =
+      var best = g.candidates.filter(function (c) { return c.hasHls; }).length;
+      card.innerHTML =
         '<div class="tv-card__poster">' +
         (g.pic
           ? '<img src="' + esc(g.pic) + '" alt="' + esc(g.name) + '" loading="lazy" ' +
@@ -308,21 +542,22 @@
         '<div class="tv-card__title">' + esc(g.name) + '</div>' +
         '<div class="tv-card__meta">' +
         esc([g.typeName, g.area, g.year].filter(Boolean).join(' · ') || '—') +
+        (best ? ' · ' + best + ' 可直连' : '') +
         '</div>';
 
-      card.innerHTML = inner;
       card.addEventListener('click', function () { openDetail(i); });
       grid.appendChild(card);
     });
   }
 
-  /* ══════════════════ 详情 ══════════════════ */
+  /* ══════════════ 详情 ══════════════ */
 
   function openDetail(groupIdx) {
     state.detail = { gi: groupIdx };
     state.candIdx = 0;
     state.lineIdx = 0;
     state.epIdx = -1;
+    state.autoPicked = false;
     $('[data-tv-mask]').hidden = false;
     $('[data-tv-drawer]').hidden = false;
     renderDetail();
@@ -341,40 +576,49 @@
 
     body.innerHTML =
       '<div class="tv-detail__hero">' +
-      '<div class="tv-detail__poster">' +
-      (g.pic ? '<img src="' + esc(g.pic) + '" alt="' + esc(g.name) + '">' : '') +
-      '</div>' +
+      '<div class="tv-detail__poster">' + (g.pic ? '<img src="' + esc(g.pic) + '" alt="' + esc(g.name) + '">' : '') + '</div>' +
       '<div class="tv-detail__head">' +
       '<h2 class="tv-detail__title">' + esc(g.name) + '</h2>' +
       '<div class="tv-detail__tags">' + tagsHtml(g) + '</div>' +
       '<div class="tv-detail__desc">暂无简介</div>' +
       '</div></div>' +
       '<div class="tv-detail__sec">' +
-      '<h3 class="tv-detail__h">来源线路（' + g.candidates.length + ' 个源）</h3>' +
-      '<div class="tv-cands">' + candsHtml(g) + '</div>' +
+      '<h3 class="tv-detail__h">来源线路（' + g.candidates.length + ' 个源）' +
+      '<span class="tv-detail__probe" data-tv-probe>正在测清晰度…</span></h3>' +
+      '<div class="tv-cands" data-tv-cands></div>' +
       '<div data-tv-extra><div class="tv-loading">正在读取剧集…</div></div>' +
       '</div>';
 
-    bindDetailEvents(g);
+    bindCands(g);
+    loadDetailFor(g, cand);
 
-    if (!cand) return;
-    getJson(BASE + '/detail?s=' + encodeURIComponent(cand.sourceId) + '&id=' + encodeURIComponent(cand.vodId))
-      .then(function (vod) {
-        state.detail.vod = vod;
-        // 简介与元信息以详情为准补全
-        var desc = $('.tv-detail__desc');
-        if (desc) desc.textContent = vod.content || '暂无简介';
-        var tags = $('.tv-detail__tags');
-        if (tags) tags.innerHTML = tagsHtml(g, vod);
-        renderEps(vod);
-      })
-      .catch(function (e) {
-        var ex = $('[data-tv-extra]');
-        if (ex) {
-          ex.innerHTML = '<div class="tv-loading">读取失败：' + esc(e.message) +
-            '<br>可点上面别的源重试</div>';
+    // 逐源探测清晰度；测出比当前更好的就自动切过去（只自动切一次，不跟用户抢）
+    probeCandidates(g).then(function (results) {
+      renderCands(g, results);
+      var probeEl = $('[data-tv-probe]');
+      var ranked = g.candidates.slice(0, PROBE_TOP_N).map(function (c, i) {
+        return { c: c, p: results[i], s: qualScore(results[i]) };
+      }).filter(function (x) { return x.p && x.p.ok; });
+
+      if (probeEl) {
+        probeEl.textContent = ranked.length
+          ? '已测 ' + ranked.length + ' 源 · 最高 ' + qualLabel(ranked.reduce(function (a, b) { return b.s > a.s ? b : a; }).p)
+          : '清晰度未知（源未提供多码率列表）';
+      }
+
+      ranked.sort(function (a, b) { return b.s - a.s; });
+      if (ranked.length && !state.autoPicked) {
+        state.autoPicked = true;
+        var bestIdx = g.candidates.findIndex(function (c) { return c.sourceId === ranked[0].c.sourceId; });
+        if (bestIdx >= 0 && bestIdx !== state.candIdx) {
+          state.candIdx = bestIdx;
+          state.lineIdx = 0;
+          state.epIdx = -1;
+          renderCands(g, results);
+          loadDetailFor(g, g.candidates[bestIdx], true);
         }
-      });
+      }
+    });
   }
 
   function tagsHtml(g, vod) {
@@ -392,32 +636,58 @@
     return out.join('');
   }
 
-  function candsHtml(g) {
-    return g.candidates
-      .map(function (c, i) {
-        return (
-          '<button type="button" class="tv-cand' + (i === state.candIdx ? ' is-on' : '') +
-          '" data-cand="' + i + '">' +
-          '<span class="tv-cand__n">' + esc(c.sourceName) + '</span>' +
-          '<span class="tv-cand__m">' + c.episodeCount + ' 集 · ' + c.lineCount + ' 线路' +
-          (c.hasHls ? ' · 可直连' : '') + '</span></button>'
-        );
-      })
-      .join('');
+  function bindCands(g) {
+    var box = $('[data-tv-cands]');
+    if (!box) return;
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cand]');
+      if (!b) return;
+      state.candIdx = Number(b.dataset.cand);
+      state.lineIdx = 0;
+      state.epIdx = -1;
+      renderCands(g);
+      loadDetailFor(g, g.candidates[state.candIdx]);
+    });
   }
 
-  function bindDetailEvents(g) {
-    var cands = $('.tv-cands');
-    if (cands) {
-      cands.addEventListener('click', function (e) {
-        var b = e.target.closest('[data-cand]');
-        if (!b) return;
-        state.candIdx = Number(b.dataset.cand);
-        state.lineIdx = 0;
-        state.epIdx = -1;
-        renderDetail();
+  function renderCands(g, results) {
+    var box = $('[data-tv-cands]');
+    if (!box) return;
+    box.innerHTML = g.candidates.map(function (c, i) {
+      var p = results ? results[i] : state.probe[c.sourceId + ':' + c.vodId];
+      var label = qualLabel(p);
+      var speed = p && p.ok && p.ms ? p.ms + 'ms' : '';
+      return (
+        '<button type="button" class="tv-cand' + (i === state.candIdx ? ' is-on' : '') + '" data-cand="' + i + '">' +
+        '<span class="tv-cand__n">' + esc(c.sourceName) +
+        (label ? '<span class="tv-qbadge' + qualBadgeClass(p) + '">' + label + '</span>' : '') +
+        '</span>' +
+        '<span class="tv-cand__m">' + c.episodeCount + ' 集 · ' + c.lineCount + ' 线路' +
+        (c.hasHls ? ' · 可直连' : ' · 仅网页') +
+        (speed ? ' · ' + speed : '') +
+        '</span></button>'
+      );
+    }).join('');
+  }
+
+  function loadDetailFor(g, cand, isAuto) {
+    if (!cand) return;
+    var extra = $('[data-tv-extra]');
+    if (extra && !isAuto) extra.innerHTML = '<div class="tv-loading">正在读取剧集…</div>';
+
+    getJson(BASE + '/detail?s=' + encodeURIComponent(cand.sourceId) + '&id=' + encodeURIComponent(cand.vodId))
+      .then(function (vod) {
+        state.detail.vod = vod;
+        var desc = $('.tv-detail__desc');
+        if (desc) desc.textContent = vod.content || '暂无简介';
+        var tags = $('.tv-detail__tags');
+        if (tags) tags.innerHTML = tagsHtml(g, vod);
+        renderEps(vod);
+      })
+      .catch(function (e) {
+        var ex = $('[data-tv-extra]');
+        if (ex) ex.innerHTML = '<div class="tv-loading">读取失败：' + esc(e.message) + '<br>可点上面别的源重试</div>';
       });
-    }
   }
 
   function renderEps(vod) {
@@ -433,40 +703,46 @@
     var line = vod.lines[state.lineIdx];
     state.eps = line.episodes;
 
-    var linesHtml = vod.lines
-      .map(function (l, i) {
-        var page = l.kind === 'page';
-        return (
-          '<button type="button" class="tv-line' + (page ? ' tv-line--page' : '') +
-          (i === state.lineIdx ? ' is-on' : '') + '" data-line="' + i + '" ' +
-          'title="' + (page ? '网页播放器地址，无法直连' : '可直接播放') + '">' +
-          esc(l.from) + ' <span class="tv-line__warn">' + l.episodes.length + '</span>' +
-          (page ? ' ⚠' : '') + '</button>'
-        );
-      })
-      .join('');
+    // 该片在这个源上的播放进度（用于「继续观看第 X 集」提示）
+    var last = lastProgressOf(vod.name);
 
-    var epsHtml = line.episodes
-      .map(function (ep, i) {
-        return (
-          '<button type="button" class="tv-ep' + (i === state.epIdx ? ' is-on' : '') +
-          '" data-ep="' + i + '" title="' + esc(ep.name) + '">' + esc(ep.name) + '</button>'
-        );
-      })
-      .join('');
+    var linesHtml = vod.lines.map(function (l, i) {
+      var page = l.kind === 'page';
+      return (
+        '<button type="button" class="tv-line' + (page ? ' tv-line--page' : '') +
+        (i === state.lineIdx ? ' is-on' : '') + '" data-line="' + i + '" ' +
+        'title="' + (page ? '网页播放器地址，无法直连' : '可直接播放') + '">' +
+        esc(l.from) + ' <span class="tv-line__warn">' + l.episodes.length + '</span>' + (page ? ' ⚠' : '') +
+        '</button>'
+      );
+    }).join('');
 
-    var tip =
-      line.kind === 'page'
-        ? '<p class="tv-tip">这条线路是资源站的网页播放器地址，浏览器拿不到直链。' +
-          '请选上面带 m3u8 的线路，或换一个源。</p>'
-        : '';
+    var epsHtml = line.episodes.map(function (ep, i) {
+      var pr = findProgress(vod.name, ep.name);
+      var mark = pr && pr.t > 5 ? '<i class="tv-ep__dot"></i>' : '';
+      return (
+        '<button type="button" class="tv-ep' + (i === state.epIdx ? ' is-on' : '') + '" data-ep="' + i +
+        '" title="' + esc(ep.name) + '">' + esc(ep.name) + mark + '</button>'
+      );
+    }).join('');
+
+    var tip = line.kind === 'page'
+      ? '<p class="tv-tip">这条线路是资源站的网页播放器地址，浏览器拿不到直链。请选带 m3u8 的线路，或换一个源。</p>'
+      : '';
+
+    var resumeBar = last && last.t > 5
+      ? '<div class="tv-resume"><span>上次看到「' + esc(last.epName) + '」' +
+        (last.d > 0 ? '（' + Math.round((last.t / last.d) * 100) + '%）' : '') + '</span>' +
+        '<button type="button" class="tv-resume__go" data-tv-resume="1">继续播放</button></div>'
+      : '';
 
     ex.innerHTML =
+      resumeBar +
       '<div class="tv-lines">' + linesHtml + '</div>' + tip +
       '<h3 class="tv-detail__h">剧集 · ' + esc(line.from) + '</h3>' +
       '<div class="tv-eps">' + epsHtml + '</div>';
 
-    ex.addEventListener('click', function (e) {
+    ex.onclick = function (e) {
       var lb = e.target.closest('[data-line]');
       if (lb) {
         state.lineIdx = Number(lb.dataset.line);
@@ -475,11 +751,28 @@
         return;
       }
       var eb = e.target.closest('[data-ep]');
-      if (eb) playEp(vod, Number(eb.dataset.ep));
-    });
+      if (eb) { playEp(vod, Number(eb.dataset.ep)); return; }
+      if (e.target.closest('[data-tv-resume]')) {
+        // 继续播放：切到上次那条线路，找同名剧集
+        var lr = last.lineIdx >= 0 ? last.lineIdx : state.lineIdx;
+        if (lr < vod.lines.length) {
+          state.lineIdx = lr;
+          renderEps(vod);
+          var idx = vod.lines[lr].episodes.findIndex(function (x) { return x.name === last.epName; });
+          playEp(vod, idx >= 0 ? idx : 0);
+        }
+      }
+    };
   }
 
-  /* ══════════════════ 播放器 ══════════════════ */
+  /* ══════════════ 播放器 ══════════════ */
+
+  var TRIES = ['direct', 'hlsProxy', 'fullProxy'];
+  var TRY_LABEL = {
+    direct: '直连',
+    hlsProxy: '改为经本站取播放列表',
+    fullProxy: '改为连分片也走本站代理',
+  };
 
   function bindPlayer() {
     $('[data-tv-pclose]').addEventListener('click', closePlayer);
@@ -498,6 +791,33 @@
       if (!$('[data-tv-player]').hidden) { closePlayer(); return; }
       if (!$('[data-tv-drawer]').hidden) closeDetail();
     });
+
+    // 进度落盘：每 5 秒 + 暂停/结束时
+    var v = $('[data-tv-video]');
+    setInterval(function () {
+      if (!v || v.paused || !v.duration || !state.cur) return;
+      persistProgress();
+    }, 5000);
+    v.addEventListener('pause', persistProgress);
+    v.addEventListener('ended', persistProgress);
+  }
+
+  function persistProgress() {
+    var v = $('[data-tv-video]');
+    var c = state.cur;
+    if (!v || !c || !v.duration || !isFinite(v.duration)) return;
+    saveProgress({
+      name: c.name,
+      epName: c.epName,
+      t: Math.round(v.currentTime),
+      d: Math.round(v.duration),
+      ts: Date.now(),
+      srcId: c.srcId,
+      vodId: c.vodId,
+      srcName: c.srcName,
+      lineIdx: state.lineIdx,
+      lineFrom: c.lineFrom,
+    });
   }
 
   function playerMsg(html) {
@@ -509,52 +829,27 @@
 
   function teardownVideo() {
     var v = $('[data-tv-video]');
-    if (state.hls) {
-      try { state.hls.destroy(); } catch (e) { /* ignore */ }
-      state.hls = null;
-    }
+    if (state.hls) { try { state.hls.destroy(); } catch (e) { /* ignore */ } state.hls = null; }
     v.pause();
     v.removeAttribute('src');
     v.load();
+    var q = $('[data-tv-quality]');
+    if (q) q.innerHTML = '';
   }
 
   function closePlayer() {
+    persistProgress();
     $('[data-tv-player]').hidden = true;
     teardownVideo();
   }
 
-  /** 拼播放列表代理地址（只转发文本；分片由浏览器直连 CDN） */
   function playlistUrl(epUrl, api, useProxy) {
-    var ref = originOf(api);
     return (
       BASE + '/hls?u=' + encodeURIComponent(epUrl) +
-      '&ref=' + encodeURIComponent(ref) +
+      '&ref=' + encodeURIComponent(originOf(api)) +
       (useProxy ? '&proxy=1' : '')
     );
   }
-
-  /**
-   * 播放三级降级链。顺序是实测定的，别凭直觉调换：
-   *
-   *   1. `direct`    —— 直接把上游 m3u8 交给 hls.js，一个字节都不经 Worker
-   *   2. `hlsProxy`  —— 经 /api/tv/hls 取播放列表并改写 URI（分片仍由浏览器直连）
-   *   3. `fullProxy` —— 连分片也经 /api/tv/seg 转发
-   *
-   * **为什么 direct 必须排第一**：2026-10 上线实测，15 个源里有 8 个的
-   * m3u8 CDN 会对 Cloudflare 机房出口 IP 直接回 403 / 404 / 530
-   * （本机家宽网络同一个地址却是 200）。也就是说 Worker 去取播放列表
-   * 这条路在边缘上天然不可靠，而**浏览器从访客自己的网络去取是通的** ——
-   * 而且这些 m3u8 大多带 `Access-Control-Allow-Origin: *`，跨域没问题。
-   *
-   * hls.js 拿到原始 m3u8 地址后，会以该地址为基准解析里面的相对路径，
-   * 所以直连时不需要我们改写任何 URI。改写只在第 2 级（走代理）时才必要。
-   */
-  var TRIES = ['direct', 'hlsProxy', 'fullProxy'];
-  var TRY_LABEL = {
-    direct: '直连',
-    hlsProxy: '改为经本站取播放列表',
-    fullProxy: '改为连分片也走本站代理',
-  };
 
   function playEp(vod, idx) {
     var g = state.groups[state.detail.gi];
@@ -568,11 +863,18 @@
     ov.hidden = false;
     state.epIdx = idx;
     state.tryIdx = 0;
+    state.cur = {
+      name: vod.name,
+      epName: ep.name,
+      srcId: c.sourceId,
+      srcName: c.sourceName,
+      vodId: c.vodId,
+      lineFrom: line.from,
+    };
 
     $('[data-tv-ptitle]').textContent = (vod.name || g.name) + ' · ' + ep.name;
     $('[data-tv-pline]').textContent = c.sourceName + ' / ' + line.from;
 
-    // 底部剧集条
     var strip = $('[data-tv-peps]');
     strip.innerHTML = '';
     line.episodes.forEach(function (e2, i) {
@@ -587,7 +889,6 @@
     var onBtn = strip.querySelector('.is-on');
     if (onBtn && onBtn.scrollIntoView) onBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
 
-    // 同步详情里剧集高亮
     $$('[data-tv-extra] .tv-ep').forEach(function (b, i) {
       b.classList.toggle('is-on', i === idx);
     });
@@ -598,29 +899,26 @@
       teardownVideo();
       return;
     }
-
     if (!/^https?:\/\//i.test(ep.url)) {
       playerMsg('<b>这不是直链播放地址</b><br>换一条线路或换一个源试试。');
       teardownVideo();
       return;
     }
 
-    startPlayback(ep.url, src ? src.api : '', line, ep.name);
+    startPlayback(ep.url, src ? src.api : '');
   }
 
-  function startPlayback(epUrl, api, line, epName) {
+  function startPlayback(epUrl, api) {
     teardownVideo();
-    state.pendingPlay = { epUrl: epUrl, api: api, epName: epName };
+    state.pendingPlay = { epUrl: epUrl, api: api };
     tryPlayback(0);
   }
 
-  /** 按 TRIES 顺序尝试；前一级失败才进下一级 */
   function tryPlayback(i) {
     var p = state.pendingPlay;
     if (!p) return;
     if (i >= TRIES.length) {
-      playerMsg('<b>三种方式都播不了</b><br>' + esc(p.epName) +
-        ' 可能已失效。<br><code>建议换一条线路，或换一个源。</code>');
+      playerMsg('<b>三种方式都播不了</b><br><code>建议换一条线路，或换一个源。</code>');
       return;
     }
     state.tryIdx = i;
@@ -632,23 +930,16 @@
       attachHls(mode, v);
       return;
     }
-
-    // mp4 / 原生 HLS（Safari）：直连优先，失败再走分片代理
-    if (mode === 'direct') {
-      v.src = p.epUrl;
-    } else {
-      v.src = BASE + '/seg?u=' + encodeURIComponent(p.epUrl) +
-        '&ref=' + encodeURIComponent(originOf(p.api));
-    }
-    playerMsg(mode === 'direct' ? null : '直连失败，' + TRY_LABEL[mode] + '…');
+    v.src = mode === 'direct' ? p.epUrl
+      : BASE + '/seg?u=' + encodeURIComponent(p.epUrl) + '&ref=' + encodeURIComponent(originOf(p.api));
+    playerMsg(mode === 'direct' ? null : TRY_LABEL[mode] + '…');
     v.onerror = function () { tryPlayback(i + 1); };
-    v.play().catch(function () { /* 自动播放被拦，等用户手势 */ });
+    v.play().catch(function () {});
   }
 
   function attachHls(mode, video) {
     var p = state.pendingPlay;
     if (!p) return;
-
     if (state.hls) { try { state.hls.destroy(); } catch (e) { /* ignore */ } }
 
     var hls = new window.Hls({
@@ -661,9 +952,15 @@
     });
     state.hls = hls;
 
-    hls.on(window.Hls.Events.MANIFEST_PARSED, function () {
+    hls.on(window.Hls.Events.MANIFEST_PARSED, function (_e, data) {
       playerMsg(null);
-      video.play().catch(function () { /* 等用户手势 */ });
+      renderQualityPicker(hls, data && data.levels);
+      resumeIfAny(video);
+      video.play().catch(function () {});
+    });
+
+    hls.on(window.Hls.Events.LEVEL_SWITCHED, function () {
+      highlightQuality(hls);
     });
 
     hls.on(window.Hls.Events.ERROR, function (_evt, data) {
@@ -673,7 +970,6 @@
         try { hls.recoverMediaError(); } catch (e) { tryPlayback(state.tryIdx + 1); }
         return;
       }
-      // 网络类致命错误：交下一级兜底
       var next = state.tryIdx + 1;
       if (next < TRIES.length) {
         playerMsg('播放失败，' + TRY_LABEL[TRIES[next]] + '…');
@@ -685,17 +981,96 @@
       playerMsg('<b>播放失败</b><br><code>' + esc(data.details || '') + '</code>');
     });
 
-    // direct 给原始地址；代理两级才需要改写后的播放列表
-    var srcUrl =
-      mode === 'direct'
-        ? p.epUrl
-        : playlistUrl(p.epUrl, p.api, mode === 'fullProxy');
-
-    hls.loadSource(srcUrl);
+    hls.loadSource(mode === 'direct' ? p.epUrl : playlistUrl(p.epUrl, p.api, mode === 'fullProxy'));
     hls.attachMedia(video);
   }
 
-  /* ══════════════════ 直播 ══════════════════ */
+  /** 播放器里的清晰度切换（hls.js 的 levels） */
+  function renderQualityPicker(hls, levels) {
+    var box = $('[data-tv-quality]');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!levels || levels.length < 2) { box.hidden = true; return; }
+    box.hidden = false;
+
+    var auto = document.createElement('button');
+    auto.type = 'button';
+    auto.className = 'tv-qbtn is-on';
+    auto.textContent = '自动';
+    auto.dataset.level = '-1';
+    auto.addEventListener('click', function () {
+      hls.currentLevel = -1;
+      highlightQuality(hls);
+    });
+    box.appendChild(auto);
+
+    // 高 → 低
+    levels.slice().sort(function (a, b) { return (b.height || 0) - (a.height || 0); }).forEach(function (lv, i) {
+      var real = levels.indexOf(lv);
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tv-qbtn';
+      b.textContent = lv.height ? lv.height + 'P' : (Math.round(lv.bitrate / 1000) + 'k');
+      b.title = (lv.height || '?') + 'P · ' + Math.round(lv.bitrate / 1000) + ' kbps';
+      b.dataset.level = String(real);
+      b.addEventListener('click', function () {
+        hls.currentLevel = real;
+        highlightQuality(hls);
+      });
+      box.appendChild(b);
+      void i;
+    });
+  }
+
+  function highlightQuality(hls) {
+    var box = $('[data-tv-quality]');
+    if (!box) return;
+    var cur = hls.currentLevel;
+    $$('.tv-qbtn', box).forEach(function (b) {
+      b.classList.toggle('is-on', Number(b.dataset.level) === cur);
+    });
+  }
+
+  /** 有进度记录就自动续播（同一集），并提示 */
+  function resumeIfAny(video) {
+    var c = state.cur;
+    if (!c) return;
+    var pr = findProgress(c.name, c.epName);
+    if (!pr || !pr.t || pr.t < 5) return;
+    var onLoaded = function () {
+      if (!video.duration || !isFinite(video.duration)) return;
+      // 已经快看完了就别续了，从头更合理
+      if (pr.t > video.duration - 15) return;
+      try { video.currentTime = pr.t; } catch (e) { return; }
+      toast('已从 ' + fmtTime(pr.t) + ' 继续播放');
+      video.removeEventListener('loadedmetadata', onLoaded);
+    };
+    if (video.readyState >= 1) onLoaded();
+    else video.addEventListener('loadedmetadata', onLoaded);
+  }
+
+  function fmtTime(s) {
+    s = Math.max(0, Math.round(s));
+    var m = Math.floor(s / 60);
+    var ss = s % 60;
+    return (m > 0 ? m + ' 分 ' : '') + ss + ' 秒';
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    var el = $('[data-tv-toast]');
+    if (!el) return;
+    el.textContent = msg;
+    el.hidden = false;
+    requestAnimationFrame(function () { el.classList.add('is-on'); });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      el.classList.remove('is-on');
+      setTimeout(function () { el.hidden = true; }, 250);
+    }, 2400);
+  }
+
+  /* ══════════════ 直播 ══════════════ */
 
   var liveLoaded = false;
 
@@ -710,18 +1085,13 @@
     getJson(BASE + '/live')
       .then(function (d) {
         var ok = (d.playlists || []).filter(function (p) { return p.ok && p.channels.length; });
-        if (!ok.length) {
-          status.textContent = '没有可用的直播源';
-          return;
-        }
+        if (!ok.length) { status.textContent = '没有可用的直播源'; return; }
         var total = ok.reduce(function (n, p) { return n + p.channels.length; }, 0);
         status.textContent = ok.length + ' 个源 · ' + total + ' 个频道';
         state.live = ok;
         renderLive('');
       })
-      .catch(function (e) {
-        status.textContent = '拉取失败：' + e.message;
-      });
+      .catch(function (e) { status.textContent = '拉取失败：' + e.message; });
   }
 
   function renderLive(q) {
@@ -757,8 +1127,7 @@
             var b = document.createElement('button');
             b.type = 'button';
             b.className = 'tv-ch';
-            b.innerHTML =
-              (ch.logo ? '<img class="tv-ch__logo" src="' + esc(ch.logo) + '" alt="" loading="lazy">' : '') +
+            b.innerHTML = (ch.logo ? '<img class="tv-ch__logo" src="' + esc(ch.logo) + '" alt="" loading="lazy">' : '') +
               '<span class="tv-ch__n">' + esc(ch.name) + '</span>';
             b.addEventListener('click', function () { playLive(ch); });
             list.appendChild(b);
@@ -773,20 +1142,15 @@
           more.type = 'button';
           more.className = 'tv-ch tv-ch--more';
           more.textContent = '展开其余 ' + (chs.length - PAGE) + ' 个';
-          more.addEventListener('click', function () {
-            addRange(PAGE, chs.length);
-            more.remove();
-          });
+          more.addEventListener('click', function () { addRange(PAGE, chs.length); more.remove(); });
           list.appendChild(more);
         }
-
         box.appendChild(sec);
       });
     });
 
     if (!shown) {
-      box.innerHTML = '<div class="tv-empty"><span class="tv-empty__big">📺</span>' +
-        '<div class="tv-empty__msg">没有匹配的频道</div></div>';
+      box.innerHTML = '<div class="tv-empty"><span class="tv-empty__big">📺</span><div class="tv-empty__msg">没有匹配的频道</div></div>';
     }
   }
 
@@ -794,39 +1158,28 @@
     var ov = $('[data-tv-player]');
     ov.hidden = false;
     state.eps = [];
+    state.cur = null;
     $('[data-tv-ptitle]').textContent = ch.name;
     $('[data-tv-pline]').textContent = '直播';
     $('[data-tv-peps]').innerHTML = '';
+    var q = $('[data-tv-quality]');
+    if (q) { q.innerHTML = ''; q.hidden = true; }
 
     var v = $('[data-tv-video]');
     teardownVideo();
     playerMsg('正在连接直播流…');
 
-    // 直播同样直连优先：Worker 出口取不动的流，访客自己的网络往往能取
     var attempts = [ch.url, playlistUrl(ch.url, '', true)];
     var i = 0;
-
     function tryLive() {
-      if (i >= attempts.length) {
-        playerMsg('<b>直播流不可用</b><br>换一个频道试试。');
-        return;
-      }
+      if (i >= attempts.length) { playerMsg('<b>直播流不可用</b><br>换一个频道试试。'); return; }
       var url = attempts[i];
       if (i > 0) playerMsg('直连失败，正在改走本站代理…');
-
       if (window.Hls && window.Hls.isSupported()) {
         if (state.hls) { try { state.hls.destroy(); } catch (e) { /* ignore */ } }
-        var hls = new window.Hls({
-          enableWorker: true,
-          liveSyncDurationCount: 3,
-          manifestLoadingTimeOut: 20000,
-          fragLoadingMaxRetry: 6,
-        });
+        var hls = new window.Hls({ enableWorker: true, liveSyncDurationCount: 3, manifestLoadingTimeOut: 20000, fragLoadingMaxRetry: 6 });
         state.hls = hls;
-        hls.on(window.Hls.Events.MANIFEST_PARSED, function () {
-          playerMsg(null);
-          v.play().catch(function () {});
-        });
+        hls.on(window.Hls.Events.MANIFEST_PARSED, function () { playerMsg(null); v.play().catch(function () {}); });
         hls.on(window.Hls.Events.ERROR, function (_e, data) {
           if (!data.fatal) return;
           try { hls.destroy(); } catch (e) { /* ignore */ }
@@ -842,49 +1195,42 @@
         v.play().catch(function () {});
       }
     }
-
     tryLive();
   }
 
-  /* ══════════════════ 源列表 ══════════════════ */
+  /* ══════════════ 源列表 ══════════════ */
 
   function renderSrcList() {
     var ul = $('[data-tv-srclist]');
     if (!ul) return;
     ul.innerHTML = '';
-
     state.sources.forEach(function (s) {
       var li = document.createElement('li');
       li.className = 'tv-srcitem';
       var on = !state.off.has(s.id);
       li.innerHTML =
-        '<button type="button" class="tv-srcitem__box' + (on ? ' is-on' : '') +
-        '" aria-label="启用/停用"></button>' +
+        '<button type="button" class="tv-srcitem__box' + (on ? ' is-on' : '') + '" aria-label="启用/停用"></button>' +
         '<div class="tv-srcitem__main">' +
         '<div class="tv-srcitem__n">' + esc(s.name) + '</div>' +
         '<div class="tv-srcitem__url">' + esc(s.api) + '</div>' +
         '</div>' +
         '<div class="tv-srcitem__note">' + esc(s.note || '') + '</div>';
-
       li.querySelector('.tv-srcitem__box').addEventListener('click', function (e) {
-        if (state.off.has(s.id)) state.off.delete(s.id);
-        else state.off.add(s.id);
+        if (state.off.has(s.id)) state.off.delete(s.id); else state.off.add(s.id);
         saveOff();
         e.currentTarget.classList.toggle('is-on', !state.off.has(s.id));
         renderSrcBar();
         updateCount();
       });
-
       ul.appendChild(li);
     });
   }
 
-  /* ══════════════════ 直播搜索 ══════════════════ */
-
+  var liveSearchBound = false;
   function bindLiveSearch() {
     var el = $('[data-tv-liveq]');
-    if (!el || el.dataset.bound === '1') return;
-    el.dataset.bound = '1';
+    if (!el || liveSearchBound) return;
+    liveSearchBound = true;
     var timer = null;
     el.addEventListener('input', function () {
       clearTimeout(timer);
@@ -892,14 +1238,13 @@
     });
   }
 
-  /* ══════════════════ 入口 ══════════════════ */
+  /* ══════════════ 入口 ══════════════ */
 
   function boot() {
     init();
     bindLiveSearch();
   }
 
-  // ClientRouter：首次加载与每次换页都会发这个事件。没有它（老浏览器/独立打开）就退回 DOMContentLoaded
   document.addEventListener('astro:page-load', boot);
   if (document.readyState !== 'loading') boot();
   else document.addEventListener('DOMContentLoaded', boot);
