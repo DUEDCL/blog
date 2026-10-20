@@ -33,7 +33,7 @@
   var MAX_Q_HIST = 12;
   var MAX_PROG = 30;
   var QUAL_TTL = 7 * 86400 * 1000;   // 清晰度缓存 7 天
-  var PROBE_TOP_N = 6;               // 最多探测前 N 个候选源，避免开详情页时发太多请求
+  var PROBE_TOP_N = 10;              // 探测前 N 个候选源；16 个源里探 10 个，兼顾覆盖与延迟
 
   /** @type {any} */
   var state = {

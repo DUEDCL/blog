@@ -131,6 +131,16 @@ export const VOD_SOURCES: VodSource[] = [
     api: 'https://subocaiji.com/api.php/provide/vod/',
     note: '直连 m3u8',
   },
+  {
+    /* 第三轮加入（2026-10-20 实测）：部分影片能到 1920x1080 / 6733 kbps，
+       是清单里码率最高的一档（其余多在 800 kbps ~ 4096 kbps）。
+       注意清晰度是**按片**变的：同一源对「流浪地球2」只有 1280x538 / 706 kbps。
+       所以它值不值，由前端实测后自动决定 —— 探测失败时自然不会被选中，加进来没有副作用。 */
+    id: '360zy',
+    name: '360 资源',
+    api: 'https://360zy.com/api.php/provide/vod/',
+    note: '高码率（个别片 6.7 Mbps）',
+  },
 ];
 
 /** 直播源（M3U 或 TVBOX `#genre#` txt）。实测 2026-10。 */
