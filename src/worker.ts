@@ -52,6 +52,8 @@ import { CONTENT } from './data/content.generated';
 import * as steps from './steps';
 /** 步数管家（多用户商用版）：独立 AppDB、独立 API（R48） */
 import { appApi, appAutoTick, adminAppGet, adminAppPost } from './app';
+/** 影视聚合（/tv）：十来个采集站并发搜索 + HLS 播放列表改写 */
+import { tvApi } from './lib/tv';
 
 /** DO 类必须从入口文件导出，`wrangler.toml` 的 `[exports.*]` 才找得到它们 */
 export { ChatLog } from './chat-log';
@@ -2476,6 +2478,19 @@ export default {
         return await appApi(request, env);
       } catch {
         return fail(500, '步数管家这边出了点问题');
+      }
+    }
+
+    /* 影视聚合（/tv 页面的取数接口）。独立一套：并发聚合 8 个采集站、
+       自己带熔断与缓存，与点歌台的「单上游」模型没有一处共用。
+       同样先做一遍同源检查 —— 这套接口会替访客去抓外站，不该被外站 iframe 借用。 */
+    if (url.pathname.startsWith('/api/tv/')) {
+      const from = request.headers.get('sec-fetch-site');
+      if (from && from !== 'same-origin') return fail(403, '只服务本站页面');
+      try {
+        return await tvApi(request, url);
+      } catch {
+        return fail(500, '影视聚合这边出了点问题');
       }
     }
 

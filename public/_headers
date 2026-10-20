@@ -126,3 +126,25 @@
 # 真要换文件就改个文件名（portal-v2.*）或去面板 Purge，都比赌 immutable 稳。
 /video/*
   Cache-Control: public, max-age=2592000
+
+# --- 影视聚合（/tv）：短鲜期 + 不进搜索 --------------------------------------
+# 这一页是纯静态壳（数据全靠 /api/tv/* 在浏览器里取），所以和别的 HTML 一样
+# 吃 60 秒鲜期。**不带尾斜杠的 `/tv` 单独给一条** —— splat 不匹配零段，
+# 与 /admin、/en 那两对同一个理由。
+#
+# `X-Robots-Tag: noindex` 是刻意的：这一页指向的是第三方公开接口，
+# 不该被搜索引擎当成站点内容去收录（也不该替那些源站做 SEO）。要放开就删这一行。
+# 与 /admin 的区别：/admin 是 no-store（登录态），这一页没有状态，正常缓存。
+/tv
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+  X-Robots-Tag: noindex, follow
+
+/tv/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=604800
+  X-Robots-Tag: noindex, follow
+
+# 播放器脚本与 hls.js：手工放进 public/，文件名里没有内容哈希，
+# 所以同样不敢加 immutable（换 hls.js 版本后老访客会拿不到新的）。
+# 7 天够用：这两个文件不是每次访问都变。
+/tv/*.js
+  Cache-Control: public, max-age=604800

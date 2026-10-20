@@ -59,6 +59,23 @@ const stepsHref = localePath(locale, '/tools/steps');
         </a>
       </li>
     )}
+    {/* 影视聚合（/tv）。同一条理由：只有中文形态，所以不挂 en/ja 入口。 */}
+    {locale === 'zh' && (
+      <li class="brief">
+        <a href="/tv">
+          <span class="brief__main">
+            <span class="brief__title">影视聚合</span>
+            <span class="brief__blurb">
+              多个公开采集站并发搜索，同名影片跨源合并；点开即播，另带直播频道。
+            </span>
+          </span>
+          <span class="brief__side">
+            <span class="chip">在线</span>
+            <span class="meta go">进入 →</span>
+          </span>
+        </a>
+      </li>
+    )}
   </ul>
 </BaseLayout>
 

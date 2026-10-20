@@ -1,0 +1,127 @@
+---
+/**
+ * 影视聚合（/tv）—— 常驻功能页。
+ *
+ * 位置选择：与 `/bushu` 同一个理由。这一页只有中文形态，不挂英文/日文入口
+ * （`tools/index.astro` 里那条例外注释写的就是这件事：「英文/日文页不挂入口，
+ * 避免把用户送进一页看不懂的界面」）。所以它放在根路径、不走 `[...locale]`。
+ *
+ * 这一页是**纯静态壳**：里面一个影片数据都没有，所有内容由浏览器向
+ * `/api/tv/*` 取。这样 `_headers` 能给它短鲜期缓存，而数据永远新鲜。
+ *
+ * 样式走 `src/styles/tv.css`，全部用站点既有的 CSS 变量
+ * （--paper / --ink / --seal / --rule / --font-mono …），所以四套版次
+ * （夜刊 / 晨版 / 胶片 / 霓虹）自动成立，不需要为这一页再写一遍配色。
+ *
+ * 客户端逻辑在 `public/tv/app.js`（不进构建，按原样发）。
+ * 用 `is:inline` 是为了不被 Astro 打包改写 —— 这份脚本用 `astro:page-load`
+ * 自己处理 ClientRouter 的换页重入。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import '../styles/tv.css';
+---
+
+<BaseLayout
+  title="影视 · 沉麟"
+  description="聚合多个公开采集站的影视搜索与播放，另带直播频道。"
+  footerNote="片子来自第三方公开接口，本站只做检索与播放。"
+>
+  <div class="tv" data-tv>
+    <header class="tv-head">
+      <div class="tv-head__row">
+        <span class="tv-kicker">工具 · 影视聚合</span>
+        <span class="tv-kicker" data-tv-count>—</span>
+      </div>
+      <h1 class="tv-title">影视<em>.</em></h1>
+      <p class="tv-lead">
+        多个公开采集站并发搜索，同名影片跨源合并；线路自动挑能直接播的那条。
+        另带直播频道。
+      </p>
+      <div class="pressrule"></div>
+    </header>
+
+    <div class="tv-tabs" role="tablist">
+      <button class="tv-tab is-on" data-tv-tab="search" role="tab">影视</button>
+      <button class="tv-tab" data-tv-tab="live" role="tab">直播</button>
+      <button class="tv-tab" data-tv-tab="sources" role="tab">资源</button>
+    </div>
+
+    <!-- ═══════════ 影视 ═══════════ -->
+    <section class="tv-view is-on" data-tv-view="search">
+      <form class="tv-search" data-tv-form>
+        <input
+          class="tv-search__input"
+          data-tv-q
+          type="search"
+          placeholder="搜片名，如 庆余年 / 流浪地球 / 繁花"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="搜索关键词"
+        />
+        <button class="tv-search__btn" type="submit">搜索</button>
+      </form>
+
+      <div class="tv-srcbar" data-tv-srcbar></div>
+      <p class="tv-status" data-tv-status></p>
+
+      <div class="tv-hot" data-tv-hot></div>
+
+      <div class="tv-grid" data-tv-grid></div>
+      <div class="tv-empty" data-tv-empty hidden></div>
+    </section>
+
+    <!-- ═══════════ 直播 ═══════════ -->
+    <section class="tv-view" data-tv-view="live">
+      <div class="tv-livetools">
+        <input
+          class="tv-search__input"
+          data-tv-liveq
+          type="search"
+          placeholder="搜频道，如 CCTV / 湖南卫视 / 凤凰"
+          autocomplete="off"
+          aria-label="搜索频道"
+        />
+        <span class="tv-status tv-status--inline" data-tv-livestatus></span>
+      </div>
+      <div data-tv-livebody></div>
+    </section>
+
+    <!-- ═══════════ 资源 ═══════════ -->
+    <section class="tv-view" data-tv-view="sources">
+      <p class="tv-hint">
+        点播源按延迟排序。勾掉不想搜的源 —— 选择记在浏览器本地，不动服务端配置。
+        失效的源会在搜索时自动熔断（连续失败两次冷却五分钟）。
+      </p>
+      <ul class="tv-srclist" data-tv-srclist></ul>
+      <p class="tv-hint">
+        另：资源站换域名是常态。若整页都搜不到东西，多半是清单整体过期了。
+      </p>
+    </section>
+  </div>
+</BaseLayout>
+
+<!-- ═══════════ 详情抽屉 ═══════════ -->
+<div class="tv-mask" data-tv-mask hidden></div>
+<aside class="tv-drawer" data-tv-drawer hidden aria-modal="true" role="dialog" aria-label="影片详情">
+  <button class="tv-drawer__close" data-tv-dclose aria-label="关闭">✕</button>
+  <div class="tv-drawer__scroll" data-tv-dbody></div>
+</aside>
+
+<!-- ═══════════ 播放器 ═══════════ -->
+<div class="tv-player" data-tv-player hidden>
+  <div class="tv-player__top">
+    <span class="tv-player__title" data-tv-ptitle>播放中</span>
+    <span class="tv-player__line" data-tv-pline></span>
+    <button class="tv-icon" data-tv-pprev title="上一集" aria-label="上一集">⏮</button>
+    <button class="tv-icon" data-tv-pnext title="下一集" aria-label="下一集">⏭</button>
+    <button class="tv-icon" data-tv-pclose title="关闭" aria-label="关闭">✕</button>
+  </div>
+  <div class="tv-player__stage">
+    <video data-tv-video controls playsinline preload="metadata"></video>
+    <div class="tv-player__msg" data-tv-pmsg hidden></div>
+  </div>
+  <div class="tv-player__eps" data-tv-peps></div>
+</div>
+
+<script is:inline src="/tv/hls.min.js"></script>
+<script is:inline src="/tv/app.js"></script>
