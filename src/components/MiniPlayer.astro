@@ -567,7 +567,16 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
 
     /** 门是满屏画面，合适的位置与正站本来就不同，所以两把键分开存 */
     const isPortal = () => !!document.querySelector('[data-portal]');
-    const foldKey = () => (isPortal() ? 'music:mini:portal' : 'music:mini');
+
+    /**
+     * 折叠态键。**2026-10-20 升到 v2**：
+     * 站主要求「默认只显示唱片封面」，默认值已改成吸附态（`'2'`）。
+     * 但老访客的 localStorage 里存着 v1 时期的 `'0'`（展开）/`'1'`（药丸），
+     * `prefFold()` 会优先读它 —— 结果就是「改了默认值对他不生效」。
+     * 换键名让旧值自然失效，新的默认值才能真正落地；代价是老访客的折叠偏好被重置一次。
+     */
+    const foldKey = () => (isPortal() ? 'music:mini2:portal' : 'music:mini2');
+    /* 位置键**不升版**：位置不是这次要改的东西，老访客把它拖到哪就还在哪 */
     const posKey = () => (isPortal() ? 'music:pos:portal' : 'music:pos');
 
     const read = (k: string) => {

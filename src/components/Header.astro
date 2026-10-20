@@ -74,11 +74,94 @@ function isCurrent(href: string) {
       {/* R44 把版次键加了回来（R31 砍掉浅色时连它一起删了）；R46 在它左边多了一枚
           语言键。位置都在导航右侧 —— `.brand` 的 `margin-right: auto` 把导航推到
           右侧，这两枚跟在导航后面。窄屏时它们与品牌同一行（导航折到下面整行）。 */}
+      {/* 账号位（R: 站点登录式）。未登录显示「登录」，已登录显示昵称/账号。
+          放这里而不是塞进 nav：nav 是页面导航，账号不是页面。
+          样式复用 global.css 的 `.topkey`（与语言/版次两枚键同一套长相），
+          所以三枚并排看起来是一组。 */}
+      <a class="topkey acct" href="/login" data-acct title="账号">
+        <span class="acct__dot" aria-hidden="true"></span>
+        <span class="acct__text">登录</span>
+      </a>
       <LangSwitch />
       <ThemeSwitch />
     </div>
   </div>
 </header>
+
+<script>
+  /**
+   * 顶栏账号位的状态。
+   *
+   * 站点是静态渲染的，服务端不知道登录态（会话在 cookie 里、由 Worker 判），
+   * 所以这一格先渲染成「登录」，再由浏览器问一次 `/api/site/me` 改文案。
+   *
+   * **必须挂 `astro:page-load`**：全站走 ClientRouter，这个模块脚本只在首次执行一次，
+   * 换页后的新 Header 节点没被绑过 —— 表现是「只有第一页显示昵称，导航后就变回登录」。
+   */
+  const paintAccount = () => {
+    const el = document.querySelector<HTMLAnchorElement>('[data-acct]');
+    if (!el) return;
+    const text = el.querySelector('.acct__text');
+    fetch('/api/site/me', { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((d) => {
+        const u = d && d.user;
+        if (u) {
+          el.classList.add('is-in');
+          el.title = '已登录：' + (u.nick || u.account);
+          if (text) text.textContent = u.nick || u.account;
+        } else {
+          el.classList.remove('is-in');
+          el.title = '未登录，点这里登录';
+          if (text) text.textContent = '登录';
+        }
+      })
+      .catch(() => {
+        /* 接口挂了就当未登录，不要因此把顶栏弄坏 */
+      });
+  };
+
+  document.addEventListener('astro:page-load', paintAccount);
+  if (document.readyState !== 'loading') paintAccount();
+  else document.addEventListener('DOMContentLoaded', paintAccount);
+</script>
+
+<style>
+  /* 账号位：一枚小圆点表示登录态（灰=未登录，朱红=已登录）+ 一段可能很长的名字 */
+  .acct {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    max-width: 10rem;
+  }
+
+  .acct__dot {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    flex-shrink: 0;
+    transition: background-color 0.2s ease;
+  }
+
+  .acct.is-in .acct__dot {
+    background: var(--seal);
+  }
+
+  .acct__text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 40rem) {
+    /* 窄屏三枚键一起挤：名字截短，圆点保留 —— 圆点才是「登没登录」的那个信号 */
+    .acct {
+      max-width: 4.8rem;
+    }
+  }
+</style>
 
 <style>
   .site-header {
