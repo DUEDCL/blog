@@ -675,14 +675,15 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
     };
 
     /**
-     * 折叠态的默认值。用户自己点过就以他的为准（存在 localStorage 里）；没点过：     *   - 门上默认收叠 —— 站主原话「在启动页默认为收叠药丸状态」；
-     *   - 窄屏正站也默认收叠 —— 展开态在 375 屏上占 22%，「占屏比太高」说的就是它；
-     *   - 宽屏正站照旧展开（那儿右下角这块地本来就是空的）。
+     * 折叠态的默认值。用户自己点过就以他的为准（存在 localStorage 里）；没点过：
+     *   - **站主要求「默认最小状态、只显示唱片封面」→ 吸附态**（`is-dock`，一枚封面圆）。
+     *     这是 2026-10-20 改的，取代了原来「门上/窄屏收叠、宽屏展开」那套判定。
+     *     存值语义：`'0'` 全展开 / `'1'` 药丸 / `'2'` 吸附成封面圆。
      */
     const prefFold = () => {
       const saved = read(foldKey());
-      if (saved !== null) return saved === '1';
-      return isPortal() || matchMedia('(max-width: 40rem)').matches;
+      if (saved === '0' || saved === '1' || saved === '2') return saved;
+      return '2';
     };
 
     /* ---------- 三个形态：全展开 / 药丸 / 吸附（R28） ----------------------
@@ -727,10 +728,16 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
       room();
     };
 
-    /** 封面与「卡片空白处」共用的动作：吸附态先退出吸附，其余情况在前两态之间翻 */
+    /**
+     * 封面与「卡片空白处」共用的动作：吸附态先退出吸附，其余情况在前两态之间翻。
+     *
+     * **从吸附态点开时要落盘 `'0'`**：不写的话 `prefFold()` 仍是「没存过」，
+     * 下次 `reflow()`（换页/刷新）会把它又吸回封面圆 —— 用户明明点开过。
+     */
     const flip = () => {
       if (root.classList.contains('is-dock')) {
         setDock(false);
+        write(foldKey(), '0');
         return;
       }
       const on = !root.classList.contains('is-fold');
@@ -940,9 +947,19 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
      */
     const reflow = () => {
       show();
-      // 吸附态不跨页也不跨刷新（R28 站主定的「不记住」）
-      setDock(false);
-      setFold(prefFold());
+      const pref = prefFold();
+      if (pref === '2') {
+        /* 吸附态现在也是默认态，所以**不再无条件撤掉它**（原来 R28 那句「跨页不记住」
+           已被站主的「默认最小状态」取代）。
+           没存过位置就给一个右边缘居中的起点 —— 存的是「边 + 比例」不是像素，
+           所以转屏、改窗口都不会把它甩出屏幕（见 readPos/applyPos 的注释）。 */
+        if (!readPos()) write(posKey(), JSON.stringify({ edge: 'right', t: 0.5 }));
+        setFold(true); // 先按药丸的尺寸收好，吸附圆的基准尺寸才是对的
+        setDock(true);
+      } else {
+        setDock(false);
+        setFold(pref === '1');
+      }
     };
     reflow();
     document.addEventListener('astro:after-swap', reflow);

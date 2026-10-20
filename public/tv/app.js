@@ -28,6 +28,7 @@
     q: 'tv:q',            // 搜索历史
     prog: 'tv:prog',      // 播放进度 / 历史
     qual: 'tv:qual',      // 清晰度探测缓存
+    sort: 'tv:sort',      // 结果排序偏好
   };
   var HOT = ['庆余年', '流浪地球', '繁花', '狂飙', '三体', '沙丘', '阿凡达', '抓娃娃'];
   var MAX_Q_HIST = 12;
@@ -53,7 +54,19 @@
     pendingPlay: null,
     probe: {},            // `${srcId}:${vodId}` → {w,h,bw,ms} 本次会话的探测结果
     autoPicked: false,    // 详情页是否已按探测结果自动换源
+    sort: 'rel',          // 结果排序：rel 推荐 / rating 评分 / srcs 源数 / name 名称
+    baseRate: 1,          // 常驻倍速（点倍速按钮轮换）
+    holdingBoost: false,  // 是否处于「长按右箭头」的临时快放
   };
+
+  var SORTS = [
+    { id: 'rel', label: '推荐' },
+    { id: 'rating', label: '评分' },
+    { id: 'srcs', label: '源最多' },
+    { id: 'name', label: '名称' },
+  ];
+  var RATES = [1, 1.5, 2, 3];
+  var HOLD_RATE = 3;      // 长按右箭头时的临时倍速
 
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
@@ -91,6 +104,8 @@
       var raw = localStorage.getItem(LS.off);
       state.off = new Set(raw ? JSON.parse(raw) : []);
     } catch (e) { state.off = new Set(); }
+    var s = readLS(LS.sort, 'rel');
+    state.sort = SORTS.some(function (x) { return x.id === s; }) ? s : 'rel';
   }
   function saveOff() { writeLS(LS.off, Array.from(state.off)); }
 
@@ -507,6 +522,48 @@
       });
   }
 
+  /** 按当前排序偏好返回 [{g, idx}]；idx 是它在 state.groups 里的原始下标（开详情要用） */
+  function sortedView() {
+    var items = state.groups.map(function (g, idx) { return { g: g, idx: idx }; });
+    var mode = state.sort;
+    items.sort(function (a, b) {
+      if (mode === 'rating') {
+        return (b.g.rating || 0) - (a.g.rating || 0) || b.g.score - a.g.score;
+      }
+      if (mode === 'srcs') {
+        return b.g.candidates.length - a.g.candidates.length || b.g.score - a.g.score;
+      }
+      if (mode === 'name') {
+        return String(a.g.name).localeCompare(String(b.g.name), 'zh');
+      }
+      return b.g.score - a.g.score; // 推荐：服务端算好的相关性打分
+    });
+    return items;
+  }
+
+  /** 排序条：只在有结果时出现 */
+  function renderSortBar() {
+    var bar = $('[data-tv-sortbar]');
+    if (!bar) return;
+    if (!state.groups.length) { bar.hidden = true; return; }
+    bar.hidden = false;
+    // 只重建按钮，保留「排序」这个标签节点
+    $$('.tv-sort', bar).forEach(function (b) { b.remove(); });
+    SORTS.forEach(function (s) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tv-sort' + (state.sort === s.id ? ' is-on' : '');
+      b.textContent = s.label;
+      b.addEventListener('click', function () {
+        state.sort = s.id;
+        writeLS(LS.sort, s.id);
+        renderSortBar();
+        renderCards();
+      });
+      bar.appendChild(b);
+    });
+  }
+
   function renderCards() {
     var grid = $('[data-tv-grid]');
     grid.innerHTML = '';
@@ -522,10 +579,14 @@
     }
     $('[data-tv-empty]').hidden = true;
 
-    state.groups.forEach(function (g, i) {
+    renderSortBar();
+
+    sortedView().forEach(function (item, order) {
+      var g = item.g;
+      var i = item.idx;
       var card = document.createElement('div');
       card.className = 'tv-card';
-      card.style.animationDelay = Math.min(i * 16, 320) + 'ms';
+      card.style.animationDelay = Math.min(order * 16, 320) + 'ms';
 
       var n = g.candidates.length;
       var best = g.candidates.filter(function (c) { return c.hasHls; }).length;
@@ -541,6 +602,7 @@
         '</div>' +
         '<div class="tv-card__title">' + esc(g.name) + '</div>' +
         '<div class="tv-card__meta">' +
+        (g.rating > 0 ? '<span class="tv-rate">★ ' + g.rating + '</span> ' : '') +
         esc([g.typeName, g.area, g.year].filter(Boolean).join(' · ') || '—') +
         (best ? ' · ' + best + ' 可直连' : '') +
         '</div>';
@@ -786,6 +848,32 @@
     });
     $('[data-tv-mask]').addEventListener('click', closeDetail);
     $('[data-tv-dclose]').addEventListener('click', closeDetail);
+
+    // 倍速按钮：点按轮换常驻倍速
+    var speedBtn = $('[data-tv-speedbtn]');
+    if (speedBtn) speedBtn.addEventListener('click', cycleRate);
+
+    /* 长按右箭头 = 临时 HOLD_RATE 快放，松手回到常驻倍速。
+       **必须 preventDefault**：浏览器对 ArrowRight 的原生行为是「快进 5 秒」，
+       不拦的话按住会变成一路跳着走，而不是快放。 */
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowRight') return;
+      var ov = $('[data-tv-player]');
+      if (!ov || ov.hidden) return;
+      var t = e.target;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '')) return;
+      e.preventDefault();
+      if (state.holdingBoost) return; // 忽略键盘自动重复
+      state.holdingBoost = true;
+      applyRate(HOLD_RATE);
+      toast('长按快放 ' + HOLD_RATE + '×，松手恢复');
+    });
+    document.addEventListener('keyup', function (e) {
+      if (e.key !== 'ArrowRight' || !state.holdingBoost) return;
+      state.holdingBoost = false;
+      applyRate(state.baseRate);
+    });
+
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (!$('[data-tv-player]').hidden) { closePlayer(); return; }
@@ -800,6 +888,24 @@
     }, 5000);
     v.addEventListener('pause', persistProgress);
     v.addEventListener('ended', persistProgress);
+  }
+
+  /** 设置播放倍速并同步按钮文案 */
+  function applyRate(r) {
+    var v = $('[data-tv-video]');
+    var btn = $('[data-tv-speedbtn]');
+    var wrap = $('[data-tv-speed]');
+    if (v) { try { v.playbackRate = r; } catch (e) { /* 某些容器不允许 */ } }
+    if (btn) btn.textContent = (Math.round(r * 10) / 10) + '×';
+    if (wrap) wrap.classList.toggle('is-boost', r > state.baseRate + 0.01);
+  }
+
+  /** 点按轮换常驻倍速：1× → 1.5× → 2× → 3× */
+  function cycleRate() {
+    var i = RATES.indexOf(state.baseRate);
+    state.baseRate = RATES[(i + 1) % RATES.length];
+    applyRate(state.baseRate);
+    toast('倍速 ' + state.baseRate + '×');
   }
 
   function persistProgress() {
@@ -911,7 +1017,10 @@
   function startPlayback(epUrl, api) {
     teardownVideo();
     state.pendingPlay = { epUrl: epUrl, api: api };
+    // 换集/换源后倍速回到常驻档（而不是沿用上一次长按的临时快放）
+    state.holdingBoost = false;
     tryPlayback(0);
+    applyRate(state.baseRate);
   }
 
   function tryPlayback(i) {

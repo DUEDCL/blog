@@ -65,6 +65,9 @@ import '../styles/tv.css';
       <div class="tv-qhist" data-tv-qhist hidden></div>
 
       <div class="tv-srcbar" data-tv-srcbar></div>
+      <div class="tv-sortbar" data-tv-sortbar hidden>
+        <span class="tv-sortbar__label">排序</span>
+      </div>
       <p class="tv-status" data-tv-status></p>
 
       <!-- 继续观看（按本地播放记录） -->
@@ -120,6 +123,10 @@ import '../styles/tv.css';
     <span class="tv-player__line" data-tv-pline></span>
     <!-- 清晰度切换：由 hls.js 的 levels 动态填充，只有多码率时才显示 -->
     <span class="tv-quality" data-tv-quality hidden></span>
+    <!-- 倍速：长按 → 不等（键盘按住 → 临时快放），点按轮换常驻倍速 -->
+    <span class="tv-speed" data-tv-speed>
+      <button class="tv-icon tv-speed__btn" data-tv-speedbtn title="点按切换倍速，长按右箭头临时快放" aria-label="播放倍速">1×</button>
+    </span>
     <button class="tv-icon" data-tv-pprev title="上一集" aria-label="上一集">⏮</button>
     <button class="tv-icon" data-tv-pnext title="下一集" aria-label="下一集">⏭</button>
     <button class="tv-icon" data-tv-pclose title="关闭" aria-label="关闭">✕</button>

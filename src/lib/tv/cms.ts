@@ -86,6 +86,8 @@ export interface Candidate {
   firstHlsUrl: string;
   /** 该候选所有 HLS 线路的标签，用于展示（如 `ffm3u8`、`4K`） */
   hlsLabels: string[];
+  /** 资源站给的评分原值（MacCMS 的 `vod_score`，常为空或 `0.0`/`8.7`） */
+  rating: string;
 }
 
 export interface Group {
@@ -97,6 +99,8 @@ export interface Group {
   area: string;
   remarks: string;
   score: number;
+  /** 影片评分（取各源 `vod_score` 的最大值；全都没有就是 0）。**不是**排序打分 `score` */
+  rating: number;
   candidates: Candidate[];
 }
 
@@ -452,6 +456,7 @@ export function fuse(items: Vod[], q: string): Group[] {
         area: v.area,
         remarks: v.remarks,
         score: 0,
+        rating: 0,
         candidates: [],
       };
       map.set(key, g);
@@ -476,6 +481,7 @@ export function fuse(items: Vod[], q: string): Group[] {
       episodeCount: v.lines.reduce((n, l) => n + l.episodes.length, 0),
       firstHlsUrl: hlsLines[0]?.episodes[0]?.url ?? '',
       hlsLabels: hlsLines.map((l) => l.from),
+      rating: v.score,
     });
   }
 
@@ -485,6 +491,13 @@ export function fuse(items: Vod[], q: string): Group[] {
     g.score = scoreGroup(g, q);
     // 卡片备注取「最可播那个候选」的备注
     if (!g.remarks) g.remarks = g.candidates[0]?.remarks ?? '';
+    // 评分取各源最大值（不同源给的 vod_score 常常只有一个源有值）
+    let best = 0;
+    for (const c of g.candidates) {
+      const n = Number(c.rating);
+      if (Number.isFinite(n) && n > best) best = n;
+    }
+    g.rating = Math.round(best * 10) / 10;
   }
 
   groups.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));

@@ -1165,6 +1165,72 @@
   transform: translateX(-50%) translateY(0);
 }
 
+/* ══════════════ 排序条 ══════════════ */
+.tv-sortbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.36rem;
+  margin: 0 0 var(--sp-3, 0.75rem);
+}
+
+.tv-sortbar__label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  margin-right: 0.2rem;
+}
+
+.tv-sort {
+  padding: 0.2em 0.62em;
+  border: var(--rule-w, 1px) solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.tv-sort:hover {
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+.tv-sort.is-on {
+  border-color: var(--seal);
+  background: var(--seal-wash);
+  color: var(--seal);
+}
+
+/* 卡片上的评分 */
+.tv-rate {
+  color: var(--seal);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* ══════════════ 倍速 ══════════════ */
+.tv-speed {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.tv-speed__btn {
+  min-width: 2.6rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* 长按快放中：按钮变色提示「现在是临时倍速」 */
+.tv-speed.is-boost .tv-speed__btn {
+  border-color: #f0b429;
+  color: #f0b429;
+  background: rgba(240, 180, 41, 0.16);
+}
+
 /* ══════════════ 响应式 ══════════════ */
 @media (max-width: 46rem) {
   .tv-grid {
