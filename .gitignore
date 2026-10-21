@@ -47,3 +47,9 @@ pnpm-debug.log*
 # 派生物，不进仓库：进了就等于每改一篇文章都要提交一份全站原文的副本。
 # `npm run dev` 与 `npm run build` 都会先生成它，部署流程第一步就是 build，所以线上不会缺。
 src/data/content.generated.ts
+
+# 本机会话产生的临时目录（不进仓库）。
+# `.agents/` 是设计/调研类技能在本机留下的工作目录；`preview/` 是本地预览产物。
+# 两者都不是站点的一部分，提交它们只会让 `git status` 长期脏着。
+.agents/
+preview/
