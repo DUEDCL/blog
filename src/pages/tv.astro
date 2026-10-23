@@ -22,20 +22,20 @@ import '../styles/tv.css';
 ---
 
 <BaseLayout
-  title="影视 · 沉麟"
-  description="聚合多个公开采集站的影视搜索与播放，另带直播频道。"
-  footerNote="片子来自第三方公开接口，本站只做检索与播放。"
+  title="沉麟看剧 · 沉麟"
+  description="沉麟看剧：聚合多个公开采集站的影视搜索与播放，另带直播频道。"
+  footerNote="片子来自第三方公开接口，沉麟看剧只做检索与播放。"
 >
   <div class="tv" data-tv>
     <header class="tv-head glass-card">
       <div class="tv-head__row">
-        <span class="tv-kicker">工具 · 影视聚合</span>
+        <span class="tv-kicker">工具 · 沉麟看剧</span>
         <span class="tv-kicker" data-tv-count>—</span>
       </div>
-      <h1 class="tv-title">影视<em>.</em></h1>
+      <h1 class="tv-title">沉麟看剧<em>.</em></h1>
       <p class="tv-lead">
-        多个公开采集站并发搜索，同名影片跨源合并；线路自动挑能直接播的那条。
-        另带直播频道。
+        多个公开采集站并发搜索，同名影片跨源合并；自动挑清晰度最高的那条线路，
+        播不了的源不再占着位置。搜索与播放记录按账号分开，换设备也接着看。
       </p>
       <div class="pressrule"></div>
     </header>
@@ -123,12 +123,15 @@ import '../styles/tv.css';
     <span class="tv-player__line" data-tv-pline></span>
     <!-- 清晰度切换：由 hls.js 的 levels 动态填充，只有多码率时才显示 -->
     <span class="tv-quality" data-tv-quality hidden></span>
-    <!-- 倍速：长按 → 不等（键盘按住 → 临时快放），点按轮换常驻倍速 -->
+    <!-- 画质：默认锁最高码率（不掉档）；「增强」只是对比度/饱和度的轻微提升 -->
+    <button class="tv-icon tv-icon--wide" data-tv-qmode title="画质优先：锁最高码率" aria-label="画质策略">画质优先</button>
+    <button class="tv-icon tv-icon--wide is-on" data-tv-enhance title="观感增强：不改变实际分辨率" aria-label="观感增强">增强开</button>
+    <!-- 倍速：点按轮换常驻倍速；长按这颗键（或按住键盘 →）临时加速 -->
     <span class="tv-speed" data-tv-speed>
-      <button class="tv-icon tv-speed__btn" data-tv-speedbtn title="点按切换倍速，长按右箭头临时快放" aria-label="播放倍速">1×</button>
+      <button class="tv-icon tv-speed__btn" data-tv-speedbtn title="点按切换倍速；长按右边的 ⏭ 临时加速" aria-label="播放倍速">1×</button>
     </span>
     <button class="tv-icon" data-tv-pprev title="上一集" aria-label="上一集">⏮</button>
-    <button class="tv-icon" data-tv-pnext title="下一集" aria-label="下一集">⏭</button>
+    <button class="tv-icon" data-tv-pnext title="点按下一集，长按加速播放" aria-label="下一集 / 长按加速">⏭</button>
     <button class="tv-icon" data-tv-pclose title="关闭" aria-label="关闭">✕</button>
   </div>
   <div class="tv-player__stage">

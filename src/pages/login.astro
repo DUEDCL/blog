@@ -43,7 +43,7 @@ import '../styles/login.css';
     </div>
 
     <!-- 未登录 -->
-    <div class="lg-panel" data-panel="form" hidden>
+    <div class="lg-panel" data-panel="form">
       <div class="lg-tabs" role="tablist">
         <button class="lg-tab is-on" type="button" data-tab="login" role="tab">登录</button>
         <button class="lg-tab" type="button" data-tab="register" role="tab">邀请码注册</button>
@@ -88,9 +88,21 @@ import '../styles/login.css';
   </div>
 </BaseLayout>
 
-<script is:inline>
+<script is:inline data-astro-rerun>
+  /**
+   * ⚠ 这里的两个细节都是 bug 修出来的，不要改回去：
+   *
+   * ① `data-astro-rerun` 不能删。全站走 ClientRouter（SPA 换页），而 Astro 对
+   *    `is:inline` 脚本的默认行为是**只执行一次** —— 从别的页面点进 /login 时，
+   *    这段脚本压根不跑，于是两块面板都停在模板的 `hidden` 上：页面只剩标题，
+   *    表单与「当前账号」一个都不出现。这就是「登录界面经常信息显示不完全」。
+   * ② 表单在模板里**默认可见**（没有 hidden），JS 只在确认已登录后才换成账号面板。
+   *    这样即使接口慢、脚本没跑、JS 被禁用，看到的也是一个能用的登录表单。
+   */
   (function () {
     'use strict';
+
+    function boot() {
     var root = document.querySelector('[data-lg]');
     if (!root || root.dataset.ready === '1') return;
     root.dataset.ready = '1';
@@ -215,5 +227,14 @@ import '../styles/login.css';
       .catch(function () {
         $('[data-panel="form"]').hidden = false;
       });
+    }
+
+    /* 首屏与每次 SPA 换页都跑一遍；boot() 自带 data-ready 守卫，重复调用无害 */
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot, { once: true });
+    } else {
+      boot();
+    }
+    document.addEventListener('astro:page-load', boot);
   })();
 </script>

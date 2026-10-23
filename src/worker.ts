@@ -56,7 +56,9 @@ import { appApi, appAutoTick, adminAppGet, adminAppPost } from './app';
 import { tvApi } from './lib/tv';
 /** 站点账号（登录式）：/api/site/* 与准入判断 */
 import { loginRedirect, needsLogin, siteApi } from './lib/site-api';
-import { currentUser } from './lib/site-auth';
+import { currentUser, siteCall } from './lib/site-auth';
+/** 实时内容层：线上稿的 Markdown 渲染（R52） */
+import { renderLivePage } from './lib/live';
 /** 后台的站点账号管理（邀请码 / 用户） */
 import { adminSite } from './lib/site-admin';
 
@@ -550,7 +552,7 @@ function ip64(ip: string): string {
 const TAB_RE = /^[0-9a-zA-Z_-]{8,64}$/;
 
 /** 知识库在 isolate 里缓存 5 分钟，省掉每次对话都读一遍 `/kb.json` 的 subrequest */
-const KB_TTL_MS = 5 * 60 * 1000;
+const KB_TTL_MS = 60 * 1000;
 let kbCache: { at: number; items: KbItem[] } | null = null;
 
 /**
@@ -566,6 +568,35 @@ async function loadKb(env: Env, base: string): Promise<KbItem[]> {
 
   const data = (await res.json()) as { items?: KbItem[] };
   const items = Array.isArray(data.items) ? data.items : [];
+
+  /* R52：把后台写进 DO 的「线上知识库」并进来 —— 按 question 覆盖，新的追加。
+     这样在后台改一条，分身一分钟内就用上了，不用部署。
+     读 DO 失败不算错：静态那一份照旧可用。 */
+  try {
+    const live = await siteCall(env as unknown as { SITE: Env['SITE'] }, '/kb-live-list');
+    const rows = (live.rows as { question?: string; answer?: string; topic?: string; aliases?: string; status?: number }[]) ?? [];
+    const byQ = new Map<string, KbItem>();
+    for (const it of items) byQ.set(it.q, it);
+    for (const r of rows) {
+      if (Number(r.status ?? 1) !== 1) continue;
+      const q2 = String(r.question ?? '').trim();
+      if (!q2) continue;
+      /* KbItem 的字段名是 q / a（与 /kb.json 一致），不是 question / answer */
+      byQ.set(q2, {
+        q: q2,
+        a: String(r.answer ?? ''),
+        topic: String(r.topic ?? ''),
+        aliases: String(r.aliases ?? '')
+          .split(/[,，\s]+/)
+          .filter(Boolean),
+      });
+    }
+    items.length = 0;
+    items.push(...byQ.values());
+  } catch {
+    /* 线上那一份取不到就只用静态的 */
+  }
+
   // 空知识库比答错更糟：那会让模型完全靠自己编，而 R32 允许它编的前提是「有底座」
   if (!items.length) throw new Error('知识库是空的');
 
@@ -2124,6 +2155,31 @@ async function admin(req: Request, env: Env): Promise<Response> {
     }
   }
 
+  /* ── 实时内容层（R52）：后台的读接口 ─────────────────────────────── */
+  if (path === 'content-live-list') {
+    const d = await siteCall(env as unknown as { SITE: Env['SITE'] }, '/content-live-list');
+    return json(d, CACHE.none);
+  }
+
+  if (path === 'content-live-get') {
+    const sp = new URL(req.url).searchParams;
+    const d = await siteCall(env as unknown as { SITE: Env['SITE'] }, '/content-live-get', {
+      coll: sp.get('coll') ?? '',
+      slug: sp.get('slug') ?? '',
+    });
+    return json(d, CACHE.none);
+  }
+
+  if (path === 'kb-live-list') {
+    const d = await siteCall(env as unknown as { SITE: Env['SITE'] }, '/kb-live-list');
+    return json(d, CACHE.none);
+  }
+
+  if (path === 'media-list') {
+    const d = await siteCall(env as unknown as { SITE: Env['SITE'] }, '/media-list');
+    return json(d, CACHE.none);
+  }
+
   return adminWrite(req, env, path);
 }
 
@@ -2449,6 +2505,69 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
     if (res) return res;
   }
 
+  /* ── 实时内容层（R52）：后台的写接口 ───────────────────────────────
+     发布 = 写进 DO 的 content_live，线上 /live/<coll>/<slug> 立刻可看。
+     图片 = 浏览器端先压到 1600px 以内、转 WebP，再 base64 上传（DO 单行 BLOB 吃得下）。 */
+  const SITE_ENV = env as unknown as { SITE: Env['SITE'] };
+
+  if (path === 'content-live-put') {
+    const coll = String(b.coll ?? '');
+    const slug = String(b.slug ?? '').trim();
+    if (!slug) return fail(400, '缺 slug');
+    const r = await siteCall(SITE_ENV, '/content-live-put', {
+      coll,
+      slug,
+      title: String(b.title ?? slug),
+      front: typeof b.front === 'string' ? b.front : '',
+      body: typeof b.body === 'string' ? b.body : '',
+      status: b.status === 0 || b.status === '0' ? 0 : 1,
+    });
+    if (r.ok === false) return fail(400, String(r.error ?? '没发上去'));
+    return json({ ok: true, url: '/live/' + coll + '/' + slug }, CACHE.none);
+  }
+
+  if (path === 'content-live-del') {
+    const r = await siteCall(SITE_ENV, '/content-live-del', {
+      coll: String(b.coll ?? ''),
+      slug: String(b.slug ?? ''),
+    });
+    return json(r, CACHE.none);
+  }
+
+  if (path === 'kb-live-put') {
+    const r = await siteCall(SITE_ENV, '/kb-live-put', {
+      question: String(b.question ?? ''),
+      answer: String(b.answer ?? ''),
+      topic: String(b.topic ?? ''),
+      aliases: String(b.aliases ?? ''),
+      status: b.status === 0 || b.status === '0' ? 0 : 1,
+    });
+    if (r.ok === false) return fail(400, String(r.error ?? '没存上'));
+    return json({ ok: true }, CACHE.none);
+  }
+
+  if (path === 'kb-live-del') {
+    const r = await siteCall(SITE_ENV, '/kb-live-del', { question: String(b.question ?? '') });
+    return json(r, CACHE.none);
+  }
+
+  if (path === 'media-put') {
+    const key = String(b.key ?? '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,158}$/.test(key)) return fail(400, '图片名不合法');
+    const r = await siteCall(SITE_ENV, '/media-put', {
+      key,
+      mime: String(b.mime ?? 'image/webp'),
+      data: String(b.data ?? ''),
+    });
+    if (r.ok === false) return fail(400, String(r.error ?? '没传上去'));
+    return json({ ok: true, key, url: '/api/media/' + key, size: r.size }, CACHE.none);
+  }
+
+  if (path === 'media-del') {
+    const r = await siteCall(SITE_ENV, '/media-del', { key: String(b.key ?? '') });
+    return json(r, CACHE.none);
+  }
+
   return fail(404, '没有这个接口');
 }
 
@@ -2503,6 +2622,68 @@ const worker = {
           return json({ ok: false, error: '需要登录' }, CACHE.none, 401);
         }
         return loginRedirect(request);
+      }
+    }
+
+    /* ── 实时内容层（R52）───────────────────────────────────────────────
+       两条公开只读路径：
+         /api/media/<key>        后台直接上传的图片（字节从 DO 出，带一年 immutable 缓存）
+         /live/<coll>/<slug>     后台发布的线上稿（Markdown 在这里现渲染）
+       放在站点账号接口之前：它们都不需要登录，也不该走后面那套 API 兜底。 */
+    if (url.pathname.startsWith('/api/media/')) {
+      const key = decodeURIComponent(url.pathname.slice('/api/media/'.length));
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,158}$/.test(key)) return fail(400, '图片名不合法');
+      try {
+        const res = await env.SITE.get(env.SITE.idFromName('site')).fetch(
+          new Request('https://site.do/media-get?key=' + encodeURIComponent(key))
+        );
+        if (!res.ok) return fail(404, '没有这张图');
+        return new Response(res.body, {
+          headers: {
+            'content-type': res.headers.get('content-type') ?? 'application/octet-stream',
+            'cache-control': 'public, max-age=31536000, immutable',
+            'x-robots-tag': 'noindex',
+          },
+        });
+      } catch {
+        return fail(502, '图片服务这边出了点问题');
+      }
+    }
+
+    if (url.pathname.startsWith('/live/')) {
+      const parts = url.pathname.split('/').filter(Boolean);
+      const coll = parts[1] ?? '';
+      const slug = parts.slice(2).join('/');
+      if (!['posts', 'notes', 'projects', 'photos', 'kb'].includes(coll) || !slug) {
+        return new Response('没有这一页', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      }
+      try {
+        const d = await siteCall(env as unknown as { SITE: Env['SITE'] }, '/content-live-get', { coll, slug });
+        const row = d.row as
+          | { title?: string; front?: string; body?: string; status?: number; updated_at?: number }
+          | null;
+        if (!row || Number(row.status ?? 0) !== 1) {
+          return new Response('这一页还没发布', {
+            status: 404,
+            headers: { 'content-type': 'text/plain; charset=utf-8' },
+          });
+        }
+        const html = renderLivePage({
+          title: String(row.title ?? slug),
+          coll,
+          front: String(row.front ?? ''),
+          body: String(row.body ?? ''),
+          updatedAt: Number(row.updated_at ?? Date.now()),
+        });
+        return new Response(html, {
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            'x-robots-tag': 'noindex, follow',
+          },
+        });
+      } catch {
+        return new Response('线上稿读不出来', { status: 502 });
       }
     }
 

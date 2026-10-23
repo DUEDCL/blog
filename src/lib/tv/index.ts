@@ -176,12 +176,15 @@ async function handleHist(request: Request, env: SiteEnv, url: URL): Promise<Res
   if (!me) return fail(401, '需要登录');
 
   if (request.method === 'GET') {
-    const [qs, progs] = await Promise.all([
+    /* 三条一起取：搜索词、播放进度、追剧收藏。分三次串行请求对首屏是纯浪费 ——
+       同一个 DO 实例，Promise.all 就够了。 */
+    const [qs, progs, favs] = await Promise.all([
       siteCall(env, '/tv-q-list?userId=' + encodeURIComponent(me.id)),
       siteCall(env, '/tv-prog-list?userId=' + encodeURIComponent(me.id)),
+      siteCall(env, '/tv-fav-list?userId=' + encodeURIComponent(me.id)),
     ]);
     return json(
-      { ok: true, q: qs.rows ?? [], prog: progs.rows ?? [] },
+      { ok: true, q: qs.rows ?? [], prog: progs.rows ?? [], fav: favs.rows ?? [] },
       0
     );
   }
@@ -198,6 +201,37 @@ async function handleHist(request: Request, env: SiteEnv, url: URL): Promise<Res
 
   if (typeof body.q === 'string' && body.q.trim()) {
     await siteCall(env, '/tv-q-put', { userId: me.id, q: body.q, now });
+    return json({ ok: true }, 0);
+  }
+
+  /* 追剧收藏：{fav:{name,pic,srcId,...}} 或 {unfav:{name}} —— 两个方向都走这一条接口 */
+  const f = body.fav as Record<string, unknown> | undefined;
+  if (f && typeof f === 'object' && String(f.name ?? '').trim()) {
+    const name = String(f.name).slice(0, 120);
+    await siteCall(env, '/tv-fav-put', {
+      userId: me.id,
+      name,
+      pic: f.pic ?? '',
+      srcId: f.srcId ?? '',
+      vodId: f.vodId ?? '',
+      srcName: f.srcName ?? '',
+      lineIdx: f.lineIdx ?? 0,
+      lineFrom: f.lineFrom ?? '',
+      epName: f.epName ?? '',
+      t: f.t ?? 0,
+      d: f.d ?? 0,
+      now,
+    });
+    return json({ ok: true }, 0);
+  }
+
+  const u = body.unfav as Record<string, unknown> | undefined;
+  if (u && typeof u === 'object' && String(u.name ?? '').trim()) {
+    await siteCall(env, '/tv-fav-del', {
+      userId: me.id,
+      name: String(u.name).slice(0, 120),
+      now,
+    });
     return json({ ok: true }, 0);
   }
 

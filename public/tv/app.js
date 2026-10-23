@@ -23,13 +23,28 @@
   'use strict';
 
   var BASE = '/api/tv';
+  /**
+   * localStorage 键。**记录类（q / prog / fav）必须按用户分开** —— R52 之前它们是
+   * 全浏览器共用的，同一台电脑上换个人登录就会看到上一个人的搜索词、看到第几分钟，
+   * 这就是站主报的「多用户共享搜索记录和观看记录」。偏好类（off / sort / qmode）
+   * 是设备偏好，不按人分。
+   */
   var LS = {
-    off: 'tv:off',        // 访客关掉的源
-    q: 'tv:q',            // 搜索历史
-    prog: 'tv:prog',      // 播放进度 / 历史
-    qual: 'tv:qual',      // 清晰度探测缓存
-    sort: 'tv:sort',      // 结果排序偏好
+    off: 'tv:off',        // 访客关掉的源（设备偏好）
+    q: 'tv:q',            // 搜索历史（按用户）
+    prog: 'tv:prog',      // 播放进度 / 历史（按用户）
+    fav: 'tv:fav',        // 追剧收藏（按用户）
+    qual: 'tv:qual',      // 清晰度探测缓存（设备级，与谁登录无关）
+    sort: 'tv:sort',      // 结果排序偏好（设备偏好）
+    qmode: 'tv:qmode',    // 画质偏好：quality = 锁最高码率 / auto = 自适应
+    boost: 'tv:boost',    // 长按加速的倍速档
+    enh: 'tv:enh',        // 观感增强开关
   };
+  /** 这三个键按用户分域；其余是设备偏好 */
+  var SCOPED = { q: 1, prog: 1, fav: 1 };
+  /** 当前登录用户 id；匿名时为空串。init() 里问 /api/site/me 拿到 */
+  var SCOPE = '';
+  function lsKey(k) { return SCOPED[k] ? k + (SCOPE ? ':' + SCOPE : '') : k; }
   var HOT = ['庆余年', '流浪地球', '繁花', '狂飙', '三体', '沙丘', '阿凡达', '抓娃娃'];
   var MAX_Q_HIST = 12;
   var MAX_PROG = 30;
@@ -56,7 +71,16 @@
     autoPicked: false,    // 详情页是否已按探测结果自动换源
     sort: 'rel',          // 结果排序：rel 推荐 / rating 评分 / srcs 源数 / name 名称
     baseRate: 1,          // 常驻倍速（点倍速按钮轮换）
-    holdingBoost: false,  // 是否处于「长按右箭头」的临时快放
+    holdingBoost: false,  // 是否处于「长按加速」的临时快放
+    boostHeld: false,     // 加速键是否正被按住（按钮与键盘共用）
+    fav: {},              // 追剧收藏：{ [片名]: rec }
+    showAllCands: false,  // 详情页是否摊开全部源（默认只留测出来的最优那条）
+    showAllLines: false,  // 是否显示「无法直连」的线路（默认藏起来）
+    qmode: 'quality',     // quality = 锁最高码率；auto = 交给 hls.js 自适应
+    enhance: true,        // 观感增强（轻微锐化观感，不改变实际分辨率）
+    pendingLine: '',      // 从记录直接打开时要定位到的线路名
+    pendingEp: '',        // 从记录直接打开时要定位到的集名
+    pendingSeek: 0,       // 从记录直接打开时要跳到的秒数
   };
 
   var SORTS = [
@@ -66,7 +90,8 @@
     { id: 'name', label: '名称' },
   ];
   var RATES = [1, 1.5, 2, 3];
-  var HOLD_RATE = 3;      // 长按右箭头时的临时倍速
+  /** 长按加速的倍速。默认 3×，可在播放器里改（存 localStorage） */
+  var HOLD_RATE = 3;
 
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
@@ -89,14 +114,23 @@
 
   function readLS(key, fallback) {
     try {
-      var raw = localStorage.getItem(key);
+      var raw = localStorage.getItem(lsKey(key));
       return raw ? JSON.parse(raw) : fallback;
     } catch (e) {
       return fallback;
     }
   }
   function writeLS(key, val) {
-    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* 隐私模式忽略 */ }
+    try { localStorage.setItem(lsKey(key), JSON.stringify(val)); } catch (e) { /* 隐私模式忽略 */ }
+  }
+  function readRaw(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function writeRaw(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* ignore */ }
+  }
+  function dropRaw(key) {
+    try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
   }
 
   function loadPrefs() {
@@ -106,6 +140,10 @@
     } catch (e) { state.off = new Set(); }
     var s = readLS(LS.sort, 'rel');
     state.sort = SORTS.some(function (x) { return x.id === s; }) ? s : 'rel';
+    state.qmode = readLS(LS.qmode, 'quality') === 'auto' ? 'auto' : 'quality';
+    state.enhance = readLS(LS.enh, true) !== false;
+    var hr = Number(readLS(LS.boost, 3));
+    HOLD_RATE = [2, 3, 4].indexOf(hr) >= 0 ? hr : 3;
   }
   function saveOff() { writeLS(LS.off, Array.from(state.off)); }
 
@@ -157,6 +195,106 @@
       if (!best || (r.ts || 0) > (best.ts || 0)) best = r;
     });
     return best;
+  }
+
+  /* ══════════════ 追剧收藏（R52） ══════════════ */
+
+  /** 收藏表：{ [片名]: {name,pic,srcId,vodId,srcName,lineIdx,lineFrom,epName,t,d,ts} } */
+  function getFav() { return readLS(LS.fav, {}); }
+  function setFav(all) { state.fav = all; writeLS(LS.fav, all); }
+  function isFav(name) { return !!(state.fav && state.fav[name]); }
+
+  /** 收藏 / 取消收藏。写本地一份，登录用户同时上云（失败不影响本地） */
+  function toggleFav(rec) {
+    var all = getFav();
+    var name = rec.name;
+    if (!name) return;
+    if (all[name]) {
+      delete all[name];
+      toast('已取消追剧：' + name);
+      if (authState.loggedIn) {
+        fetch(BASE + '/hist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ unfav: { name: name } }),
+        }).catch(function () {});
+      }
+    } else {
+      all[name] = Object.assign({ ts: Date.now() }, rec);
+      toast('已加入追剧：' + name);
+      pushFav(all[name]);
+    }
+    setFav(all);
+    renderContinue();
+    paintFavButtons();
+    if (state.detail && state.groups[state.detail.gi]) renderDetailFav();
+  }
+
+  function pushFav(rec) {
+    if (!authState.loggedIn) return;
+    fetch(BASE + '/hist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ fav: rec }),
+    }).catch(function () {});
+  }
+
+  /** 卡片上的星标状态跟着 state.fav 重画（不重建 DOM，省得打断 hover） */
+  function paintFavButtons() {
+    $('[data-fav]').forEach(function (b) {
+      var n = b.getAttribute('data-fav');
+      var on = isFav(n);
+      b.classList.toggle('is-on', on);
+      b.textContent = on ? '★' : '☆';
+      b.setAttribute('aria-pressed', String(on));
+      b.title = on ? '取消追剧' : '加入追剧';
+    });
+  }
+
+  /**
+   * 从记录直接打开（R52）。**不再搜一次** —— 这是站主点名要的那条：
+   * 记录里已经存了 srcId + vodId + lineFrom + epName，直接问 detail 接口拿剧集，
+   * 拼一个只有一个候选的分组塞进 state.groups，走正常的详情/播放路径。
+   * 只有 detail 失败（源挂了、片下架了）才退回搜索，那是退路不是主路。
+   */
+  function openByRecord(rec) {
+    if (!rec || !rec.name) return;
+    if (!rec.srcId || !rec.vodId) { doSearch(rec.name); return; }
+
+    var g0 = {
+      name: rec.name,
+      pic: rec.pic || '',
+      rating: 0,
+      score: 1000,
+      candidates: [{
+        sourceId: rec.srcId,
+        sourceName: rec.srcName || ((srcById(rec.srcId) || {}).name || rec.srcId),
+        vodId: rec.vodId,
+        episodeCount: 0,
+        lineCount: 0,
+        hasHls: true,
+        pic: rec.pic || '',
+      }],
+    };
+
+    setStatus('正在打开「' + esc(rec.name) + '」上次的位置…');
+    state.pendingLine = rec.lineFrom || '';
+    state.pendingEp = rec.epName || '';
+    state.groups = [g0];
+    state.lastQ = rec.name;
+    state.detail = { gi: 0 };
+    state.candIdx = 0;
+    state.lineIdx = Number(rec.lineIdx) || 0;
+    state.epIdx = -1;
+    state.autoPicked = true;   // 单候选，不要再探测换源
+    state.showAllCands = false;
+    state.showAllLines = false;
+    $('[data-tv-mask]').hidden = false;
+    $('[data-tv-drawer]').hidden = false;
+    renderDetail();
+    setStatus('已从记录打开，正在定位上次那一集');
   }
 
   /* ══════════════ 清晰度探测 ══════════════ */
@@ -282,6 +420,36 @@
     renderHot();
     renderQueryHistory();
 
+    /* 先问「我是谁」。记录按用户分域（见 LS 那段注释），所以必须先拿到 id
+       再读本地记录 —— 顺序反了就会先读一遍匿名键、再被覆盖一次。 */
+    fetch('/api/site/me', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.ok && d.user && d.user.id) {
+          SCOPE = String(d.user.id);
+          adoptLegacy();
+        }
+      })
+      .catch(function () { /* 没登录 / 接口挂了：按匿名处理 */ })
+      .then(loadSources);
+  }
+
+  /** 登录后把「全浏览器共享的旧键」迁进自己的命名空间，然后删掉旧键 ——
+      不删的话换个人登录还是能看到上一个人的搜索词与进度。 */
+  function adoptLegacy() {
+    if (!SCOPE) return;
+    ['q', 'prog', 'fav'].forEach(function (k) {
+      var legacy = readRaw(LS[k]);
+      if (legacy == null) return;
+      if (readRaw(lsKey(k)) == null) {
+        try { localStorage.setItem(lsKey(k), legacy); } catch (e) { /* 隐私模式 */ }
+      }
+      dropRaw(LS[k]);
+    });
+  }
+
+  function loadSources() {
+    state.fav = getFav();
     getJson(BASE + '/sources')
       .then(function (d) {
         state.sources = d.sources || [];
@@ -402,47 +570,85 @@
     box.appendChild(clear);
   }
 
-  /** 继续观看：按播放历史列出最近看过的片子 */
+  /**
+   * 追剧 + 继续观看。
+   *
+   * 两块都挂在 `[data-tv-cont]` 里（追剧在上），**点一下就直接打开上次那一集** ——
+   * 走 openByRecord()，不再先搜一次（R52 站主点名要的）。
+   * 之前这里是「填关键词 → doSearch → 找同名分组」，等于每次续播都重新搜全网，
+   * 既慢又会因为源站抖动而找不到。
+   */
   function renderContinue() {
     var box = $('[data-tv-cont]');
     if (!box) return;
+    box.innerHTML = '';
+
+    var favAll = getFav();
+    var favs = Object.keys(favAll)
+      .map(function (k) { return favAll[k]; })
+      .filter(function (r) { return r && r.name; })
+      .sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); })
+      .slice(0, 12);
+
     var all = getProgress();
-    var items = Object.keys(all).map(function (k) { return all[k]; })
+    var items = Object.keys(all)
+      .map(function (k) { return all[k]; })
       .filter(function (r) { return r && r.name && (r.t || 0) > 5; })
       .sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); })
       .slice(0, 8);
 
-    box.innerHTML = '';
-    if (!items.length) { box.hidden = true; return; }
+    if (!favs.length && !items.length) { box.hidden = true; return; }
     box.hidden = false;
+
+    if (favs.length) box.appendChild(contSection('我的追剧', favs, true));
+    if (items.length) box.appendChild(contSection('继续观看', items, false));
+  }
+
+  function contSection(title, rows, canUnfav) {
+    var wrap = document.createElement('div');
+    wrap.className = 'tv-cont__sec';
 
     var h = document.createElement('div');
     h.className = 'tv-cont__h';
-    h.textContent = '继续观看';
-    box.appendChild(h);
+    h.textContent = title;
+    wrap.appendChild(h);
 
     var list = document.createElement('div');
     list.className = 'tv-cont__list';
-    items.forEach(function (r) {
+    rows.forEach(function (r) {
       var pct = r.d > 0 ? Math.min(100, Math.round((r.t / r.d) * 100)) : 0;
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'tv-cont__item';
+      b.title = r.epName ? '接着看：' + r.epName : '打开';
       b.innerHTML =
         '<span class="tv-cont__name">' + esc(r.name) + '</span>' +
-        '<span class="tv-cont__ep">' + esc(r.epName || '') +
+        '<span class="tv-cont__ep">' + esc(r.epName || '还没开始') +
         (pct ? ' · 已看 ' + pct + '%' : '') + '</span>';
-      b.addEventListener('click', function () {
-        $('[data-tv-q]').value = r.name;
-        doSearch(r.name).then(function () {
-          // 找到同名分组后自动打开（不保证一定命中，命中才开）
-          var gi = state.groups.findIndex(function (g) { return g.name === r.name; });
-          if (gi >= 0) openDetail(gi);
+      b.addEventListener('click', function () { openByRecord(r); });
+
+      /* 条目与「取消追剧」包一层：两个 <button> 不能嵌套，而它们又要看起来是一行 */
+      var row = document.createElement('div');
+      row.className = 'tv-cont__row';
+      row.appendChild(b);
+
+      if (canUnfav) {
+        var x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'tv-cont__x';
+        x.textContent = '✕';
+        x.title = '不再追这部剧';
+        x.setAttribute('aria-label', '取消追剧 ' + r.name);
+        x.addEventListener('click', function (e) {
+          e.stopPropagation();
+          toggleFav({ name: r.name });
         });
-      });
-      list.appendChild(b);
+        row.appendChild(x);
+      }
+      list.appendChild(row);
     });
-    box.appendChild(list);
+    wrap.appendChild(list);
+    return wrap;
   }
 
   /* ══════════════ 源筛选 ══════════════ */
@@ -619,9 +825,39 @@
         (best ? ' · ' + best + ' 可直连' : '') +
         '</div>';
 
+      /* 卡片右下角的星标：不进卡片点击区域（stopPropagation），点它就只收藏不打开 */
+      var star = document.createElement('button');
+      star.type = 'button';
+      star.className = 'tv-fav tv-fav--card' + (isFav(g.name) ? ' is-on' : '');
+      star.setAttribute('data-fav', g.name);
+      star.setAttribute('aria-pressed', String(isFav(g.name)));
+      star.textContent = isFav(g.name) ? '★' : '☆';
+      star.title = isFav(g.name) ? '取消追剧' : '加入追剧';
+      star.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var pr = lastProgressOf(g.name);
+        var c0 = g.candidates.filter(function (c) { return c.hasHls; })[0] || g.candidates[0] || {};
+        toggleFav({
+          name: g.name,
+          pic: g.pic || '',
+          srcId: (pr && pr.srcId) || c0.sourceId || '',
+          vodId: (pr && pr.vodId) || c0.vodId || '',
+          srcName: (pr && pr.srcName) || c0.sourceName || '',
+          lineIdx: pr ? pr.lineIdx : 0,
+          lineFrom: pr ? pr.lineFrom : '',
+          epName: pr ? pr.epName : '',
+          t: pr ? pr.t : 0,
+          d: pr ? pr.d : 0,
+        });
+      });
+      /* 挂进海报里（海报是 position: relative，星标要贴着它的角） */
+      var poster = card.querySelector('.tv-card__poster');
+      if (poster) poster.appendChild(star);
+
       card.addEventListener('click', function () { openDetail(i); });
       grid.appendChild(card);
     });
+    paintFavButtons();
   }
 
   /* ══════════════ 详情 ══════════════ */
@@ -632,6 +868,12 @@
     state.lineIdx = 0;
     state.epIdx = -1;
     state.autoPicked = false;
+    /* 每次打开都从「只显示最优源 + 只显示能播的线路」开始。
+       上一次摊开过不该带到下一部片上。 */
+    state.showAllCands = false;
+    state.showAllLines = false;
+    state.pendingLine = '';
+    state.pendingEp = '';
     $('[data-tv-mask]').hidden = false;
     $('[data-tv-drawer]').hidden = false;
     renderDetail();
@@ -654,6 +896,8 @@
       '<div class="tv-detail__head">' +
       '<h2 class="tv-detail__title">' + esc(g.name) + '</h2>' +
       '<div class="tv-detail__tags">' + tagsHtml(g) + '</div>' +
+      '<button type="button" class="tv-fav' + (isFav(g.name) ? ' is-on' : '') + '" data-detail-fav>' +
+      (isFav(g.name) ? '★ 追剧中' : '☆ 追剧') + '</button>' +
       '<div class="tv-detail__desc">暂无简介</div>' +
       '</div></div>' +
       '<div class="tv-detail__sec">' +
@@ -664,6 +908,25 @@
       '</div>';
 
     bindCands(g);
+    var favBtn = $('[data-detail-fav]');
+    if (favBtn) {
+      favBtn.addEventListener('click', function () {
+        var pr = lastProgressOf(g.name);
+        var c0 = g.candidates[state.candIdx] || g.candidates[0] || {};
+        toggleFav({
+          name: g.name,
+          pic: g.pic || '',
+          srcId: (pr && pr.srcId) || c0.sourceId || '',
+          vodId: (pr && pr.vodId) || c0.vodId || '',
+          srcName: (pr && pr.srcName) || c0.sourceName || '',
+          lineIdx: pr ? pr.lineIdx : 0,
+          lineFrom: pr ? pr.lineFrom : '',
+          epName: pr ? pr.epName : '',
+          t: pr ? pr.t : 0,
+          d: pr ? pr.d : 0,
+        });
+      });
+    }
     loadDetailFor(g, cand);
 
     // 逐源探测清晰度；测出比当前更好的就自动切过去（只自动切一次，不跟用户抢）
@@ -695,6 +958,18 @@
     });
   }
 
+  /** 详情页那颗「追剧」键的文案与状态 */
+  function renderDetailFav() {
+    var b = $('[data-detail-fav]');
+    if (!b || !state.detail) return;
+    var g = state.groups[state.detail.gi];
+    if (!g) return;
+    var on = isFav(g.name);
+    b.classList.toggle('is-on', on);
+    b.textContent = on ? '★ 追剧中' : '☆ 追剧';
+    b.title = on ? '取消追剧' : '加入追剧，下次一点就回到这一集';
+  }
+
   function tagsHtml(g, vod) {
     var out = [];
     var type = (vod && vod.typeName) || g.typeName;
@@ -714,34 +989,67 @@
     var box = $('[data-tv-cands]');
     if (!box) return;
     box.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-cand]');
-      if (!b) return;
-      state.candIdx = Number(b.dataset.cand);
+      if (e.target.closest('[data-cand-more]')) {
+        state.showAllCands = !state.showAllCands;
+        renderCands(g);
+        return;
+      }
+      var b2 = e.target.closest('[data-cand]');
+      if (!b2) return;
+      state.candIdx = Number(b2.dataset.cand);
       state.lineIdx = 0;
       state.epIdx = -1;
+      state.showAllCands = false;   // 手动选完就收回去，只留他选的那条
       renderCands(g);
       loadDetailFor(g, g.candidates[state.candIdx]);
     });
   }
 
+  function candHtml(row) {
+    var c = row.c;
+    var p = row.p;
+    var label = qualLabel(p);
+    var speed = p && p.ok && p.ms ? p.ms + 'ms' : '';
+    return (
+      '<button type="button" class="tv-cand' + (row.i === state.candIdx ? ' is-on' : '') +
+      '" data-cand="' + row.i + '">' +
+      '<span class="tv-cand__n">' + esc(c.sourceName) +
+      (label ? '<span class="tv-qbadge' + qualBadgeClass(p) + '">' + label + '</span>' : '') +
+      '</span>' +
+      '<span class="tv-cand__m">' + c.episodeCount + ' 集 · ' + c.lineCount + ' 线路' +
+      (c.hasHls ? ' · 可直连' : ' · 仅网页') +
+      (speed ? ' · ' + speed : '') +
+      '</span></button>'
+    );
+  }
+
+  /**
+   * 播放源列表。
+   *
+   * **默认只显示一条**（R52）：站主要的是「提取到最佳播放源之后不要主动把其余源摊开」。
+   * 其余收进「换源（还有 N 个）」，点了才摊。默认收起还有一个副作用是好事 ——
+   * 手机上抽屉不用先滚过十几条源才看到剧集。
+   */
   function renderCands(g, results) {
     var box = $('[data-tv-cands]');
     if (!box) return;
-    box.innerHTML = g.candidates.map(function (c, i) {
+    var rows = g.candidates.map(function (c, i) {
       var p = results ? results[i] : state.probe[c.sourceId + ':' + c.vodId];
-      var label = qualLabel(p);
-      var speed = p && p.ok && p.ms ? p.ms + 'ms' : '';
-      return (
-        '<button type="button" class="tv-cand' + (i === state.candIdx ? ' is-on' : '') + '" data-cand="' + i + '">' +
-        '<span class="tv-cand__n">' + esc(c.sourceName) +
-        (label ? '<span class="tv-qbadge' + qualBadgeClass(p) + '">' + label + '</span>' : '') +
-        '</span>' +
-        '<span class="tv-cand__m">' + c.episodeCount + ' 集 · ' + c.lineCount + ' 线路' +
-        (c.hasHls ? ' · 可直连' : ' · 仅网页') +
-        (speed ? ' · ' + speed : '') +
-        '</span></button>'
-      );
-    }).join('');
+      return { c: c, i: i, p: p };
+    });
+    var keep = rows[state.candIdx] || rows[0];
+    var rest = rows.filter(function (r) { return r !== keep; });
+
+    var html = keep ? candHtml(keep) : '';
+    if (rest.length) {
+      html +=
+        '<button type="button" class="tv-candmore' + (state.showAllCands ? ' is-on' : '') +
+        '" data-cand-more>' +
+        (state.showAllCands ? '收起其它源' : '换源（还有 ' + rest.length + ' 个）') +
+        '</button>';
+      if (state.showAllCands) html += rest.map(candHtml).join('');
+    }
+    box.innerHTML = html;
   }
 
   function loadDetailFor(g, cand, isAuto) {
@@ -764,6 +1072,15 @@
       });
   }
 
+  /**
+   * 剧集区。
+   *
+   * 两条 R52 的规矩：
+   * ① **默认不显示播不了的线路**（kind === 'page' 的那些是资源站网页播放器地址，
+   *    点开只有一句「无法直连」）。全部都不能直连时才照旧全列，不然抽屉会空着。
+   * ② 从记录直接打开时（state.pendingLine / pendingEp），这里负责定位到上次那条线路
+   *    与那一集 —— 定位完就把标记清掉，后面换线路不会又被拽回去。
+   */
   function renderEps(vod) {
     var ex = $('[data-tv-extra]');
     if (!ex) return;
@@ -773,14 +1090,32 @@
       return;
     }
 
+    /* 从记录打开：先按线路名定位（线路名比下标稳，源站重排线路时下标会变） */
+    if (state.pendingLine) {
+      var want = state.pendingLine;
+      var hit = -1;
+      vod.lines.forEach(function (l, i) { if (l.from === want) hit = i; });
+      if (hit >= 0) state.lineIdx = hit;
+      state.pendingLine = '';
+    }
+
+    var playable = [];
+    vod.lines.forEach(function (l, i) { if (l.kind !== 'page') playable.push(i); });
+    if (!playable.length) playable = vod.lines.map(function (_l, i) { return i; });
+
     state.lineIdx = Math.min(state.lineIdx, vod.lines.length - 1);
+    // 当前停在一条播不了的线路上、又有能播的：自动挪过去
+    if (playable.indexOf(state.lineIdx) < 0) state.lineIdx = playable[0];
+
     var line = vod.lines[state.lineIdx];
     state.eps = line.episodes;
 
-    // 该片在这个源上的播放进度（用于「继续观看第 X 集」提示）
     var last = lastProgressOf(vod.name);
+    var shown = state.showAllLines ? vod.lines.map(function (_l, i) { return i; }) : playable;
+    var hiddenN = vod.lines.length - playable.length;
 
-    var linesHtml = vod.lines.map(function (l, i) {
+    var linesHtml = shown.map(function (i) {
+      var l = vod.lines[i];
       var page = l.kind === 'page';
       return (
         '<button type="button" class="tv-line' + (page ? ' tv-line--page' : '') +
@@ -790,6 +1125,13 @@
         '</button>'
       );
     }).join('');
+
+    var linesMore = hiddenN > 0
+      ? '<button type="button" class="tv-linemore' + (state.showAllLines ? ' is-on' : '') +
+        '" data-line-more>' +
+        (state.showAllLines ? '隐藏无法直连的线路' : '显示 ' + hiddenN + ' 条无法直连的线路') +
+        '</button>'
+      : '';
 
     var epsHtml = line.episodes.map(function (ep, i) {
       var pr = findProgress(vod.name, ep.name);
@@ -812,11 +1154,16 @@
 
     ex.innerHTML =
       resumeBar +
-      '<div class="tv-lines">' + linesHtml + '</div>' + tip +
+      '<div class="tv-lines">' + linesHtml + '</div>' + linesMore + tip +
       '<h3 class="tv-detail__h">剧集 · ' + esc(line.from) + '</h3>' +
       '<div class="tv-eps">' + epsHtml + '</div>';
 
     ex.onclick = function (e) {
+      if (e.target.closest('[data-line-more]')) {
+        state.showAllLines = !state.showAllLines;
+        renderEps(vod);
+        return;
+      }
       var lb = e.target.closest('[data-line]');
       if (lb) {
         state.lineIdx = Number(lb.dataset.line);
@@ -827,7 +1174,6 @@
       var eb = e.target.closest('[data-ep]');
       if (eb) { playEp(vod, Number(eb.dataset.ep)); return; }
       if (e.target.closest('[data-tv-resume]')) {
-        // 继续播放：切到上次那条线路，找同名剧集
         var lr = last.lineIdx >= 0 ? last.lineIdx : state.lineIdx;
         if (lr < vod.lines.length) {
           state.lineIdx = lr;
@@ -837,6 +1183,14 @@
         }
       }
     };
+
+    /* 从记录打开：定位到上次那一集并直接播（state.pendingEp 只消费一次） */
+    if (state.pendingEp) {
+      var pe = state.pendingEp;
+      state.pendingEp = '';
+      var pi = line.episodes.findIndex(function (x) { return x.name === pe; });
+      playEp(vod, pi >= 0 ? pi : 0);
+    }
   }
 
   /* ══════════════ 播放器 ══════════════ */
@@ -865,26 +1219,91 @@
     var speedBtn = $('[data-tv-speedbtn]');
     if (speedBtn) speedBtn.addEventListener('click', cycleRate);
 
-    /* 长按右箭头 = 临时 HOLD_RATE 快放，松手回到常驻倍速。
-       **必须 preventDefault**：浏览器对 ArrowRight 的原生行为是「快进 5 秒」，
-       不拦的话按住会变成一路跳着走，而不是快放。 */
+    /* ── 长按加速（R52 重做）─────────────────────────────────────────────
+       站主报的两种现象指向同一个根因：**长按根本没有落在我们的手势上**。
+       · 「有时会直接快进」——按住的是浏览器原生控件，或 <video> 有焦点时的方向键；
+         原生行为就是 +5s 跳着走，冒泡阶段的 keydown 拦不住那一路。
+       · 「有时会失效」——keyup 丢在窗口外（切标签、松手时焦点不在文档里），
+         state.holdingBoost 卡在 true，之后再也不进加速分支。
+       现在键盘与屏幕上的右箭头共用 boostOn/boostOff，且三条兜底复位。 */
+    var nextBtn = $('[data-tv-pnext]');
+    if (nextBtn) {
+      var holdTimer = 0;
+      var heldBoost = false;
+      nextBtn.title = '点按下一集，长按加速播放';
+      nextBtn.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        heldBoost = false;
+        clearTimeout(holdTimer);
+        holdTimer = window.setTimeout(function () {
+          heldBoost = true;
+          state.boostHeld = true;
+          boostOn();
+        }, 280);
+      });
+      var endHold = function () {
+        clearTimeout(holdTimer);
+        if (state.boostHeld) {
+          state.boostHeld = false;
+          boostOff();
+        }
+      };
+      nextBtn.addEventListener('pointerup', endHold);
+      nextBtn.addEventListener('pointercancel', endHold);
+      nextBtn.addEventListener('pointerleave', endHold);
+      // 长按成立后吞掉随后那一下 click，否则松手会顺带跳下一集
+      nextBtn.addEventListener('click', function (e) {
+        if (!heldBoost) return;
+        heldBoost = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+    }
+
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'ArrowRight') return;
       var ov = $('[data-tv-player]');
       if (!ov || ov.hidden) return;
       var t = e.target;
       if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '')) return;
+      // capture 阶段就拦：原生控件的「快进 5 秒」是默认动作，晚一步就晚了
       e.preventDefault();
-      if (state.holdingBoost) return; // 忽略键盘自动重复
-      state.holdingBoost = true;
-      applyRate(HOLD_RATE);
-      toast('长按快放 ' + HOLD_RATE + '×，松手恢复');
-    });
+      boostOn();
+    }, true);
+
     document.addEventListener('keyup', function (e) {
-      if (e.key !== 'ArrowRight' || !state.holdingBoost) return;
-      state.holdingBoost = false;
-      applyRate(state.baseRate);
+      if (e.key !== 'ArrowRight') return;
+      boostOff();
+    }, true);
+
+    /* 三条兜底：窗口失焦、切标签、指针捕获被系统收走 —— 任何一条都可能吞掉 keyup/pointerup */
+    addEventListener('blur', boostOff);
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) boostOff();
     });
+
+    // 画质偏好 / 观感增强：两个开关，状态存本地
+    var qmodeBtn = $('[data-tv-qmode]');
+    if (qmodeBtn) {
+      qmodeBtn.addEventListener('click', function () {
+        state.qmode = state.qmode === 'quality' ? 'auto' : 'quality';
+        writeLS(LS.qmode, state.qmode);
+        paintQmode();
+        if (state.hls) applyQualityMode(state.hls, state.hls.levels);
+        toast(state.qmode === 'quality' ? '画质优先：锁最高码率' : '自动：按网速自适应');
+      });
+    }
+    var enhBtn = $('[data-tv-enhance]');
+    if (enhBtn) {
+      enhBtn.addEventListener('click', function () {
+        state.enhance = !state.enhance;
+        writeLS(LS.enh, state.enhance);
+        applyEnhance();
+        toast(state.enhance ? '观感增强已开（不改变实际分辨率）' : '观感增强已关');
+      });
+    }
+    paintQmode();
+    applyEnhance();
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
@@ -912,6 +1331,83 @@
     if (wrap) wrap.classList.toggle('is-boost', r > state.baseRate + 0.01);
   }
 
+  /** 开始长按加速。重复调用无害（键盘自动重复会一直喊） */
+  function boostOn() {
+    if (state.holdingBoost) return;
+    state.holdingBoost = true;
+    applyRate(HOLD_RATE);
+    toast('加速 ' + HOLD_RATE + '×，松手恢复');
+  }
+  /** 结束长按加速。没在加速时直接返回 —— 兜底复位会反复调它 */
+  function boostOff() {
+    if (!state.holdingBoost) return;
+    state.holdingBoost = false;
+    applyRate(state.baseRate);
+  }
+
+  /** 画质偏好按钮的文案（两档：锁最高码率 / 自适应） */
+  function paintQmode() {
+    var b = $('[data-tv-qmode]');
+    if (!b) return;
+    b.textContent = state.qmode === 'quality' ? '画质优先' : '自动画质';
+    b.classList.toggle('is-on', state.qmode === 'quality');
+    b.title = state.qmode === 'quality'
+      ? '已锁定最高码率，不会因网速波动掉到低清晰度（点一下改成自适应）'
+      : '按网速自适应（点一下锁最高码率）';
+  }
+
+  /**
+   * 观感增强。
+   *
+   * 说清它是什么：**不改变实际分辨率**，只是把对比度与饱和度各提一点，
+   * 低码率片源的「灰蒙蒙」观感会好一些。真正的超分要 WASM/WebGL 逐帧跑，
+   * 那是另一个量级的成本，而且免费档 Worker 与手机都吃不消 —— 所以这里不假装。
+   */
+  function applyEnhance() {
+    var v = $('[data-tv-video]');
+    if (v) v.style.filter = state.enhance ? 'contrast(1.06) saturate(1.06) brightness(1.02)' : '';
+    var b = $('[data-tv-enhance]');
+    if (b) {
+      b.classList.toggle('is-on', state.enhance);
+      b.textContent = state.enhance ? '增强开' : '增强关';
+      b.title = '观感增强：对比度与饱和度各提一点，不改变实际分辨率';
+    }
+  }
+
+  /** 最高那档的索引（同分辨率比码率） */
+  function maxLevelIndex(levels) {
+    var best = -1;
+    var bestH = -1;
+    var bestBw = -1;
+    (levels || []).forEach(function (lv, i) {
+      var h = lv.height || 0;
+      var bw = lv.bitrate || 0;
+      if (h > bestH || (h === bestH && bw > bestBw)) { best = i; bestH = h; bestBw = bw; }
+    });
+    return best;
+  }
+
+  /**
+   * 按画质偏好决定 hls.js 的档位策略。
+   *
+   * `quality` 档两件事一起做：
+   *   autoLevelCapping = 最高档 → ABR 想降也降不下去（这是「看着看着变糊」的根因）；
+   *   currentLevel = 最高档 → 立刻切过去，不等 ABR 自己爬。
+   * `auto` 档把两者复位成 -1，交回 hls.js。
+   */
+  function applyQualityMode(hls, levels) {
+    if (!hls) return;
+    var top = maxLevelIndex(levels);
+    if (state.qmode === 'quality' && top >= 0) {
+      hls.autoLevelCapping = top;
+      hls.currentLevel = top;
+    } else {
+      hls.autoLevelCapping = -1;
+      hls.currentLevel = -1;
+    }
+    renderQualityPicker(hls, levels);
+  }
+
   /** 点按轮换常驻倍速：1× → 1.5× → 2× → 3× */
   function cycleRate() {
     var i = RATES.indexOf(state.baseRate);
@@ -937,6 +1433,25 @@
       lineFrom: c.lineFrom,
     };
     saveProgress(rec);
+
+    /* 追剧收藏里那一份也更新：不然「我的追剧」永远停在加入时的那一集，
+       点「继续看」还是从旧位置起播。 */
+    var fv = getFav();
+    if (fv[rec.name]) {
+      fv[rec.name] = Object.assign({}, fv[rec.name], {
+        srcId: rec.srcId || fv[rec.name].srcId,
+        vodId: rec.vodId || fv[rec.name].vodId,
+        srcName: rec.srcName || fv[rec.name].srcName,
+        lineIdx: rec.lineIdx,
+        lineFrom: rec.lineFrom || fv[rec.name].lineFrom,
+        epName: rec.epName,
+        t: rec.t,
+        d: rec.d,
+        ts: rec.ts,
+      });
+      setFav(fv);
+    }
+
     if (authState.loggedIn) {
       fetch(BASE + '/hist', {
         method: 'POST',
@@ -1001,7 +1516,33 @@
           }
         });
         writeLS(LS.prog, all);
+
+        // 追剧收藏：云端的按 ts 覆盖本地同名片
+        var fav = getFav();
+        (d.fav || []).forEach(function (r) {
+          var name = r.name || r.k;
+          if (!name) return;
+          var cur = fav[name];
+          var ts = Number(r.ts) || 0;
+          if (!cur || ts >= (cur.ts || 0)) {
+            fav[name] = {
+              name: name,
+              pic: r.pic || '',
+              srcId: r.src_id || '',
+              vodId: r.vod_id || '',
+              srcName: r.src_name || '',
+              lineIdx: Number(r.line_idx) || 0,
+              lineFrom: r.line_from || '',
+              epName: r.ep_name || '',
+              t: Number(r.t) || 0,
+              d: Number(r.d) || 0,
+              ts: ts,
+            };
+          }
+        });
+        setFav(fav);
         renderContinue();
+        paintFavButtons();
       })
       .catch(function () { /* 离线就只用本地 */ });
   }
@@ -1099,8 +1640,10 @@
     state.pendingPlay = { epUrl: epUrl, api: api };
     // 换集/换源后倍速回到常驻档（而不是沿用上一次长按的临时快放）
     state.holdingBoost = false;
+    state.boostHeld = false;
     tryPlayback(0);
     applyRate(state.baseRate);
+    applyEnhance();
   }
 
   function tryPlayback(i) {
@@ -1131,19 +1674,36 @@
     if (!p) return;
     if (state.hls) { try { state.hls.destroy(); } catch (e) { /* ignore */ } }
 
+    /**
+     * hls.js 的调参（R52）。
+     *
+     * 这几个值都是冲着「清晰度」去的，逐个说清代价：
+     * · `capLevelToPlayerSize: false` —— 默认 true 会把码率上限压到播放器像素尺寸，
+     *   手机小窗/半屏时等于主动降画质。关掉它才可能吃到源站的最高档。
+     * · `abrEwmaDefaultEstimate: 8Mbps` —— 起播时的带宽先验。默认 500kbps 会让它
+     *   第一段就挑最烂的档，然后再慢慢往上爬。
+     * · `maxBufferLength: 45` / `maxMaxBufferLength: 300` —— 缓冲吃深一点，
+     *   网速抖一下不会立刻触发降档（降档一次要重新下载分片，观感上就是「忽然糊了」）。
+     * · `backBufferLength: 60` —— 回拖 60 秒内不用重新拉。
+     */
     var hls = new window.Hls({
       enableWorker: true,
       lowLatencyMode: false,
-      maxBufferLength: 30,
+      capLevelToPlayerSize: false,
+      abrEwmaDefaultEstimate: 8 * 1000 * 1000,
+      maxBufferLength: 45,
+      maxMaxBufferLength: 300,
+      backBufferLength: 60,
       manifestLoadingTimeOut: 20000,
       manifestLoadingMaxRetry: 2,
       fragLoadingMaxRetry: 4,
+      startLevel: -1,
     });
     state.hls = hls;
 
     hls.on(window.Hls.Events.MANIFEST_PARSED, function (_e, data) {
       playerMsg(null);
-      renderQualityPicker(hls, data && data.levels);
+      applyQualityMode(hls, data && data.levels);
       resumeIfAny(video);
       video.play().catch(function () {});
     });

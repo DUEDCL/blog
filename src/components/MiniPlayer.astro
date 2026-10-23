@@ -594,6 +594,18 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
       }
     };
 
+    /**
+     * 折叠态落盘：**门与正站两把键一起写**（R52）。
+     *
+     * 原来只有 `foldKey()` 那把（按当前页是不是门二选一）。问题是门上收成吸附态之后
+     * 点进正站，正站读的是另一把键 —— 读到的是更早的值，于是「换页之后没保持最小态」。
+     * 折叠态本来就是「我想要它多大」，与在门还是在正站无关，所以镜像两份。
+     */
+    const writeFold = (v: string) => {
+      write('music:mini2', v);
+      write('music:mini2:portal', v);
+    };
+
     /** 贴边的边距，与 player.css 里默认位置用的 `--sp-4` 是同一个 16px。
         吸附态例外，它要**贴死**屏幕边缘（R29：站主说「竖边吸附确实没有很贴」） */
     const GAP = 16;
@@ -667,6 +679,9 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
             还原出来会偏上／偏下三十来像素。所以下面一律用**松手时的中心** cx/cy
             配**收完之后**的尺寸来反推比例，圆心就停在手指松开的地方。 */
       setDock(side);
+      /* R52：吸附态从「不记住」改成「记住」。站主要的就是「换页之后还是最小态」——
+         拖到竖边收成一枚封面圆，这一下本身就是他的选择，没有理由换一页就忘掉。 */
+      writeFold(side ? '2' : '1');
       const gap = gapNow();
       const w2 = root.offsetWidth;
       const h2 = root.offsetHeight;
@@ -690,8 +705,12 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
      *     存值语义：`'0'` 全展开 / `'1'` 药丸 / `'2'` 吸附成封面圆。
      */
     const prefFold = () => {
-      const saved = read(foldKey());
-      if (saved === '0' || saved === '1' || saved === '2') return saved;
+      const ok = (v: string | null): v is '0' | '1' | '2' => v === '0' || v === '1' || v === '2';
+      const own = read(foldKey());
+      if (ok(own)) return own;
+      // 另一把键（门 ↔ 正站）也认，见 writeFold 的注释
+      const other = read(isPortal() ? 'music:mini2' : 'music:mini2:portal');
+      if (ok(other)) return other;
       return '2';
     };
 
@@ -746,12 +765,12 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
     const flip = () => {
       if (root.classList.contains('is-dock')) {
         setDock(false);
-        write(foldKey(), '0');
+        writeFold('0');
         return;
       }
       const on = !root.classList.contains('is-fold');
       setFold(on);
-      write(foldKey(), on ? '1' : '0');
+      writeFold(on ? '1' : '0');
     };
 
     fold.addEventListener('click', flip);
@@ -831,11 +850,27 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
       hold = undefined;
     };
 
+    /**
+     * 跟手拖动 + 磁性提示（R52）。
+     *
+     * 磁性只做「提示」，不真的把卡片吸过去 —— 真的吸会在中途把位置从手指下面抢走，
+     * 反而更难放。所以：离左右边 28px 内给卡片加一圈受光边（`.is-snap-left/right`），
+     * 松手时 snap() 照旧吸到最近那条边。
+     */
+    const NEAR = 28;
     const moveTo = (px: number, py: number) => {
-      const x = Math.min(Math.max(0, px - ox), Math.max(0, innerWidth - root.offsetWidth));
-      const y = Math.min(Math.max(0, py - oy), Math.max(0, innerHeight - root.offsetHeight));
+      const maxX = Math.max(0, innerWidth - root.offsetWidth);
+      const maxY = Math.max(0, innerHeight - root.offsetHeight);
+      const x = Math.min(Math.max(0, px - ox), maxX);
+      const y = Math.min(Math.max(0, py - oy), maxY);
       root.style.setProperty('--jk-x', x + 'px');
       root.style.setProperty('--jk-y', y + 'px');
+      root.classList.toggle('is-snap-left', x < NEAR);
+      root.classList.toggle('is-snap-right', maxX - x < NEAR);
+    };
+
+    const clearSnapHint = () => {
+      root.classList.remove('is-snap-left', 'is-snap-right');
     };
 
     const beginDrag = () => {
@@ -867,6 +902,7 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
          所以位移不到 MOVED 就整件事作废：位置退回拖之前（这次是第一次被摆的话连
          `is-placed` 一起撤掉，好让它继续跟着 CSS 的默认位置走），`dragged` 不举旗，
          那一下 click 照常派给按钮。 */
+      clearSnapHint();
       if (Math.hypot(lx - sx, ly - sy) < MOVED) {
         dragged = false;
         if (!wasPlaced) {
@@ -880,6 +916,7 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
         return;
       }
 
+      clearSnapHint();
       snap();
       room();
       /* `dragged` 只为吞掉紧跟着这次拖动的那一下 click。浏览器**不一定**会派那一下
@@ -914,7 +951,13 @@ const jkStrings = JSON.stringify(clientStrings(locale)).replace(/</g, '\\u003c')
           moveTo(e.clientX, e.clientY);
           return;
         }
-        if (hold !== undefined && Math.hypot(e.clientX - sx, e.clientY - sy) > 8) stopHold();
+        if (hold !== undefined && Math.hypot(e.clientX - sx, e.clientY - sy) > 8) {
+          /* R52：不再等长按计时器 —— 手指移动超过 8px 就开拖。
+             原来要「按住 200ms 才跟手」，慢半拍就是「不跟手」本身。 */
+          stopHold();
+          beginDrag();
+          moveTo(e.clientX, e.clientY);
+        }
       },
       { passive: false }
     );

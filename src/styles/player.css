@@ -1639,3 +1639,11 @@
     transform: none;
   }
 }
+
+/* ══════════════ 磁性吸附提示（R52） ══════════════
+   只在拖动中、离左右边 28px 内出现。它不改变位置，只把「松手会吸到这一边」说出来。 */
+.jk-mini.is-drag.is-snap-left .jk-mini__card,
+.jk-mini.is-drag.is-snap-right .jk-mini__card {
+  border-color: var(--seal);
+  box-shadow: var(--shadow-glass), 0 0 0 1px var(--seal), 0 0 18px -4px var(--seal);
+}

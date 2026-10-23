@@ -42,24 +42,41 @@ const s = strings.stepsTool;
     </section>
   </div>
 
-  {/* 未登录：只说清边界，给后台入口。登录后的面板整块由脚本揭开 */}
+  {/* 未登录：说清边界并给登录入口（登录后回跳到这一页） */}
   <section class="gate rise rise-2" data-gate>
-    <p class="dim">{s.needAdmin}</p>
-    <a class="keylike" href="/admin">{s.goAdmin} →</a>
+    <p class="dim">{s.needLogin}</p>
+    <a class="keylike" href={'/login?next=' + encodeURIComponent('/tools/steps')}>{s.goLogin} →</a>
   </section>
 
+  {/* 登录后：一人一个账号、手动刷、自己的记录。自动刷步不在这页（只在后台）。 */}
   <section class="panel rise rise-3" data-panel hidden>
     <div class="panel__head">
-      <h2 class="sub">{s.panel}</h2>
-      <div class="panel__acts">
-        <button class="keylike keylike--quiet" type="button" data-run-auto>执行自动规则</button>
-        <button class="keylike keylike--quiet" type="button" data-refresh>{s.refresh}</button>
-      </div>
+      <h2 class="sub">{s.myAccount}</h2>
+      <span class="dim" data-acc-sum></span>
     </div>
-    <p class="dim heartbeat" data-heartbeat></p>
 
-    <ul class="accounts" data-accounts></ul>
-    <p class="dim empty" data-empty hidden>{s.noAccounts} {s.addHint}</p>
+    <form class="mine" data-form autocomplete="off">
+      <label class="mine__f">
+        <span class="mine__lab">{s.fieldUser}</span>
+        <input class="mine__in" data-f-user placeholder="手机号或邮箱" autocomplete="username" />
+      </label>
+      <label class="mine__f">
+        <span class="mine__lab">{s.fieldPwd}</span>
+        <input class="mine__in" data-f-pwd type="password" placeholder={s.pwdHint} autocomplete="current-password" />
+      </label>
+      <div class="mine__acts">
+        <button class="keylike" type="submit" data-save>{s.save}</button>
+        <button class="keylike keylike--quiet" type="button" data-del>{s.unbind}</button>
+      </div>
+    </form>
+    <p class="dim msg" data-form-msg hidden></p>
+
+    <div class="runbar">
+      <input class="mine__in mine__in--num" data-run-steps type="number" min="0" max="98000" placeholder={s.stepsHint} aria-label={s.stepsHint} />
+      <button class="keylike" type="button" data-run>{s.runNow}</button>
+      <button class="keylike keylike--quiet" type="button" data-quick>{s.quick}</button>
+    </div>
+    <p class="dim msg" data-run-msg hidden></p>
 
     <div class="loghead">
       <h2 class="sub">{s.log}</h2>
@@ -67,6 +84,7 @@ const s = strings.stepsTool;
     </div>
     <ol class="log" data-log></ol>
     <p class="dim empty" data-log-empty hidden>{s.logEmpty}</p>
+    <p class="dim">{s.autoNote}</p>
   </section>
 </BaseLayout>
 
@@ -447,53 +465,99 @@ const s = strings.stepsTool;
       white-space: normal;
     }
   }
+
+  /* ── 「帮您走走」的账号表单（R52）────────────────────────────────────── */
+  .mine {
+    display: grid;
+    gap: var(--sp-3, 0.75rem);
+    margin-top: var(--sp-4, 1rem);
+  }
+
+  .mine__f {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .mine__lab {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs, 0.75rem);
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+  }
+
+  .mine__in {
+    width: 100%;
+    height: 2.6rem;
+    padding: 0 0.8rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: var(--text-base, 1rem);
+    outline: none;
+  }
+
+  .mine__in:focus {
+    border-color: var(--seal);
+    box-shadow: 0 0 0 3px var(--seal-wash);
+  }
+
+  .mine__in--num {
+    max-width: 18rem;
+    font-family: var(--font-mono);
+  }
+
+  .mine__acts,
+  .runbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2, 0.5rem);
+    align-items: center;
+    margin-top: var(--sp-2, 0.5rem);
+  }
+
+  .msg {
+    margin: var(--sp-2, 0.5rem) 0 0;
+  }
 </style>
 
 <script>
   /**
-   * 状态面板：先问后台有没有登录，登录了才拉账号与记录。
-   * 主页只显示备注（label），不显示账号。
+   * 「帮您走走」的客户端（R52）。
+   *
+   * 与后台那套的区别写死在这里：**这页只管当前登录用户自己的一个 Zepp 账号，
+   * 只有手动刷，没有自动规则**。自动刷步的情况只在 /admin 的「刷步」面板里看。
+   *
+   * 账号与密码只进不出：保存之后服务端只回脱敏名，页面上永远没有明文。
    */
+  type LogRow = { id: number; steps: number; ok: number; msg: string; ts: number };
   type Account = {
-    id: string;
-    label: string;
-    note: string;
     userMask: string;
     enabled: boolean;
-    auto: boolean;
-    beforeHour: number;
-    beforeMinute: number;
-    threshold: number;
-    toMin: number;
-    toMax: number;
     lastSteps: number;
     lastRunAt: number;
-    lastRunMsg: string;
-    lastRunOk: boolean;
-  };
-
-  type LogRow = {
-    id: number;
-    userMask: string;
-    steps: number;
-    ok: boolean;
-    msg: string;
-    ts: number;
-    via: string;
+    lastOk: boolean;
+    lastMsg: string;
   };
 
   const gate = document.querySelector<HTMLElement>('[data-gate]');
   const panel = document.querySelector<HTMLElement>('[data-panel]');
-  const accountsEl = document.querySelector<HTMLElement>('[data-accounts]');
-  const emptyEl = document.querySelector<HTMLElement>('[data-empty]');
+  const form = document.querySelector<HTMLFormElement>('[data-form]');
+  const userIn = document.querySelector<HTMLInputElement>('[data-f-user]');
+  const pwdIn = document.querySelector<HTMLInputElement>('[data-f-pwd]');
+  const stepsIn = document.querySelector<HTMLInputElement>('[data-run-steps]');
+  const accSum = document.querySelector<HTMLElement>('[data-acc-sum]');
+  const formMsg = document.querySelector<HTMLElement>('[data-form-msg]');
+  const runMsg = document.querySelector<HTMLElement>('[data-run-msg]');
   const logEl = document.querySelector<HTMLElement>('[data-log]');
   const logEmpty = document.querySelector<HTMLElement>('[data-log-empty]');
 
-  function ruleSentence(a: Account): string {
-    const hh = String(a.beforeHour).padStart(2, '0');
-    const mm = String(a.beforeMinute).padStart(2, '0');
-    return `每天 ${hh}:${mm} 前，若不足 ${a.threshold} 步，刷到 ${a.toMin}–${a.toMax}；过点未刷则补刷`;
-  }
+  const say = (el: HTMLElement | null, text: string) => {
+    if (!el) return;
+    el.textContent = text;
+    el.hidden = !text;
+  };
 
   function when(ms: number): string {
     if (!ms) return '';
@@ -501,7 +565,7 @@ const s = strings.stepsTool;
   }
 
   async function api(path: string, body?: unknown) {
-    const res = await fetch('/api/admin/' + path, {
+    const res = await fetch('/api/site/' + path, {
       method: body === undefined ? 'GET' : 'POST',
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -513,165 +577,97 @@ const s = strings.stepsTool;
     } catch {
       /* 非 JSON 当失败 */
     }
-    return { ok: res.ok, data };
+    return { ok: res.ok, status: res.status, data };
   }
 
-  function paintAccounts(items: Account[]) {
-    if (!accountsEl) return;
-    accountsEl.textContent = '';
-    if (emptyEl) emptyEl.hidden = items.length > 0;
-    for (const a of items) {
-      const li = document.createElement('li');
-      li.className = 'account';
-
-      // 主页只亮备注；没备注才退回脱敏名
-      const user = document.createElement('div');
-      user.className = 'account__user';
-      user.textContent = a.label || a.userMask;
-
-      const badges = document.createElement('div');
-      badges.className = 'account__badges';
-      for (const [txt, on] of [
-        [a.enabled ? '启用' : '停用', a.enabled],
-        [a.auto ? '自动' : '仅手动', a.auto],
-      ] as const) {
-        const b = document.createElement('span');
-        b.className = 'badge' + (on ? ' badge--on' : '');
-        b.textContent = txt;
-        badges.appendChild(b);
-      }
-
-      const rule = document.createElement('p');
-      rule.className = 'rule';
-      rule.innerHTML = ruleSentence(a).replace(/(\d{2}:\d{2}|\d+)/g, '<b>$1</b>');
-
-      const meta = document.createElement('div');
-      meta.className = 'account__meta';
-
-      const steps = document.createElement('span');
-      steps.className = 'steps-now';
-      steps.textContent = String(a.lastSteps || 0);
-
-      const last = document.createElement('span');
-      last.className = 'last';
-      last.textContent = a.lastRunAt ? `上次 ${when(a.lastRunAt)} · ${a.lastRunMsg}` : '还没跑过';
-
-      const num = document.createElement('input');
-      num.type = 'number';
-      num.min = '0';
-      num.max = '98000';
-      num.placeholder = '指定步数';
-      num.className = 'steps-in';
-      num.setAttribute('aria-label', '指定步数');
-
-      const run = document.createElement('button');
-      run.type = 'button';
-      run.className = 'keylike';
-      run.textContent = '刷步';
-      run.addEventListener('click', async () => {
-        const custom = num.value.trim();
-        const payload: Record<string, unknown> = { id: a.id };
-        if (custom !== '') {
-          const n = Number(custom);
-          if (!Number.isFinite(n) || n < 0) {
-            run.textContent = '步数不对';
-            setTimeout(() => {
-              run.textContent = '刷步';
-            }, 1200);
-            return;
-          }
-          payload.steps = Math.trunc(n);
-        }
-        run.textContent = '正在刷…';
-        run.setAttribute('disabled', '');
-        const r = await api('steps-run', payload);
-        run.removeAttribute('disabled');
-        if (r.ok && r.data.ok) {
-          run.textContent = `已刷到 ${String(r.data.steps ?? '')} 步`;
-        } else {
-          run.textContent = `没刷成：${String(r.data.error ?? '')}`;
-        }
-        setTimeout(() => {
-          run.textContent = '刷步';
-          void load();
-        }, 1600);
-      });
-
-      meta.append(steps, last, num, run);
-      li.append(user, badges, rule, meta);
-      accountsEl.appendChild(li);
+  function paintAccount(a: Account | null) {
+    if (!accSum) return;
+    if (!a) {
+      accSum.textContent = '还没绑定 Zepp 账号';
+      return;
     }
+    accSum.textContent =
+      a.userMask +
+      (a.lastRunAt
+        ? ' · 上次 ' + when(a.lastRunAt) + ' · ' + (a.lastOk ? '✓ ' + a.lastSteps + ' 步' : '✗ ' + a.lastMsg)
+        : ' · 还没刷过');
   }
 
   function paintLog(rows: LogRow[]) {
     if (!logEl) return;
     logEl.textContent = '';
     if (logEmpty) logEmpty.hidden = rows.length > 0;
-    for (const r of rows.slice(0, 20)) {
+    for (const r of rows) {
       const li = document.createElement('li');
       const ok = document.createElement('span');
       ok.className = r.ok ? 'ok' : 'bad';
-      ok.textContent = r.ok ? `✓ ${r.steps}` : '✗';
-      const who = document.createElement('span');
-      who.textContent = r.userMask;
-      const via = document.createElement('span');
-      via.textContent = r.via === 'auto' ? '自动' : '手动';
+      ok.textContent = r.ok ? '✓ ' + r.steps : '✗';
       const msg = document.createElement('span');
       msg.className = 'msg';
       msg.textContent = r.msg;
       const ts = document.createElement('span');
       ts.textContent = when(r.ts);
-      li.append(ok, who, via, msg, ts);
+      li.append(ok, msg, ts);
       logEl.appendChild(li);
     }
   }
 
   async function load() {
-    const st = await api('state');
-    if (!st.ok || !st.data.logged) {
-      if (gate) gate.hidden = false;
-      if (panel) panel.hidden = true;
-      return;
-    }
-    if (gate) gate.hidden = true;
-    if (panel) panel.hidden = false;
+    const r = await api('steps');
+    const logged = !!(r.data && r.data.logged);
+    if (gate) gate.hidden = logged;
+    if (panel) panel.hidden = !logged;
+    if (!logged) return;
 
-    const acc = await api('steps-list');
-    paintAccounts(((acc.data.items as Account[]) ?? []) as Account[]);
-
-    const hb = document.querySelector<HTMLElement>('[data-heartbeat]');
-    if (hb) {
-      const at = Number(acc.data.lastAutoAt || 0);
-      hb.textContent = at
-        ? `上次自动扫描 ${when(at)}`
-        : '自动扫描尚未运行 · 点「执行自动规则」立刻跑一遍 · cron 每小时一次，过点会补刷';
-    }
-
-    const lg = await api('steps-log');
-    paintLog(((lg.data.items as LogRow[]) ?? []) as LogRow[]);
+    paintAccount((r.data.account as Account | null) ?? null);
+    paintLog(((r.data.log as LogRow[]) ?? []) as LogRow[]);
   }
 
-  document.querySelector('[data-refresh]')?.addEventListener('click', () => void load());
-  document.querySelector('[data-run-auto]')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget as HTMLButtonElement;
-    btn.textContent = '执行中…';
-    btn.setAttribute('disabled', '');
-    const r = await api('steps-run-auto', {});
-    btn.removeAttribute('disabled');
-    if (r.ok) {
-      const ran = Number(r.data.ran || 0);
-      btn.textContent = ran ? `已刷 ${ran} 个` : '已评估，见记录';
-      void load();
-      setTimeout(() => {
-        btn.textContent = '执行自动规则';
-      }, 2000);
-    } else {
-      btn.textContent = `失败：${String(r.data.error ?? '')}`;
-      setTimeout(() => {
-        btn.textContent = '执行自动规则';
-      }, 2400);
-    }
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = (userIn?.value || '').trim();
+    const pwd = pwdIn?.value || '';
+    if (!user) return say(formMsg, '填一下 Zepp 账号');
+    say(formMsg, '正在保存…');
+    const r = await api('steps-save', { user, pwd });
+    if (!r.ok || !r.data.ok) return say(formMsg, '没存上：' + String(r.data.error ?? ''));
+    if (pwdIn) pwdIn.value = '';
+    say(formMsg, '已保存。密码只存在服务端，页面上不会再显示。');
+    void load();
   });
+
+  document.querySelector('[data-del]')?.addEventListener('click', async () => {
+    if (!confirm('解除绑定？保存的 Zepp 账号会被删掉。')) return;
+    const r = await api('steps-del', {});
+    say(formMsg, r.ok ? '已解除绑定' : '没删成：' + String(r.data.error ?? ''));
+    void load();
+  });
+
+  const runOne = async (path: string, body: Record<string, unknown>) => {
+    say(runMsg, '正在刷…（要登录 Zepp，慢一点）');
+    const r = await api(path, body);
+    if (r.ok && r.data.ok) say(runMsg, '已刷到 ' + String(r.data.steps) + ' 步');
+    else say(runMsg, '没刷成：' + String(r.data.error ?? ''));
+    void load();
+  };
+
+  document.querySelector('[data-run]')?.addEventListener('click', () => {
+    const raw = (stepsIn?.value || '').trim();
+    const body: Record<string, unknown> = {};
+    if (raw) body.steps = Number(raw);
+    void runOne('steps-run', body);
+  });
+
+  document.querySelector('[data-quick]')?.addEventListener('click', () => {
+    const user = (userIn?.value || '').trim();
+    const pwd = pwdIn?.value || '';
+    if (!user || !pwd) return say(runMsg, '临时刷要在这两个框里填账号和密码');
+    const raw = (stepsIn?.value || '').trim();
+    const body: Record<string, unknown> = { user, pwd };
+    if (raw) body.steps = Number(raw);
+    void runOne('steps-quick', body);
+  });
+
   document.addEventListener('astro:page-load', () => void load());
   void load();
 </script>

@@ -18,6 +18,9 @@ import {
   beijingDate,
   clampSteps,
   evalBrush,
+  rangeOf,
+  targetOf,
+  jitterOf,
   looksMasked,
   maskUser,
   ruleSentence,
@@ -137,6 +140,16 @@ export async function putAccount(
     toMin: clampSteps(asInt(body.toMin, STEP_DEFAULTS.toMin)),
     toMax: clampSteps(asInt(body.toMax, STEP_DEFAULTS.toMax)),
   };
+  /* R52：后台表单给的是 C（目标）与 D（随机幅度），落库仍是 toMin/toMax 两列。
+     两个新字段都不给时按老写法用 toMin/toMax，老调用方不受影响。 */
+  if (body.target !== undefined || body.jitter !== undefined) {
+    const r2 = rangeOf(
+      asInt(body.target, targetOf({ toMin: payload.toMin, toMax: payload.toMax })),
+      asInt(body.jitter, jitterOf({ toMin: payload.toMin, toMax: payload.toMax }))
+    );
+    payload.toMin = r2.toMin;
+    payload.toMax = r2.toMax;
+  }
   if (payload.toMin > payload.toMax) {
     const t = payload.toMin;
     payload.toMin = payload.toMax;
@@ -254,14 +267,16 @@ export async function runOne(
   const now = Date.now();
 
   // 自动路径先判条件（当前步数优先问 Zepp）
+  let twoPhase = false;
   if (via === 'auto' && !opts.force) {
     const cur = await currentStepsOf(me);
-    const d = evalBrush(me, now, cur.steps);
+    const d = evalBrush(me, now, cur.steps, cur.source === 'zepp');
     if (!d.brush) {
       // 跳过也落一条，不然「自动没跑」在后台等于没发生
       await writeRun(env, me, 0, true, `跳过：${d.reason}`, 'auto');
       return { ok: true, steps: 0, skipped: d.reason };
     }
+    twoPhase = !!d.twoPhase;
   }
 
   const target =
@@ -270,6 +285,24 @@ export async function runOne(
       : pickTarget(me.toMin, me.toMax);
 
   const cached = (me.tokens as ZeppTokens | undefined) ?? null;
+
+  /* 两段式第一段：读不到步数时先刷到 B 附近探路。
+     成功了才继续刷 C —— 失败就在这里落日志收工，不去覆盖一个可能已经达标的账号。 */
+  if (twoPhase) {
+    const probe = clampSteps(me.threshold + Math.floor(Math.random() * 201));
+    try {
+      const r1 = await runBrush(me.user, me.pwd ?? '', cached, probe);
+      if (!r1.ok) {
+        await writeRun(env, me, probe, false, `探路没成：${r1.error}`, via);
+        return { ok: false, error: r1.error };
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await writeRun(env, me, probe, false, `探路异常：${msg}`, via);
+      return { ok: false, error: msg };
+    }
+  }
+
   let r;
   try {
     r = await runBrush(me.user, me.pwd ?? '', cached, target);
@@ -353,7 +386,7 @@ export async function runAuto(
       }
 
       const cur = await currentStepsOf(raw);
-      const dec = evalBrush(raw, at, cur.steps);
+      const dec = evalBrush(raw, at, cur.steps, cur.source === 'zepp');
       const row: AutoRow = {
         id: raw.id,
         userMask: maskUser(raw.user),
@@ -382,6 +415,19 @@ export async function runAuto(
 
       const target = pickTarget(raw.toMin, raw.toMax);
       try {
+        /* 两段式：读不到步数时先刷到 B 探路，成功了再补到 C ± D */
+        if (dec.twoPhase) {
+          const probe = clampSteps(raw.threshold + Math.floor(Math.random() * 201));
+          const r1 = await runBrush(raw.user, raw.pwd ?? '', (raw.tokens as ZeppTokens) || null, probe);
+          if (!r1.ok) {
+            await writeRun(env, raw, probe, false, `探路没成：${r1.error}`, 'auto');
+            row.ran = false;
+            row.error = r1.error;
+            skipped++;
+            rows.push(row);
+            continue;
+          }
+        }
         const r = await runBrush(raw.user, raw.pwd ?? '', (raw.tokens as ZeppTokens) || null, target);
         if (r.ok) {
           await writeRun(

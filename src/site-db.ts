@@ -111,6 +111,79 @@ export class SiteDB {
          PRIMARY KEY (user_id, k)
        )`,
       `CREATE INDEX IF NOT EXISTS idx_tvprog_ts ON tv_prog(user_id, ts DESC)`,
+      /* 追剧收藏（R52）。k 是片名 —— 同一部片在不同源上是不同的 vod，
+         收藏的是「这部剧」而不是「某个源上的这个 vod」，所以按片名归并。
+         src_* / line_* / ep_* / t 是**最后一次看的位置**，点「继续看」时
+         直接拿它去开详情，不必再搜一次（这正是站主要的那条）。 */
+      `CREATE TABLE IF NOT EXISTS tv_fav (
+         user_id   TEXT    NOT NULL,
+         k         TEXT    NOT NULL,
+         name      TEXT    NOT NULL DEFAULT '',
+         pic       TEXT    NOT NULL DEFAULT '',
+         src_id    TEXT    NOT NULL DEFAULT '',
+         vod_id    TEXT    NOT NULL DEFAULT '',
+         src_name  TEXT    NOT NULL DEFAULT '',
+         line_idx  INTEGER NOT NULL DEFAULT 0,
+         line_from TEXT    NOT NULL DEFAULT '',
+         ep_name   TEXT    NOT NULL DEFAULT '',
+         t         INTEGER NOT NULL DEFAULT 0,
+         d         INTEGER NOT NULL DEFAULT 0,
+         ts        INTEGER NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_tvfav_ts ON tv_fav(user_id, ts DESC)`,
+      /* 站点用户的 Zepp 账号（工具「帮您走走」）。**一人一个**：user_id 是主键，
+         再存就是覆盖 —— 这条约束写在表结构里，不靠接口自觉。 */
+      `CREATE TABLE IF NOT EXISTS step_user (
+         user_id     TEXT    PRIMARY KEY,
+         zepp_user   TEXT    NOT NULL DEFAULT '',
+         zepp_pwd    TEXT    NOT NULL DEFAULT '',
+         enabled     INTEGER NOT NULL DEFAULT 1,
+         last_steps  INTEGER NOT NULL DEFAULT 0,
+         last_run_at INTEGER NOT NULL DEFAULT 0,
+         last_ok     INTEGER NOT NULL DEFAULT 0,
+         last_msg    TEXT    NOT NULL DEFAULT '',
+         created_at  INTEGER NOT NULL
+       )`,
+      /* 每人自己的刷步流水（手动）。自动刷步的流水只在后台那一套里，这里看不到。 */
+      `CREATE TABLE IF NOT EXISTS step_user_log (
+         id         INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_id    TEXT    NOT NULL,
+         steps      INTEGER NOT NULL DEFAULT 0,
+         ok         INTEGER NOT NULL DEFAULT 0,
+         msg        TEXT    NOT NULL DEFAULT '',
+         ts         INTEGER NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_sul_user ON step_user_log(user_id, ts DESC)`,
+      /* ── 实时内容层（R52）────────────────────────────────────────────────
+         content_live：后台「发布」的文章/随笔/作品，Worker 用 /live/<coll>/<slug>
+         直接渲染。status=1 才算发布；0 是留着的线上草稿。 */
+      `CREATE TABLE IF NOT EXISTS content_live (
+         coll       TEXT    NOT NULL,
+         slug       TEXT    NOT NULL,
+         title      TEXT    NOT NULL DEFAULT '',
+         front      TEXT    NOT NULL DEFAULT '',
+         body       TEXT    NOT NULL DEFAULT '',
+         status     INTEGER NOT NULL DEFAULT 0,
+         updated_at INTEGER NOT NULL,
+         PRIMARY KEY (coll, slug)
+       )`,
+      /* kb_live：分身知识库的线上稿。loadKb() 按 question 覆盖/追加静态那一份 */
+      `CREATE TABLE IF NOT EXISTS kb_live (
+         question   TEXT    PRIMARY KEY,
+         answer     TEXT    NOT NULL DEFAULT '',
+         topic      TEXT    NOT NULL DEFAULT '',
+         aliases    TEXT    NOT NULL DEFAULT '',
+         status     INTEGER NOT NULL DEFAULT 1,
+         updated_at INTEGER NOT NULL
+       )`,
+      /* media：后台直接上传的图片。/api/media/<key> 直接吐字节 */
+      `CREATE TABLE IF NOT EXISTS media (
+         key        TEXT    PRIMARY KEY,
+         mime       TEXT    NOT NULL DEFAULT 'application/octet-stream',
+         size       INTEGER NOT NULL DEFAULT 0,
+         bytes      BLOB    NOT NULL,
+         created_at INTEGER NOT NULL
+       )`,
     ];
     for (const sql of ddl) this.#sql.exec(sql);
   }
@@ -131,6 +204,26 @@ export class SiteDB {
 
     const reply = (o: unknown): Response =>
       new Response(JSON.stringify(o), { headers: { 'content-type': 'application/json' } });
+
+    /* 取图：直接回字节。放在 switch 前面，因为它不是 JSON 接口。 */
+    if (p === '/media-get') {
+      const key = q('key') || asStr(b.key, 160);
+      const rows = this.#sql
+        .exec(`SELECT mime, bytes FROM media WHERE key = ?`, key)
+        .toArray();
+      const row = rows[0] as { mime?: string; bytes?: ArrayBuffer | Uint8Array } | undefined;
+      if (!row || !row.bytes) return new Response('not found', { status: 404 });
+      const buf = row.bytes instanceof Uint8Array ? row.bytes : new Uint8Array(row.bytes);
+      /* 切一段独立 ArrayBuffer 再交给 Response：Uint8Array 的泛型在这里不被认成 BodyInit，
+         而它背后可能是一个更大的 buffer（切片保证不会多吐字节）。 */
+      const body = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+      return new Response(body, {
+        headers: {
+          'content-type': String(row.mime ?? 'application/octet-stream'),
+          'cache-control': 'public, max-age=31536000, immutable',
+        },
+      });
+    }
 
     try {
       switch (p) {
@@ -436,6 +529,307 @@ export class SiteDB {
                FROM tv_prog WHERE user_id = ? ORDER BY ts DESC LIMIT 60`,
               userId
             )
+            .toArray();
+          return reply({ ok: true, rows });
+        }
+
+        /* ══════════ 追剧收藏（R52） ══════════ */
+
+        case '/tv-fav-put': {
+          const userId = asStr(b.userId, 80);
+          const name = asStr(b.name, 120);
+          if (!userId || !name) return reply({ ok: false, error: '缺少用户或片名' });
+          this.#sql.exec(
+            `INSERT INTO tv_fav (user_id, k, name, pic, src_id, vod_id, src_name,
+                                 line_idx, line_from, ep_name, t, d, ts)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(user_id, k) DO UPDATE SET
+               name = excluded.name,
+               pic = CASE WHEN excluded.pic != '' THEN excluded.pic ELSE tv_fav.pic END,
+               src_id = CASE WHEN excluded.src_id != '' THEN excluded.src_id ELSE tv_fav.src_id END,
+               vod_id = CASE WHEN excluded.vod_id != '' THEN excluded.vod_id ELSE tv_fav.vod_id END,
+               src_name = CASE WHEN excluded.src_name != '' THEN excluded.src_name ELSE tv_fav.src_name END,
+               line_idx = excluded.line_idx,
+               line_from = CASE WHEN excluded.line_from != '' THEN excluded.line_from ELSE tv_fav.line_from END,
+               ep_name = CASE WHEN excluded.ep_name != '' THEN excluded.ep_name ELSE tv_fav.ep_name END,
+               t = excluded.t, d = excluded.d, ts = excluded.ts`,
+            userId,
+            name,
+            name,
+            asStr(b.pic, 500),
+            asStr(b.srcId, 40),
+            asStr(b.vodId, 60),
+            asStr(b.srcName, 60),
+            asInt(b.lineIdx, 0),
+            asStr(b.lineFrom, 60),
+            asStr(b.epName, 120),
+            asInt(b.t, 0),
+            asInt(b.d, 0),
+            now
+          );
+          return reply({ ok: true });
+        }
+
+        case '/tv-fav-del': {
+          const userId = asStr(b.userId, 80);
+          const name = asStr(b.name, 120);
+          if (!userId || !name) return reply({ ok: false, error: '缺少用户或片名' });
+          this.#sql.exec(`DELETE FROM tv_fav WHERE user_id = ? AND k = ?`, userId, name);
+          return reply({ ok: true });
+        }
+
+        case '/tv-fav-list': {
+          const userId = q('userId');
+          const rows = this.#sql
+            .exec(
+              `SELECT k, name, pic, src_id, vod_id, src_name, line_idx, line_from,
+                      ep_name, t, d, ts
+               FROM tv_fav WHERE user_id = ? ORDER BY ts DESC LIMIT 200`,
+              userId
+            )
+            .toArray();
+          return reply({ ok: true, rows });
+        }
+
+        /* ══════════ 站点用户的 Zepp 账号（工具「帮您走走」） ══════════ */
+
+        case '/step-user-get': {
+          const userId = asStr(b.userId, 80) || q('userId');
+          if (!userId) return reply({ ok: false, error: '缺少用户' });
+          const rows = this.#sql
+            .exec(
+              `SELECT user_id, zepp_user, enabled, last_steps, last_run_at, last_ok, last_msg
+               FROM step_user WHERE user_id = ?`,
+              userId
+            )
+            .toArray();
+          /* 密码永不出库：这一条接口只回答「有没有绑、绑的是谁（脱敏）、上次怎样」 */
+          return reply({ ok: true, row: rows[0] ?? null });
+        }
+
+        /** 内部用：带密码的那一份，只给 Worker 的执行路径（不经过任何接口直出） */
+        case '/step-user-raw': {
+          const userId = asStr(b.userId, 80) || q('userId');
+          const rows = this.#sql
+            .exec(`SELECT zepp_user, zepp_pwd, enabled FROM step_user WHERE user_id = ?`, userId)
+            .toArray();
+          return reply({ ok: true, row: rows[0] ?? null });
+        }
+
+        /** 一人一个：user_id 主键，重复保存就是覆盖（站主要的「只能保存一个」） */
+        case '/step-user-put': {
+          const userId = asStr(b.userId, 80);
+          const zeppUser = asStr(b.zeppUser, 120);
+          if (!userId || !zeppUser) return reply({ ok: false, error: '缺少用户或 Zepp 账号' });
+          const pwd = asStr(b.zeppPwd, 200);
+          const exists = this.#sql
+            .exec(`SELECT user_id, zepp_pwd FROM step_user WHERE user_id = ?`, userId)
+            .toArray()[0];
+          if (exists) {
+            this.#sql.exec(
+              `UPDATE step_user SET zepp_user = ?, zepp_pwd = CASE WHEN ? != '' THEN ? ELSE zepp_pwd END,
+                 enabled = ?, last_steps = ?, last_run_at = ?, last_ok = ?, last_msg = ?
+               WHERE user_id = ?`,
+              zeppUser,
+              pwd,
+              pwd,
+              b.enabled === false ? 0 : 1,
+              asInt(b.lastSteps, 0),
+              asInt(b.lastRunAt, 0),
+              b.lastOk ? 1 : 0,
+              asStr(b.lastMsg, 400),
+              userId
+            );
+          } else {
+            this.#sql.exec(
+              `INSERT INTO step_user (user_id, zepp_user, zepp_pwd, enabled,
+                                      last_steps, last_run_at, last_ok, last_msg, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              userId,
+              zeppUser,
+              pwd,
+              b.enabled === false ? 0 : 1,
+              asInt(b.lastSteps, 0),
+              asInt(b.lastRunAt, 0),
+              b.lastOk ? 1 : 0,
+              asStr(b.lastMsg, 400),
+              now
+            );
+          }
+          return reply({ ok: true });
+        }
+
+        case '/step-user-del': {
+          const userId = asStr(b.userId, 80);
+          this.#sql.exec(`DELETE FROM step_user WHERE user_id = ?`, userId);
+          return reply({ ok: true });
+        }
+
+        case '/step-user-log-add': {
+          const userId = asStr(b.userId, 80);
+          this.#sql.exec(
+            `INSERT INTO step_user_log (user_id, steps, ok, msg, ts) VALUES (?, ?, ?, ?, ?)`,
+            userId,
+            asInt(b.steps, 0),
+            b.ok ? 1 : 0,
+            asStr(b.msg, 400),
+            now
+          );
+          // 每人只留最近 100 条，别让一张表无限长
+          this.#sql.exec(
+            `DELETE FROM step_user_log WHERE user_id = ? AND id NOT IN (
+               SELECT id FROM step_user_log WHERE user_id = ? ORDER BY ts DESC LIMIT 100)`,
+            userId,
+            userId
+          );
+          return reply({ ok: true });
+        }
+
+        case '/step-user-log-list': {
+          const userId = q('userId');
+          const n = Math.min(100, Math.max(1, asInt(q('n'), 20)));
+          const rows = this.#sql
+            .exec(
+              `SELECT id, steps, ok, msg, ts FROM step_user_log
+               WHERE user_id = ? ORDER BY ts DESC LIMIT ` + n,
+              userId
+            )
+            .toArray();
+          return reply({ ok: true, rows });
+        }
+
+        /* ══════════ 实时内容层（R52） ══════════ */
+
+        case '/content-live-put': {
+          const coll = asStr(b.coll, 20);
+          const slug = asStr(b.slug, 120);
+          if (!['posts', 'notes', 'projects', 'photos', 'kb'].includes(coll))
+            return reply({ ok: false, error: '不认识这个栏目' });
+          if (!/^[a-z0-9][a-z0-9/-]{0,120}$/.test(slug))
+            return reply({ ok: false, error: 'slug 只能用小写字母、数字、连字符与斜杠' });
+          this.#sql.exec(
+            `INSERT INTO content_live (coll, slug, title, front, body, status, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(coll, slug) DO UPDATE SET
+               title = excluded.title, front = excluded.front, body = excluded.body,
+               status = excluded.status, updated_at = excluded.updated_at`,
+            coll,
+            slug,
+            asStr(b.title, 200),
+            asStr(b.front, 4000),
+            asStr(b.body, 400000),
+            b.status === 0 || b.status === '0' ? 0 : 1,
+            now
+          );
+          return reply({ ok: true });
+        }
+
+        case '/content-live-del': {
+          this.#sql.exec(
+            `DELETE FROM content_live WHERE coll = ? AND slug = ?`,
+            asStr(b.coll, 20),
+            asStr(b.slug, 120)
+          );
+          return reply({ ok: true });
+        }
+
+        case '/content-live-list': {
+          const rows = this.#sql
+            .exec(
+              `SELECT coll, slug, title, status, updated_at, length(body) AS chars
+               FROM content_live ORDER BY updated_at DESC LIMIT 200`
+            )
+            .toArray();
+          return reply({ ok: true, rows });
+        }
+
+        case '/content-live-get': {
+          const rows = this.#sql
+            .exec(
+              `SELECT coll, slug, title, front, body, status, updated_at
+               FROM content_live WHERE coll = ? AND slug = ?`,
+              asStr(b.coll, 20) || q('coll'),
+              asStr(b.slug, 120) || q('slug')
+            )
+            .toArray();
+          return reply({ ok: true, row: rows[0] ?? null });
+        }
+
+        case '/kb-live-put': {
+          const question = asStr(b.question, 300).trim();
+          if (!question) return reply({ ok: false, error: '缺问题' });
+          this.#sql.exec(
+            `INSERT INTO kb_live (question, answer, topic, aliases, status, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(question) DO UPDATE SET
+               answer = excluded.answer, topic = excluded.topic,
+               aliases = excluded.aliases, status = excluded.status,
+               updated_at = excluded.updated_at`,
+            question,
+            asStr(b.answer, 20000),
+            asStr(b.topic, 60),
+            asStr(b.aliases, 500),
+            b.status === 0 || b.status === '0' ? 0 : 1,
+            now
+          );
+          return reply({ ok: true });
+        }
+
+        case '/kb-live-del': {
+          this.#sql.exec(`DELETE FROM kb_live WHERE question = ?`, asStr(b.question, 300));
+          return reply({ ok: true });
+        }
+
+        case '/kb-live-list': {
+          const rows = this.#sql
+            .exec(
+              `SELECT question, answer, topic, aliases, status, updated_at
+               FROM kb_live ORDER BY updated_at DESC LIMIT 300`
+            )
+            .toArray();
+          return reply({ ok: true, rows });
+        }
+
+        /* ── 图片 ──────────────────────────────────────────────────────────
+           base64 进、二进制出。DO 的 SQL 支持 BLOB，直接存字节，不转 data URL
+           （data URL 会让每次取图都多 33% 体积，而且没法走浏览器缓存）。 */
+        case '/media-put': {
+          const key = asStr(b.key, 160);
+          const b64 = typeof b.data === 'string' ? b.data : '';
+          if (!key || !b64) return reply({ ok: false, error: '缺 key 或数据' });
+          let bytes: Uint8Array;
+          try {
+            const raw = atob(b64);
+            bytes = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+          } catch {
+            return reply({ ok: false, error: '图片数据不是合法的 base64' });
+          }
+          if (bytes.byteLength > 3 * 1024 * 1024)
+            return reply({ ok: false, error: '图太大了（上限 3MB）' });
+          this.#sql.exec(
+            `INSERT INTO media (key, mime, size, bytes, created_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(key) DO UPDATE SET mime = excluded.mime, size = excluded.size,
+               bytes = excluded.bytes, created_at = excluded.created_at`,
+            key,
+            asStr(b.mime, 80) || 'image/webp',
+            bytes.byteLength,
+            /* 绑 ArrayBuffer 而不是 Uint8Array：DO 的 SQL 接口对视图类型的支持
+               依实现而定，ArrayBuffer 是最稳的那一种。 */
+            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+            now
+          );
+          return reply({ ok: true, key, size: bytes.byteLength });
+        }
+
+        case '/media-del': {
+          this.#sql.exec(`DELETE FROM media WHERE key = ?`, asStr(b.key, 160) || q('key'));
+          return reply({ ok: true });
+        }
+
+        case '/media-list': {
+          const rows = this.#sql
+            .exec(`SELECT key, mime, size, created_at FROM media ORDER BY created_at DESC LIMIT 200`)
             .toArray();
           return reply({ ok: true, rows });
         }

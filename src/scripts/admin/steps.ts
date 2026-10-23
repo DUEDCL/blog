@@ -50,8 +50,8 @@ function formEls() {
     hh: q<HTMLInputElement>('[data-s-hh]'),
     mm: q<HTMLInputElement>('[data-s-mm]'),
     th: q<HTMLInputElement>('[data-s-th]'),
-    min: q<HTMLInputElement>('[data-s-min]'),
-    max: q<HTMLInputElement>('[data-s-max]'),
+    c: q<HTMLInputElement>('[data-s-c]'),
+    d: q<HTMLInputElement>('[data-s-d]'),
     msg: q<HTMLElement>('[data-s-msg]'),
   };
 }
@@ -76,8 +76,12 @@ function fillForm(a?: Acc) {
   f.hh.value = String(a?.beforeHour ?? 10);
   f.mm.value = String(a?.beforeMinute ?? 0);
   f.th.value = String(a?.threshold ?? 8000);
-  f.min.value = String(a?.toMin ?? 10000);
-  f.max.value = String(a?.toMax ?? 12000);
+  /* C = 目标（toMin/toMax 的中点），D = 随机幅度（区间的一半）。
+     落库仍然是 toMin/toMax 两列，换算在 src/steps.ts 的 putAccount 里做。 */
+  const lo = Math.min(a?.toMin ?? 10000, a?.toMax ?? 12000);
+  const hi = Math.max(a?.toMin ?? 10000, a?.toMax ?? 12000);
+  f.c.value = String(Math.round((lo + hi) / 2));
+  f.d.value = String(Math.round((hi - lo) / 2));
   f.msg.hidden = true;
   showForm(true);
 }
@@ -169,8 +173,8 @@ async function save() {
     beforeHour: Number(f.hh.value) || 0,
     beforeMinute: Number(f.mm.value) || 0,
     threshold: Number(f.th.value) || 0,
-    toMin: Number(f.min.value) || 0,
-    toMax: Number(f.max.value) || 0,
+    target: Number(f.c.value) || 0,
+    jitter: Number(f.d.value) || 0,
   };
   const r = await api('steps-put', body);
   f.msg.hidden = false;

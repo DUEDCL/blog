@@ -94,6 +94,19 @@
 .in--sel {
   flex: 0 0 auto;
   width: auto;
+  /**
+   * 栏目下拉框「白显示」的根因：`<select>` 本体吃 `.in` 的 `color: var(--ink)`，
+   * 深色版次下那是接近白的一档；而 Windows/Chrome 的原生弹层是**浅色**的
+   * （它不吃页面配色），于是选项成了白底白字。
+   * 修法两半：`color-scheme: light` 让 UA 用浅色弹层并把字设成深色；
+   * `option` 上再显式写一遍，兜住不认 color-scheme 的国产内核。
+   */
+  color-scheme: light;
+}
+
+.in--sel option {
+  color: #14161a;
+  background-color: #ffffff;
 }
 
 .in--pass {

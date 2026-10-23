@@ -1286,3 +1286,122 @@
     transition: none !important;
   }
 }
+
+/* ══════════════ 追剧收藏（R52） ══════════════ */
+.tv-fav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.2em 0.6em;
+  border: var(--rule-w, 1px) solid var(--rule-strong);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.tv-fav:hover {
+  color: var(--ink);
+  border-color: var(--seal);
+}
+
+.tv-fav.is-on {
+  color: var(--seal);
+  border-color: var(--seal);
+  background: var(--seal-wash);
+}
+
+/* 海报角上那一枚：不占布局，也不抢卡片的点击 */
+.tv-fav--card {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 2;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--r-full);
+  background: rgba(10, 10, 12, 0.62);
+  color: #d8d2c8;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.tv-fav--card.is-on {
+  color: #f0b429;
+  border-color: #f0b429;
+}
+
+/* 「换源（还有 N 个）」与「显示 N 条无法直连的线路」：都是同一族的次要动作 */
+.tv-candmore,
+.tv-linemore {
+  margin-top: 0.45rem;
+  padding: 0.28rem 0.7rem;
+  border: var(--rule-w, 1px) dashed var(--rule-strong);
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+
+.tv-candmore:hover,
+.tv-linemore:hover {
+  color: var(--ink);
+  border-color: var(--seal);
+}
+
+.tv-candmore.is-on,
+.tv-linemore.is-on {
+  color: var(--seal);
+  border-style: solid;
+  border-color: var(--seal);
+}
+
+/* 追剧与继续观看两块之间的一道细线 */
+.tv-cont__sec + .tv-cont__sec {
+  margin-top: var(--sp-4, 1rem);
+  padding-top: var(--sp-4, 1rem);
+  border-top: var(--rule-w, 1px) solid var(--rule);
+}
+
+.tv-cont__row {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+
+.tv-cont__x {
+  padding: 0 0.4rem;
+  border: var(--rule-w, 1px) solid var(--rule);
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+
+.tv-cont__x:hover {
+  color: var(--seal);
+  border-color: var(--seal);
+}
+
+/* 画质偏好 / 观感增强：与倍速键同一族，但常态就标出「已锁最高」 */
+.tv-icon.is-on {
+  border-color: #f0b429;
+  color: #f0b429;
+}
+
+.tv-icon--wide {
+  width: auto;
+  padding: 0 0.55rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}

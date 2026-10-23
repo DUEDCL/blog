@@ -268,6 +268,11 @@ const TABS = [
 
           <div class="row">
             <button class="key" type="button" data-w-save>存草稿</button>
+            {/* R52：这两颗是「不用部署就上线」的入口。发布写进 DO，线上 /live/... 立刻可看；
+                图片直接传到 DO，拿回来的 URL 可以直接写进正文。 */}
+            <button class="key" type="button" data-w-publish>发布到线上</button>
+            <button class="key key--quiet2" type="button" data-w-img>上传图片</button>
+            <input type="file" accept="image/*" data-w-file hidden />
             <button class="key" type="button" data-w-down>下载 .md</button>
             <button class="key key--quiet2" type="button" data-w-copy>复制全文</button>
             <button class="key key--quiet2" type="button" data-w-eye>收起预览</button>
@@ -313,7 +318,9 @@ const TABS = [
       <p class="dim">
         小米运动（Zepp Life）账号，手机号或邮箱。刷完微信运动从那儿同步。
         <strong>密码只存在服务端</strong>，这一页保存之后就再也看不到明文；改密码时填新值，留空就是不改。
-        自动规则每小时扫一遍，条件满足才动手，一天最多成功刷一次。
+        自动规则每小时扫一遍，<strong>A 点之后</strong>才评估，一天最多成功刷一次。
+        读不到今日步数时走两段式：先刷到 B 探路，成功了再补到 C±D。
+        随机幅度 D 内取一个数，所以每天的目标都不一样。
       </p>
 
       <div class="row">
@@ -329,18 +336,20 @@ const TABS = [
         <label class="check"><input type="checkbox" data-s-enabled checked /><span>启用</span></label>
         <label class="check"><input type="checkbox" data-s-auto checked /><span>自动</span></label>
       </div>
+      {/* 条件句 A / B / C / D（R52）。四个都是可自定义的正整数：
+          A = 检测时刻 · B = 中间阈值 · C = 最终目标 · D = 随机幅度（C±D 内随机） */}
       <div class="row steps-form" data-steps-form2 hidden>
         <span class="dim lab">条件句：</span>
         <span class="dim">每天</span>
-        <input class="in in--num" data-s-hh type="number" min="0" max="23" value="10" aria-label="截止小时" />
+        <input class="in in--num" data-s-hh type="number" min="0" max="23" value="10" aria-label="A 点小时" />
         <span class="dim">:</span>
-        <input class="in in--num" data-s-mm type="number" min="0" max="59" value="0" aria-label="截止分钟" />
-        <span class="dim">前，若不足</span>
-        <input class="in in--num" data-s-th type="number" min="0" value="8000" aria-label="阈值" />
+        <input class="in in--num" data-s-mm type="number" min="0" max="59" value="0" aria-label="A 点分钟" />
+        <span class="dim">后，若不足</span>
+        <input class="in in--num" data-s-th type="number" min="0" value="8000" aria-label="B 中间阈值" />
         <span class="dim">步，刷到</span>
-        <input class="in in--num" data-s-min type="number" min="0" value="10000" aria-label="目标下限" />
-        <span class="dim">–</span>
-        <input class="in in--num" data-s-max type="number" min="0" value="12000" aria-label="目标上限" />
+        <input class="in in--num" data-s-c type="number" min="0" value="11000" aria-label="C 目标步数" />
+        <span class="dim">±</span>
+        <input class="in in--num" data-s-d type="number" min="0" value="1000" aria-label="D 随机幅度" />
       </div>
       <div class="row" data-steps-form3 hidden>
         <button class="key" type="button" data-s-save>保存</button>

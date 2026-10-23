@@ -95,6 +95,104 @@ async function copyAll() {
   }
 }
 
+/** 从 frontmatter 里取一个字段（不做完整解析，只认 `key: value` 一行） */
+function fm(key: string): string {
+  const re = new RegExp('^' + key + ':\\s*(.*)$', 'm');
+  const m = re.exec(front().value);
+  return (m && m[1] ? m[1] : '').trim().replace(/^['\"]|['\"]$/g, '');
+}
+
+/**
+ * 发布到线上（R52）。**这是真的实时**：写进 DO 的 content_live，
+ * Worker 的 /live/<coll>/<slug> 立刻渲染出来，不用构建、不用部署。
+ *
+ * 知识库（coll === 'kb'）走另一条：写进 kb_live，loadKb() 一分钟内并进分身的底座。
+ */
+async function publishLive() {
+  const coll = q<HTMLSelectElement>('[data-w-coll]').value;
+  const slug = (q<HTMLInputElement>('[data-w-slug]').value || '').trim();
+  if (!slug) return say('先起一个 slug（它也是线上地址的一段）');
+
+  if (coll === 'kb') {
+    const question = fm('question') || slug;
+    const { ok, data } = await api('kb-live-put', {
+      question,
+      answer: body().value,
+      topic: fm('topic'),
+      aliases: fm('aliases').replace(/[\[\]']/g, ''),
+      status: 1,
+    });
+    return say(ok ? '已写进分身知识库：' + question + '（一分钟内生效）' : '没发上去：' + String(data.error ?? ''));
+  }
+
+  const title = fm('title') || slug;
+  const { ok, data } = await api('content-live-put', {
+    coll,
+    slug,
+    title,
+    front: front().value,
+    body: body().value,
+    status: 1,
+  });
+  if (!ok) return say('没发上去：' + String(data.error ?? ''));
+  say('已发布：' + String(data.url ?? '') + '（这一页立刻能看，不用部署）');
+}
+
+/** 把一段文字插到正文光标处 */
+function insertBody(text: string) {
+  const t = body();
+  const s = t.selectionStart;
+  t.focus();
+  t.setRangeText(text, s, t.selectionEnd, 'end');
+  refreshStat();
+  autoSave();
+  paint();
+}
+
+/**
+ * 图片上传。**先在浏览器里压**：长边 1600px、WebP、质量 0.86。
+ * 两层理由：DO 的单行 BLOB 有上限（这里卡 3MB），而相机原图动辄 5–8MB；
+ * 另外文章正文根本用不到 4000px 宽的图。
+ */
+async function uploadImage(file: File) {
+  say('正在处理图片…');
+  let blob: Blob = file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const max = 1600;
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * scale);
+    const h = Math.round(bmp.height * scale);
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    const ctx = cv.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(bmp, 0, 0, w, h);
+      const out = await new Promise<Blob | null>((res) => cv.toBlob(res, 'image/webp', 0.86));
+      if (out) blob = out;
+    }
+  } catch {
+    /* 老浏览器不支持 createImageBitmap：原图直传，体积由服务端兜 */
+  }
+
+  if (blob.size > 3 * 1024 * 1024) return say('压完还是超过 3MB，换一张小点的');
+
+  const b64 = await new Promise<string>((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] ?? '');
+    fr.onerror = () => rej(new Error('读不出来'));
+    fr.readAsDataURL(blob);
+  });
+
+  const key = 'img-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7) + '.webp';
+  const { ok, data } = await api('media-put', { key, mime: 'image/webp', data: b64 });
+  if (!ok) return say('没传上去：' + String(data.error ?? ''));
+  const url = String(data.url ?? '/api/media/' + key);
+  insertBody('\n![' + file.name.replace(/\.[^.]+$/, '') + '](' + url + ')\n');
+  say('图已上传：' + url + '（已插到正文光标处）');
+}
+
 export function wireWrite() {
   // 栏目下拉与筛选下拉的选项都从同一份表来，不手写两遍
   for (const sel of ['[data-w-coll]', '[data-write-coll]']) {
@@ -125,6 +223,13 @@ export function wireWrite() {
   q('[data-write-coll]').addEventListener('change', drawList);
   q('[data-w-new]').addEventListener('click', fresh);
   q('[data-w-save]').addEventListener('click', () => void saveDraft());
+  q('[data-w-publish]').addEventListener('click', () => void publishLive());
+  q('[data-w-img]').addEventListener('click', () => q<HTMLInputElement>('[data-w-file]').click());
+  q<HTMLInputElement>('[data-w-file]').addEventListener('change', (e) => {
+    const f = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (f) void uploadImage(f);
+    (e.currentTarget as HTMLInputElement).value = '';
+  });
   q('[data-w-down]').addEventListener('click', download);
   q('[data-w-copy]').addEventListener('click', () => void copyAll());
 

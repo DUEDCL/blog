@@ -64,6 +64,8 @@
 
 .lg-me b {
   color: var(--ink);
+  /* 账号是 3~24 位的字母数字下划线横线，窄屏上贴着「当前账号：」会被挤出卡片 */
+  overflow-wrap: anywhere;
 }
 
 .lg-actions {
@@ -199,4 +201,15 @@
 .lg-msg.is-err {
   border-left-color: var(--seal);
   color: var(--ink);
+}
+
+/* 窄屏：卡片内边距收一档，否则 320px 下表单两侧只剩 12px，输入框看起来像被切掉 */
+@media (max-width: 40rem) {
+  .lg {
+    padding: var(--sp-5, 1.25rem);
+  }
+
+  .lg-actions .lg-btn {
+    flex: 1 1 auto;
+  }
 }

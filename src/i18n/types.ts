@@ -233,6 +233,18 @@ export interface Strings {
     /** 未登录时 */
     needAdmin: string;
     goAdmin: string;
+    /* ── R52：这一页从「站长的只读状态」改成「登录用户自己的账号」 ── */
+    needLogin: string;
+    goLogin: string;
+    myAccount: string;
+    fieldUser: string;
+    fieldPwd: string;
+    pwdHint: string;
+    save: string;
+    unbind: string;
+    stepsHint: string;
+    quick: string;
+    autoNote: string;
     /** 登录后的面板 */
     panel: string;
     accounts: string;
