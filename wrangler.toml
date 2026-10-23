@@ -63,6 +63,10 @@ run_worker_first = [
   "/api/app/*",
   "/api/tv/*",
   "/api/site/*",
+  # R52 的实时内容层。**这两条必须列上** —— 不在这个数组里，请求连 Worker 都不进，
+  # 会被静态资源兜底成 404 页（线上实测过：/api/media/xx 返回 404 页而不是 JSON）。
+  "/api/media/*",
+  "/live/*",
   "/tools/*",
   "/tv",
   "/tv/*",
