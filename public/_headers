@@ -9,6 +9,28 @@
 # 两个 max-age 冲突，长效缓存作废。文档给的解法是在窄规则里用 `! Cache-Control` 先摘掉，
 # 但同一条规则里「先删再设」的先后顺序文档没定义，所以不赌 —— 改成显式列出 HTML 路径。
 
+# --- 安全响应头（全局）------------------------------------------------------
+# 为什么这里可以写 /*：规则是**合并**的（文件开头那段），同名头会被逗号拼接。
+# 所以凡是别处已经定义过的头（Cache-Control、X-Robots-Tag）一律不出现在这一块里 ——
+# 一旦出现，/_astro/* 的 max-age=31536000 就会被拼上第二个 max-age，长效缓存作废。
+# 安全头在别处没有任何定义，合并不会产生冲突，用 /* 一次覆盖全站静态资源
+# （含 /_astro、/video、/audio、/tv、/en、/ja，以及 404 页）。
+#
+# 与边缘 Transform Rules 的关系：站主给的 token 没有 Zone WAF / Rulesets 权限
+# （rulesets 全线 403），所以这套头走 _headers 落盘、随 deploy 生效；
+# 将来拿到边缘权限后可以搬到 Transform Rules，两处同值也不会冲突（同名头会拼接，
+# 届时记得删掉这一块，别让头出现两遍）。
+#
+# CSP 首日 Report-Only：script-src 里的 9 个 sha256 由 scripts/csp-hash.mjs 在
+# 每次 build 后按 dist 里真实的内联脚本重算写入（见 package.json 的 build）。
+# 手动改这一行的 hash 等于自欺 —— 页面一改 hash 就变。
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+
 # --- HTML：短鲜期 + 长时间容许陈旧 ------------------------------------------
 # max-age=60 让边缘与浏览器各存 60 秒；过期后的 7 天内边缘直接吐旧的、同时后台回源刷新
 # （Cf-Cache-Status: UPDATING），访客不等待。这是国内首屏从秒级降到百毫秒级的关键。

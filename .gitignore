@@ -53,3 +53,9 @@ src/data/content.generated.ts
 # 两者都不是站点的一部分，提交它们只会让 `git status` 长期脏着。
 .agents/
 preview/
+
+# 安全加固的一次性产物（before/after 导出、回滚清单）。含 record id 与 zone id，
+# 每次执行都会重新生成，进仓库只会让公开仓库多一份基础设施快照。
+cases/**/backups/
+cases/**/ROLLBACK-*.md
+cases/**/.nginx-test/

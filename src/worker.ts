@@ -2452,7 +2452,36 @@ async function adminWrite(req: Request, env: Env, path: string): Promise<Respons
   return fail(404, '没有这个接口');
 }
 
-export default {
+/* ── 全站安全响应头（兜底层）──────────────────────────────────────────────
+   `public/_headers` 只作用于**静态资源**的响应。Worker 自己生成的那些响应
+   （`/tv` 的 302、`/tools/*` 的登录跳转、`/api/*` 的 JSON）压根不经过那一层，
+   所以 XFO / Referrer-Policy / Permissions-Policy 在那几条路径上是缺的 ——
+   线上实测：`curl -I https://duchenlin.top/tv` 只有 HSTS 与 nosniff，没有 XFO。
+
+   这里补的就是这个缺口，规则只有一条：**只补没有的**。静态资源已经带着
+   `_headers` 那一份，同名头再设一次会被拼成 `DENY, DENY`（`_headers` 是合并
+   语义，理由见那个文件开头），所以 `has()` 先判一次。
+
+   CSP 刻意不在这里补：它的 hash 由 `scripts/csp-hash.mjs` 在构建时按 dist 里
+   真实的内联脚本算出来写进 `_headers`，在这里再写一份就等于有第二份会漂移的
+   真相。Worker 响应里没有 HTML 文档（只有 302 与 JSON），本来也不需要 CSP。 */
+const SEC_HEADERS: [string, string][] = [
+  ['x-frame-options', 'DENY'],
+  ['referrer-policy', 'strict-origin-when-cross-origin'],
+  ['permissions-policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=()'],
+];
+
+function withSecurityHeaders(res: Response): Response {
+  let out = res;
+  for (const [k, v] of SEC_HEADERS) {
+    if (out.headers.has(k)) continue;
+    if (out === res) out = new Response(res.body, res);
+    out.headers.set(k, v);
+  }
+  return out;
+}
+
+const worker = {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
     const url = new URL(request.url);
 
@@ -2590,6 +2619,15 @@ export default {
     }
     ctx.waitUntil(appAutoTick(env).catch(() => ({ ran: 0, skipped: 0 })));
   },
+};
+
+/* 默认导出只做一件事：给 Worker 自己产出的响应补上安全头。
+   业务逻辑全在 worker 里，这里不碰任何一条分支。 */
+export default {
+  async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
+    return withSecurityHeaders(await worker.fetch(request, env, ctx));
+  },
+  scheduled: worker.scheduled,
 };
 
 
