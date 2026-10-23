@@ -22,7 +22,7 @@ const s = strings.stepsTool;
 ---
 
 <BaseLayout title={s.title} description={s.description} footerNote={s.note}>
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     <div class="head__row">
       <span class="vlabel">{s.heading}</span>
       <h1 class="head__title">{s.title}</h1>
@@ -72,7 +72,7 @@ const s = strings.stepsTool;
 
 <style>
   .head {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
     margin-bottom: var(--sp-6);
   }
 
@@ -84,9 +84,8 @@ const s = strings.stepsTool;
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     margin-right: auto;
   }
 
@@ -113,13 +112,31 @@ const s = strings.stepsTool;
 
   .brief {
     padding: var(--sp-5) var(--sp-6);
-    background: var(--paper-raised);
-    border: var(--rule-w) solid var(--rule);
+    background: transparent;
+    border: 1px solid var(--glass-border);
   }
 
   .brief--dim {
     background: transparent;
-    border-color: var(--rule);
+    border-color: var(--glass-border);
+  }
+
+  .panel {
+    padding: var(--sp-6);
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .gate {
+    padding: var(--sp-5);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    background: var(--glass-bg);
   }
 
   .brief__h {
@@ -149,9 +166,6 @@ const s = strings.stepsTool;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-4);
-    padding: var(--sp-5) 0;
-    border-top: var(--rule-w) solid var(--rule-strong);
-    border-bottom: var(--rule-w) solid var(--rule-strong);
     margin-bottom: var(--sp-8);
   }
 
@@ -159,20 +173,20 @@ const s = strings.stepsTool;
     margin: 0;
   }
 
-  /* 可点的方键：黄铜描边。全站圆角只给浮层，这里是直角 */
   .keylike {
     display: inline-flex;
     align-items: center;
     gap: var(--sp-2);
     padding: 0.5em 1.05em;
-    border: var(--rule-w) solid var(--rule-strong);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
     color: var(--ink);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-decoration: none;
     cursor: pointer;
-    background: transparent;
+    background: var(--glass-bg);
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
   }
 
@@ -205,7 +219,6 @@ const s = strings.stepsTool;
     font-family: var(--font-display);
     font-size: var(--text-xl);
     font-weight: 600;
-    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
     margin: 0;
     letter-spacing: 0.02em;
   }
@@ -223,27 +236,24 @@ const s = strings.stepsTool;
     list-style: none;
     margin: 0 0 var(--sp-10);
     padding: 0;
-    border-top: 2px solid var(--press);
-    border-bottom: var(--rule-w) solid var(--rule-strong);
+    display: grid;
+    gap: var(--sp-3);
   }
 
   .account {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: var(--sp-3) var(--sp-5);
-    padding: var(--sp-6) 0;
-    border-bottom: var(--rule-w) solid var(--rule);
-  }
-
-  .account:last-child {
-    border-bottom: 0;
+    padding: var(--sp-5);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
   }
 
   .account__user {
     font-family: var(--font-display);
     font-size: var(--text-xl);
     font-weight: 600;
-    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
     letter-spacing: 0.03em;
     color: var(--ink);
     line-height: 1.2;
@@ -260,7 +270,9 @@ const s = strings.stepsTool;
   .badge {
     display: inline-flex;
     padding: 0.22em 0.6em;
-    border: var(--rule-w) solid var(--rule-strong);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.1em;

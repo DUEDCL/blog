@@ -151,7 +151,7 @@ const cards = [
       「这个站怎么搭的」。站主圈掉了那三样（原话「将图示圈起来的地方全部删掉，添加『名片』栏」），
       于是这一页只剩名片与「别处」，页面本身就是名片：名片那一节因此从 h2 升成 h1
       （一页只能有一个 h1，而页头卡已经没了），顶栏也多了一项「名片」指到这儿。 */}
-  <div class="prose rise rise-1">
+  <div class="prose glass-card rise rise-1">
     <div class="head__row">
       <span class="vlabel">{s.label}</span>
       <h1 class="title">{s.title}</h1>
@@ -382,7 +382,7 @@ const cards = [
      那是「卡片里的卡片」（名片卡又套在面板里），两层边框在渲染里互相干扰。
      现在这一页就是纸，名片是纸上印的一排格子。 */
   .prose {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
   }
 
   .head__row {
@@ -395,9 +395,8 @@ const cards = [
   .title {
     margin-top: 0;
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
   }
 
   .pressrule {
@@ -418,15 +417,19 @@ const cards = [
     list-style: none;
   }
 
-  /* 纸上的一格：实底 + 一道线 + 直角。上一版是 4.5% 白膜 + 圆角的玻璃格子 */
   .card {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--sp-3);
     padding: var(--sp-5);
-    background: var(--paper-raised);
-    border: var(--rule-w) solid var(--rule-strong);
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-glass);
   }
 
   .card__label {
@@ -526,11 +529,6 @@ const cards = [
    * 也就是说微信自家扫码器能不能试反转这个**本机核实不了**的风险，
    * 在晨版下根本不存在。深色三档仍是反相码，灯箱里那颗「加白底」的退路照旧留着。
    */
-  :global(html[data-theme='paper']) .cards,
-  :global(html[data-theme='paper']) .lb__figure {
-    --qr-flip: none;
-  }
-
   .card__qr,
   .lb__code {
     display: block;
@@ -577,17 +575,16 @@ const cards = [
     gap: var(--sp-2);
   }
 
-  /* 方框（R44）：这些是「复制/打开」两类动作，方框已经够重。上一版是玻璃药丸，
-     而这一版全站只有浮层保留圆角 */
   .card__btn {
     display: inline-block;
-    padding: var(--sp-2) var(--sp-4);
+    padding: 0.5rem 0.9rem;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     line-height: 1.2;
     color: var(--ink-soft);
-    background: none;
-    border: var(--rule-w) solid var(--rule-strong);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
     text-decoration: none;
     cursor: pointer;
     transition: color 0.18s ease, border-color 0.18s ease,

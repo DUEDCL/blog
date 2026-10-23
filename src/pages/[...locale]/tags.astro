@@ -42,7 +42,7 @@ const groups = await Promise.all(
 ---
 
 <BaseLayout title={s.title} description={s.description} width="broad">
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     <div class="head__row">
       <span class="vlabel">{s.title}</span>
       <h1 class="head__title">{s.title}</h1>
@@ -100,7 +100,7 @@ const groups = await Promise.all(
 
 <style>
   .head {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
     margin-bottom: var(--sp-8);
   }
 
@@ -112,9 +112,8 @@ const groups = await Promise.all(
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     margin-right: auto;
   }
 
@@ -150,8 +149,12 @@ const groups = await Promise.all(
     display: inline-flex;
     align-items: baseline;
     gap: var(--sp-2);
-    padding: 0.3em 0.7em;
-    border: var(--rule-w) solid var(--rule-strong);
+    padding: 0.38em 0.8em;
+    border: var(--rule-w) solid var(--glass-border);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--ink-soft);
@@ -162,7 +165,7 @@ const groups = await Promise.all(
 
   .chip:hover {
     color: var(--ink);
-    background: var(--seal-wash);
+    background: var(--glass-bg-strong);
     border-color: var(--seal);
   }
 
@@ -182,18 +185,25 @@ const groups = await Promise.all(
   .groups {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-12);
+    gap: var(--sp-5);
   }
 
   .group {
-    /* 锚点偏移由 global.css 的 html { scroll-padding-top } 统一管，这里不重复定义 */
-    transition: background-color 0.5s ease;
+    padding: var(--sp-6);
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-glass);
+    transition: border-color 0.5s ease, box-shadow 0.5s ease;
   }
 
-  /* 跳过来的那一段给一层底色，明确「落在哪」 */
+  /* 跳过来的那一段提亮描边 + 外发光，明确「落在哪」 */
   .group:target {
-    background: var(--seal-wash);
-    box-shadow: 0 0 0 var(--sp-4) var(--seal-wash);
+    border-color: var(--seal);
+    box-shadow: var(--shadow-glass), var(--glow-accent);
   }
 
   .group__name {
@@ -217,12 +227,20 @@ const groups = await Promise.all(
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: var(--rule-w) solid var(--rule-strong);
-    border-bottom: var(--rule-w) solid var(--rule-strong);
+    display: grid;
+    gap: var(--sp-2);
   }
 
-  .item + .item {
-    border-top: var(--rule-w) solid var(--rule);
+  .item {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+  }
+
+  .item:hover {
+    border-color: var(--glass-border-lit);
+    background: var(--glass-bg-strong);
   }
 
   .item__link {
@@ -230,13 +248,13 @@ const groups = await Promise.all(
     grid-template-columns: 6.5rem 1fr auto;
     align-items: baseline;
     gap: var(--sp-4);
-    padding: var(--sp-4) var(--sp-3);
+    padding: var(--sp-4) var(--sp-5);
     text-decoration: none;
     transition: background-color 0.2s ease;
   }
 
   .item__link:hover {
-    background: var(--seal-wash);
+    background: transparent;
   }
 
   .item__date {

@@ -1,0 +1,1497 @@
+---
+/**
+ * UI 预览台（/preview）—— 玻璃版改版的完整验收面。
+ *
+ * 一页放三样东西：
+ *   1. 设计令牌与材质配方（色板、字号、间距、圆角、玻璃）。
+ *   2. 全部界面元素（按钮、表单、卡片、列表、浮层、状态、后台/影视/工具片段）。
+ *   3. 全站页面实时预览（iframe 切换 + 桌面/手机两档）。
+ *
+ * 不进导航、不进 sitemap；地址直接给。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const pages = [
+  { href: '/home', label: '首页', note: '刊头、双栏、作品与目录' },
+  { href: '/posts', label: '文章索引', note: '页头 + 玻璃条目' },
+  { href: '/posts/astro-personal-site', label: '文章详情', note: '长阅读、代码、标签' },
+  { href: '/notes', label: '随笔索引', note: '同一套列表' },
+  { href: '/notes/owning-a-domain', label: '随笔详情', note: '短阅读' },
+  { href: '/projects', label: '作品索引', note: '封面、状态、外链' },
+  { href: '/projects/vox', label: '作品详情', note: '文章头 + 正文' },
+  { href: '/photos', label: '图库索引', note: '密排网格与空状态' },
+  { href: '/music', label: '唱片机', note: '黑胶、歌词、点歌台' },
+  { href: '/about', label: '名片', note: '六张联系卡与二维码灯箱' },
+  { href: '/tools', label: '工具目录', note: '状态芯片与入口' },
+  { href: '/tools/steps', label: '刷步数', note: '账号条、条件句、日志' },
+  { href: '/archive', label: '归档', note: '年份、搜索、条目' },
+  { href: '/tags', label: '标签', note: '标签云与分组' },
+  { href: '/404', label: '404', note: '错误页与出口' },
+  { href: '/tv', label: '影视聚合', note: '搜索、海报、抽屉、播放器' },
+  { href: '/login', label: '登录', note: '表单、切换、提示' },
+  { href: '/bushu', label: '步数管家', note: '大数字、卡密、自动任务' },
+  { href: '/admin', label: '后台', note: '功能栏与九个面板' },
+  { href: '/', label: '门', note: '启动页（另一套独立文档）' },
+];
+---
+
+<BaseLayout
+  title="UI 预览台"
+  description="玻璃版改版的全部设计令牌、界面元素与页面预览。"
+  footerNote="玻璃版 UI 预览台 · 二〇二六年十月"
+  width="wide"
+>
+  <div class="pv">
+    <header class="pv-hero glass-card rise rise-1">
+      <p class="eyebrow">Design system · 2026.10</p>
+      <h1 class="pv-title">玻璃版 UI 预览台</h1>
+      <p class="pv-lead">
+        全站改为「夜间玻璃 + 暖光」：内容面是半透明玻璃卡，页面底色是分层暗场与环境光。
+        只保留一套配色——启动页那扇门：一束白光、一枚黄铜。
+      </p>
+      <div class="pv-stats">
+        <div><b>19</b><span>页面模板</span></div>
+        <div><b>1</b><span>配色</span></div>
+        <div><b>11</b><span>共享组件</span></div>
+        <div><b>1</b><span>玻璃配方</span></div>
+      </div>
+    </header>
+
+    <!-- 01 色板 -->
+    <section class="pv-sec" id="palette">
+      <div class="pv-head">
+        <p class="eyebrow">01 / Palette</p>
+        <h2>一套配色：门</h2>
+        <p>色值逐位取自启动页那扇门的屏幕像素；没有第二种彩色，强调色只有黄铜。</p>
+      </div>
+
+      <div class="pv-cols pv-cols--1">
+        <article class="glass-card palette" data-theme="portal">
+          <div class="palette__head">
+            <h3>门</h3>
+            <span class="meta">唯一配色</span>
+          </div>
+          <div class="swatches">
+            <span class="sw"><i style="background: var(--paper)"></i><b>paper</b><em>#050505</em></span>
+            <span class="sw"><i style="background: var(--paper-raised)"></i><b>raised</b><em>#0d0c0b</em></span>
+            <span class="sw"><i style="background: var(--ink)"></i><b>ink</b><em>#fbfbfb</em></span>
+            <span class="sw"><i style="background: var(--seal)"></i><b>seal</b><em>#c4ad97</em></span>
+            <span class="sw"><i style="background: var(--press)"></i><b>press</b><em>#c4ad97</em></span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 02 字体与尺度 -->
+    <section class="pv-sec" id="type">
+      <div class="pv-head">
+        <p class="eyebrow">02 / Type</p>
+        <h2>字体与尺度</h2>
+        <p>Manrope 几何无衬线 + 系统中文字体栈；等宽用于元信息与数字。</p>
+      </div>
+
+      <div class="pv-cols pv-cols--type">
+        <article class="glass-card type-card">
+          <p class="type-sample type-sample--mast">沉麟</p>
+          <p class="type-sample type-sample--h1">玻璃与暖光</p>
+          <p class="type-sample type-sample--h2">一份会呼吸的界面</p>
+          <p class="type-sample type-sample--body">
+            正文 17px，行高 1.85。中文在屏幕上比衬线更耐读，长段落也不会挤在一起。
+          </p>
+          <p class="type-sample type-sample--small">META / 2026.10.23 / IBM PLEX MONO</p>
+        </article>
+
+        <article class="glass-card scale-card">
+          <div class="scale-row"><span>Masthead</span><b style="font-size: clamp(2rem, 4vw, 3rem)">沉麟</b><em>clamp(2.75rem, 7vw, 5.5rem)</em></div>
+          <div class="scale-row"><span>Headline</span><b style="font-size: 2rem">文章标题</b><em>clamp(1.75rem, 3.5vw, 2.75rem)</em></div>
+          <div class="scale-row"><span>Title</span><b style="font-size: 1.5rem">栏目标题</b><em>24px</em></div>
+          <div class="scale-row"><span>Body</span><b style="font-size: 1.0625rem">正文</b><em>17px</em></div>
+          <div class="scale-row"><span>Meta</span><b style="font-size: 0.75rem">2026.10.23</b><em>12px</em></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 03 材质 -->
+    <section class="pv-sec" id="material">
+      <div class="pv-head">
+        <p class="eyebrow">03 / Material</p>
+        <h2>一块玻璃的配方</h2>
+        <p>半透明底 + 24px 模糊 + 1px 低透明边 + 顶部受光；悬停只提亮描边与外发光。</p>
+      </div>
+
+      <div class="pv-cols">
+        <article class="glass-card recipe">
+          <div class="recipe__top">
+            <span class="chip">glass-card</span>
+            <span class="meta">24px blur · 160% saturate</span>
+          </div>
+          <p class="recipe__demo">这块面板就是配方本身。</p>
+          <pre><code>background: rgba(var(--paper-c), .55);
+backdrop-filter: blur(24px) saturate(160%);
+border: 1px solid rgba(var(--ink-c), .10);
+border-radius: 20px;
+box-shadow:
+  inset 0 1px 0 rgba(255,255,255,.07),
+  0 24px 64px -28px rgba(0,0,0,.8);</code></pre>
+        </article>
+
+        <article class="glass-card radii">
+          <p class="eyebrow">Radius</p>
+          <div class="radii__row">
+            <span style="border-radius: 8px">8</span>
+            <span style="border-radius: 12px">12</span>
+            <span style="border-radius: 20px">20</span>
+            <span style="border-radius: 28px">28</span>
+            <span style="border-radius: 999px">999</span>
+          </div>
+          <p class="eyebrow" style="margin-top: var(--sp-6)">Spacing</p>
+          <div class="spacing">
+            <i style="width: 8px"></i><i style="width: 16px"></i><i style="width: 24px"></i>
+            <i style="width: 32px"></i><i style="width: 48px"></i><i style="width: 64px"></i>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 04 按钮与控件 -->
+    <section class="pv-sec" id="controls">
+      <div class="pv-head">
+        <p class="eyebrow">04 / Controls</p>
+        <h2>按钮、标签与输入</h2>
+        <p>一套圆角：按钮与输入 12px，标签 999px，卡片 20px。</p>
+      </div>
+
+      <div class="pv-cols pv-cols--3">
+        <article class="glass-card panel">
+          <h3>按钮</h3>
+          <div class="row">
+            <button class="btn btn--primary">主按钮</button>
+            <button class="btn">次按钮</button>
+            <button class="btn btn--ghost">幽灵</button>
+            <button class="btn" disabled>禁用</button>
+          </div>
+          <div class="row">
+            <button class="icon-btn" aria-label="播放">▶</button>
+            <button class="icon-btn" aria-label="设置">⚙</button>
+            <button class="icon-btn icon-btn--primary" aria-label="发送">↑</button>
+          </div>
+        </article>
+
+        <article class="glass-card panel">
+          <h3>标签与状态</h3>
+          <div class="row">
+            <span class="chip">默认</span>
+            <span class="chip chip--on">当前</span>
+            <span class="badge badge--ok">在用</span>
+            <span class="badge badge--warn">进行中</span>
+            <span class="badge badge--muted">已归档</span>
+          </div>
+          <div class="row">
+            <span class="tag"># 架构</span>
+            <span class="tag"># Astro</span>
+            <span class="tag"># 玻璃</span>
+          </div>
+          <p class="muted">默认 / 当前 / 成功 / 进行中 / 归档 / 关键词</p>
+        </article>
+
+        <article class="glass-card panel">
+          <h3>表单</h3>
+          <label class="field"><span>标题</span><input class="input" value="玻璃版 UI" /></label>
+          <label class="field"><span>选择</span>
+            <select class="input"><option>门</option></select>
+          </label>
+          <label class="field"><span>说明</span><textarea class="input" rows="2">半透明、暖光、低对比的层级。</textarea></label>
+          <div class="row">
+            <label class="check"><input type="checkbox" checked /> 记住我</label>
+            <label class="check"><input type="radio" name="pv-r" checked /> 桌面</label>
+            <label class="check"><input type="radio" name="pv-r" /> 手机</label>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 05 卡片与列表 -->
+    <section class="pv-sec" id="cards">
+      <div class="pv-head">
+        <p class="eyebrow">05 / Surfaces</p>
+        <h2>卡片、条目与页面头</h2>
+        <p>所有内容面共用同一块玻璃：文章、作品、照片、名片、条目、页头。</p>
+      </div>
+
+      <div class="pv-cols">
+        <article class="glass-card demo-article">
+          <p class="meta">技术文章 · 2026.08.28</p>
+          <h3>一颗 148px 的球改了九版</h3>
+          <p>摘要只出现在头条与详情页的导语；列表里只有标题与日期。</p>
+          <div class="row"><span class="tag"># 视觉模型</span><span class="tag"># 规格</span></div>
+        </article>
+
+        <article class="glass-card demo-project">
+          <div class="demo-project__shot"></div>
+          <div>
+            <div class="row row--between"><h3>Vox</h3><span class="badge badge--ok">在用</span></div>
+            <p>本地优先的语音唤醒 Agent 平台。</p>
+            <p class="meta">2026.08.26 · # 语音 · # 本地</p>
+          </div>
+        </article>
+      </div>
+
+      <div class="pv-cols pv-cols--3" style="margin-top: var(--sp-4)">
+        <article class="glass-card demo-photo">
+          <div class="demo-photo__img"></div>
+          <div class="demo-photo__cap"><b>街角</b><span class="meta">杭州 · 2026.05</span></div>
+        </article>
+
+        <article class="glass-card demo-profile">
+          <div class="avatar"></div>
+          <h3>沉麟</h3>
+          <p class="muted">我就是一个在努力尝试和自己做朋友的人。</p>
+          <div class="row"><span class="chip chip--on">已登录</span><span class="meta">@duchenlin</span></div>
+        </article>
+
+        <article class="glass-card demo-stat">
+          <p class="meta">今日步数</p>
+          <p class="demo-stat__num">12,480</p>
+          <div class="meter"><i style="width: 62%"></i></div>
+          <p class="muted">目标 20,000 · 62%</p>
+        </article>
+      </div>
+
+      <article class="glass-card demo-head" style="margin-top: var(--sp-4)">
+        <span class="vlabel">文章</span>
+        <h3>技术文章</h3>
+        <span class="meta">共 7 篇</span>
+        <div class="pressrule"></div>
+        <p class="muted">页头：玻璃小标签 + 标题 + 计数 + 一条渐隐线。</p>
+      </article>
+
+      <ul class="briefs" style="margin-top: var(--sp-4)">
+        <li class="brief"><a href="#"><span class="brief__title">给多个 agent 做路由：五维打分</span><span class="meta brief__date">2026.08.24</span></a></li>
+        <li class="brief"><a href="#"><span class="brief__title">说一句话就能在我电脑上执行命令</span><span class="meta brief__date">2026.08.19</span></a></li>
+      </ul>
+    </section>
+
+    <!-- 06 浮层 -->
+    <section class="pv-sec" id="overlays">
+      <div class="pv-head">
+        <p class="eyebrow">06 / Overlays</p>
+        <h2>浮层：播放器、分身、灯箱、Toast</h2>
+        <p>浮层是玻璃最该出现的地方：它真的浮在内容之上。</p>
+      </div>
+
+      <div class="pv-cols pv-cols--3">
+        <article class="glass-card mock-player">
+          <div class="mock-player__disc"></div>
+          <div>
+            <b>特别的人</b>
+            <span class="muted">方大同 · 危险世界</span>
+            <div class="mock-player__bar"><i></i></div>
+          </div>
+          <div class="mock-player__keys"><span>⏮</span><span class="mock-player__play">▶</span><span>⏭</span></div>
+        </article>
+
+        <article class="glass-card mock-chat">
+          <div class="mock-chat__head"><b>沉麟的分身</b><span class="meta">AI</span></div>
+          <p class="bubble bubble--ai">你好，我是沉麟，你想和我聊些什么</p>
+          <p class="bubble bubble--me">这个站是用什么做的？</p>
+          <div class="mock-chat__input"><span>回车发送</span><b>↑</b></div>
+        </article>
+
+        <article class="glass-card mock-toast">
+          <span class="badge badge--ok">已复制</span>
+          <p>微信昵称已复制到剪贴板。</p>
+          <button class="btn btn--small" data-lb-open>打开二维码灯箱</button>
+        </article>
+      </div>
+
+      <dialog class="pv-lb" id="pv-lb">
+        <div class="pv-lb__stage"><span></span></div>
+        <div class="pv-lb__cap">
+          <b>微信二维码</b>
+          <button class="btn btn--small" data-lb-close>关闭</button>
+        </div>
+      </dialog>
+    </section>
+
+    <!-- 07 状态 -->
+    <section class="pv-sec" id="states">
+      <div class="pv-head">
+        <p class="eyebrow">07 / States</p>
+        <h2>空、加载、错误、成功</h2>
+        <p>状态不是补丁，是版面的另一半。</p>
+      </div>
+
+      <div class="pv-cols pv-cols--2">
+        <article class="glass-card state">
+          <p class="eyebrow">Empty</p>
+          <p class="state__big">○</p>
+          <p>照片还没整理好，等拍够一组再放上来。</p>
+        </article>
+        <article class="glass-card state">
+          <p class="eyebrow">Loading</p>
+          <div class="skeleton"><i></i><i></i><i></i></div>
+          <p class="muted">正在取歌词…</p>
+        </article>
+        <article class="glass-card state state--bad">
+          <p class="eyebrow">Error</p>
+          <p><b>没刷成：</b>账号或密码不对。</p>
+          <button class="btn btn--small">重试</button>
+        </article>
+        <article class="glass-card state state--ok">
+          <p class="eyebrow">Success</p>
+          <p><b>已刷到 12,480 步。</b>微信运动会自己同步。</p>
+          <button class="btn btn--small">查看记录</button>
+        </article>
+      </div>
+    </section>
+
+    <!-- 08 后台与工具片段 -->
+    <section class="pv-sec" id="app">
+      <div class="pv-head">
+        <p class="eyebrow">08 / App surfaces</p>
+        <h2>后台、影视与工具</h2>
+        <p>产品页也走同一套玻璃，只是密度更高。</p>
+      </div>
+
+      <div class="pv-cols">
+        <article class="glass-card app-bar">
+          <div class="app-bar__row">
+            <span class="avatar avatar--sm"></span>
+            <b>沉麟</b><span class="muted">后台</span>
+            <span class="tabs"><i class="is-on">模型</i><i>聊天记录</i><i>接管</i><i>文章</i></span>
+            <span class="live-dot"></span>
+          </div>
+          <div class="res res--ok"><b>主线路 · 200</b><p>deepseek-v4 · 1.2s · 正常</p></div>
+          <div class="res res--warn"><b>备用线路 · 超时</b><p>8.0s · 已自动降级</p></div>
+        </article>
+
+        <article class="glass-card tv-demo">
+          <div class="tv-demo__poster"></div>
+          <div>
+            <div class="row row--between"><b>庆余年</b><span class="badge badge--ok">1080P</span></div>
+            <p class="muted">2019 · 古装 · 46 集</p>
+            <div class="row"><span class="chip chip--on">线路 1</span><span class="chip">线路 2</span><span class="chip">线路 3</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 09 页面清单 + 实时预览 -->
+    <section class="pv-sec" id="pages">
+      <div class="pv-head">
+        <p class="eyebrow">09 / Pages</p>
+        <h2>全站实时预览</h2>
+        <p>点一条，下面这台预览器就切到那一页；桌面 / 手机两档宽度。</p>
+      </div>
+
+      <div class="pv-cols pv-cols--pages">
+        <div class="glass-card page-list">
+          <ul>
+            {pages.map((p) => (
+              <li>
+                <button class="page-item" data-pv-go={p.href}>
+                  <span>{p.label}</span>
+                  <em>{p.note}</em>
+                  <b>{p.href}</b>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="glass-card viewer">
+          <div class="viewer__bar">
+            <span class="viewer__dot"></span>
+            <span class="viewer__dot"></span>
+            <span class="viewer__dot"></span>
+            <span class="viewer__url" data-pv-url>/home</span>
+            <span class="viewer__acts">
+              <button class="btn btn--small is-on" data-pv-size="desktop">桌面</button>
+              <button class="btn btn--small" data-pv-size="mobile">手机</button>
+            </span>
+          </div>
+          <div class="viewer__stage" data-pv-stage>
+            <iframe data-pv-frame src="/home" title="页面预览"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  (function () {
+    var frame = document.querySelector('[data-pv-frame]');
+    var url = document.querySelector('[data-pv-url]');
+    var stage = document.querySelector('[data-pv-stage]');
+    if (!frame) return;
+
+    document.addEventListener('click', function (e) {
+      var go = e.target.closest('[data-pv-go]');
+      if (go) {
+        var href = go.getAttribute('data-pv-go');
+        frame.src = href;
+        if (url) url.textContent = href;
+        document.querySelectorAll('.page-item').forEach(function (b) {
+          b.classList.toggle('is-on', b === go);
+        });
+        return;
+      }
+
+      var size = e.target.closest('[data-pv-size]');
+      if (size) {
+        var mobile = size.getAttribute('data-pv-size') === 'mobile';
+        if (stage) stage.classList.toggle('is-mobile', mobile);
+        document.querySelectorAll('[data-pv-size]').forEach(function (b) {
+          b.classList.toggle('is-on', b === size);
+        });
+      }
+    });
+
+    var lb = document.getElementById('pv-lb');
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('[data-lb-open]')) {
+        if (lb && lb.showModal) lb.showModal();
+      }
+      if (e.target.closest('[data-lb-close]')) {
+        if (lb) lb.close();
+      }
+    });
+  })();
+</script>
+
+<style>
+  .pv {
+    padding-bottom: var(--sp-16);
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0;
+  }
+
+  .muted {
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+  }
+
+  .pv-hero {
+    padding: var(--sp-10);
+    margin-top: var(--sp-4);
+  }
+
+  .pv-title {
+    margin-top: var(--sp-3);
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+
+  .pv-lead {
+    margin-top: var(--sp-4);
+    max-width: 46rem;
+    font-size: var(--text-lg);
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+
+  .pv-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-3);
+    margin-top: var(--sp-8);
+  }
+
+  .pv-stats div {
+    padding: var(--sp-4);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
+  }
+
+  .pv-stats b {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xl);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .pv-stats span {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .pv-sec {
+    margin-top: var(--sp-16);
+  }
+
+  .pv-head {
+    display: grid;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-5);
+  }
+
+  .pv-head h2 {
+    font-size: var(--text-2xl);
+    letter-spacing: -0.03em;
+  }
+
+  .pv-head p:last-child {
+    max-width: 46rem;
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+    line-height: 1.65;
+  }
+
+  .pv-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-4);
+    align-items: start;
+  }
+
+  .pv-cols--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pv-cols--1 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pv-cols--type {
+    grid-template-columns: 1.15fr 1fr;
+  }
+
+  .pv-cols--pages {
+    grid-template-columns: 20rem minmax(0, 1fr);
+  }
+
+  .glass-card h3 {
+    font-size: var(--text-lg);
+    letter-spacing: -0.02em;
+  }
+
+  /* 色板 */
+  .palette {
+    display: grid;
+    gap: var(--sp-4);
+  }
+
+  .palette__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+
+  .swatches {
+    display: grid;
+    gap: var(--sp-2);
+  }
+
+  .sw {
+    display: grid;
+    grid-template-columns: 2rem 1fr auto;
+    align-items: center;
+    gap: var(--sp-3);
+    font-size: var(--text-xs);
+  }
+
+  .sw i {
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--glass-border);
+  }
+
+  .sw b {
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .sw em {
+    font-style: normal;
+    font-family: var(--font-mono);
+    color: var(--ink-faint);
+  }
+
+  /* 字体 */
+  .type-card {
+    display: grid;
+    gap: var(--sp-4);
+  }
+
+  .type-sample {
+    margin: 0;
+  }
+
+  .type-sample--mast {
+    font-size: clamp(3rem, 7vw, 5rem);
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+
+  .type-sample--h1 {
+    font-size: var(--text-2xl);
+    letter-spacing: -0.03em;
+  }
+
+  .type-sample--h2 {
+    font-size: var(--text-xl);
+  }
+
+  .type-sample--body {
+    max-width: 38rem;
+    color: var(--ink-soft);
+    line-height: 1.85;
+  }
+
+  .type-sample--small {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+  }
+
+  .scale-card {
+    display: grid;
+    gap: var(--sp-2);
+  }
+
+  .scale-row {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr auto;
+    align-items: baseline;
+    gap: var(--sp-3);
+    padding-block: var(--sp-2);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .scale-row span,
+  .scale-row em {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-style: normal;
+    color: var(--ink-faint);
+  }
+
+  .scale-row b {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* 材质 */
+  .recipe {
+    display: grid;
+    gap: var(--sp-4);
+  }
+
+  .recipe__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+
+  .recipe__demo {
+    padding: var(--sp-6);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
+    text-align: center;
+    color: var(--ink-soft);
+  }
+
+  .recipe pre {
+    margin: 0;
+    padding: var(--sp-4);
+    overflow-x: auto;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background: var(--paper-sunken);
+    font-size: 0.72rem;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+
+  .radii__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
+  }
+
+  .radii__row span {
+    display: grid;
+    place-items: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    border: 1px solid var(--glass-border-lit);
+    background: var(--glass-bg);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+  }
+
+  .spacing {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+  }
+
+  .spacing i {
+    height: 0.75rem;
+    border-radius: 2px;
+    background: var(--seal);
+    opacity: 0.55;
+  }
+
+  /* 控件 */
+  .panel {
+    display: grid;
+    gap: var(--sp-4);
+    align-content: start;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .row--between {
+    justify-content: space-between;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    padding: 0.62rem 1rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease,
+      color 0.16s ease;
+  }
+
+  .btn:hover {
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .btn--primary {
+    background: var(--seal);
+    border-color: var(--seal);
+    color: var(--paper);
+  }
+
+  .btn--primary:hover {
+    background: var(--seal-hover);
+    border-color: var(--seal-hover);
+  }
+
+  .btn--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ink-soft);
+  }
+
+  .btn--small {
+    padding: 0.34rem 0.7rem;
+    font-size: var(--text-xs);
+  }
+
+  .btn[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn.is-on {
+    border-color: var(--seal);
+    color: var(--seal);
+    background: var(--seal-wash);
+  }
+
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+
+  .icon-btn--primary {
+    background: var(--seal);
+    border-color: var(--seal);
+    color: var(--paper);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+  }
+
+  .chip--on {
+    border-color: var(--seal);
+    background: var(--seal-wash);
+    color: var(--seal);
+  }
+
+  .badge {
+    display: inline-flex;
+    padding: 0.22rem 0.58rem;
+    border: 1px solid currentColor;
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+  }
+
+  .badge--ok { color: var(--seal); }
+  .badge--warn { color: var(--press); }
+  .badge--muted { color: var(--ink-faint); }
+
+  .tag {
+    display: inline-flex;
+    padding: 0.24rem 0.58rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+  }
+
+  .field {
+    display: grid;
+    gap: var(--sp-2);
+  }
+
+  .field > span {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+  }
+
+  .input {
+    width: 100%;
+    padding: 0.62rem 0.8rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    outline: none;
+  }
+
+  .input:focus {
+    border-color: var(--seal);
+    box-shadow: 0 0 0 3px var(--seal-wash);
+  }
+
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+  }
+
+  .check input {
+    accent-color: var(--seal);
+  }
+
+  /* 卡片演示 */
+  .demo-article {
+    display: grid;
+    gap: var(--sp-3);
+  }
+
+  .demo-article h3 {
+    font-size: var(--text-2xl);
+    letter-spacing: -0.03em;
+  }
+
+  .demo-article p {
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+  }
+
+  .demo-project {
+    display: grid;
+    grid-template-columns: 7rem 1fr;
+    gap: var(--sp-4);
+    align-items: center;
+  }
+
+  .demo-project__shot {
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background:
+      radial-gradient(120% 120% at 20% 0%, rgba(196, 173, 151, 0.35), transparent 60%),
+      var(--paper-sunken);
+  }
+
+  .demo-project p {
+    margin-top: var(--sp-1);
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+  }
+
+  .demo-photo {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .demo-photo__img {
+    aspect-ratio: 4 / 3;
+    background:
+      radial-gradient(90% 80% at 30% 20%, rgba(255, 255, 255, 0.22), transparent 55%),
+      linear-gradient(140deg, #2a2622, #0b0b0c);
+  }
+
+  .demo-photo__cap {
+    display: grid;
+    gap: 2px;
+    padding: var(--sp-4);
+  }
+
+  .demo-profile {
+    display: grid;
+    gap: var(--sp-3);
+    justify-items: start;
+  }
+
+  .avatar {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: var(--r-md);
+    border: 1px solid var(--glass-border-lit);
+    background:
+      radial-gradient(circle at 40% 35%, #fbfbfb 0 42%, #bdb9b5 43% 55%, #141416 56%);
+  }
+
+  .avatar--sm {
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--r-sm);
+  }
+
+  .demo-stat__num {
+    margin-top: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-4xl);
+    line-height: 1;
+  }
+
+  .meter {
+    height: 4px;
+    border-radius: var(--r-full);
+    background: var(--rule);
+    overflow: hidden;
+    margin-top: var(--sp-4);
+  }
+
+  .meter i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--seal);
+  }
+
+  .demo-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+
+  .demo-head h3 {
+    margin-right: auto;
+    font-size: var(--text-3xl);
+    letter-spacing: -0.03em;
+  }
+
+  .demo-head .pressrule {
+    flex: 1 0 100%;
+  }
+
+  /* 浮层 */
+  .mock-player {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--sp-4);
+    align-items: center;
+  }
+
+  .mock-player__disc {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    background:
+      repeating-radial-gradient(circle at 50% 50%, rgba(251, 251, 251, 0.07) 0 1px, transparent 1px 4px),
+      radial-gradient(circle at 50% 50%, var(--seal) 0 26%, #0a0a08 27% 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .mock-player b {
+    display: block;
+    font-size: var(--text-base);
+  }
+
+  .mock-player .muted {
+    display: block;
+  }
+
+  .mock-player__bar {
+    height: 3px;
+    margin-top: var(--sp-3);
+    border-radius: var(--r-full);
+    background: var(--rule);
+    overflow: hidden;
+  }
+
+  .mock-player__bar i {
+    display: block;
+    width: 34%;
+    height: 100%;
+    background: var(--seal);
+  }
+
+  .mock-player__keys {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    color: var(--ink-soft);
+  }
+
+  .mock-player__play {
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: var(--seal);
+    color: var(--paper);
+  }
+
+  .mock-chat {
+    display: grid;
+    gap: var(--sp-3);
+  }
+
+  .mock-chat__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .bubble {
+    max-width: 92%;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-md);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+  }
+
+  .bubble--ai {
+    justify-self: start;
+    border: 1px solid var(--rule);
+    background: var(--glass-bg-strong);
+    color: var(--ink-soft);
+  }
+
+  .bubble--me {
+    justify-self: end;
+    background: var(--seal-wash);
+    color: var(--ink);
+  }
+
+  .mock-chat__input {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.5rem 0.5rem 0.8rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
+    color: var(--ink-faint);
+    font-size: var(--text-xs);
+  }
+
+  .mock-chat__input b {
+    display: grid;
+    place-items: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 50%;
+    background: var(--glass-bg-strong);
+    color: var(--ink-soft);
+  }
+
+  .mock-toast {
+    display: grid;
+    gap: var(--sp-3);
+    align-content: start;
+  }
+
+  /* 灯箱 */
+  .pv-lb {
+    width: min(92vw, 28rem);
+    padding: var(--sp-5);
+    color: var(--ink);
+    background: var(--glass-fallback);
+    border: 1px solid var(--glass-border-lit);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lift);
+  }
+
+  .pv-lb::backdrop {
+    background: rgba(5, 5, 5, 0.72);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+
+  .pv-lb__stage {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
+  }
+
+  .pv-lb__stage span {
+    width: 72%;
+    height: 72%;
+    background:
+      repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 12px 12px,
+      var(--sand-0);
+    opacity: 0.9;
+  }
+
+  .pv-lb__cap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    margin-top: var(--sp-4);
+  }
+
+  /* 状态 */
+  .state {
+    display: grid;
+    gap: var(--sp-3);
+    align-content: start;
+    min-height: 12rem;
+  }
+
+  .state__big {
+    font-family: var(--font-mono);
+    font-size: 2.5rem;
+    color: var(--ink-faint);
+  }
+
+  .state--bad {
+    border-color: var(--press);
+    background:
+      linear-gradient(var(--press-wash), var(--press-wash)),
+      var(--glass-under);
+  }
+
+  .state--ok {
+    border-color: var(--seal);
+  }
+
+  .skeleton {
+    display: grid;
+    gap: var(--sp-2);
+  }
+
+  .skeleton i {
+    display: block;
+    height: 0.8rem;
+    border-radius: var(--r-full);
+    background: var(--glass-bg-strong);
+    animation: pv-pulse 1.4s ease-in-out infinite;
+  }
+
+  .skeleton i:nth-child(2) { width: 82%; }
+  .skeleton i:nth-child(3) { width: 64%; }
+
+  @keyframes pv-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* 后台片段 */
+  .app-bar {
+    display: grid;
+    gap: var(--sp-3);
+  }
+
+  .app-bar__row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .tabs i {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: var(--r-full);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-style: normal;
+    color: var(--ink-faint);
+  }
+
+  .tabs i.is-on {
+    border-color: var(--glass-border);
+    background: var(--seal-wash);
+    color: var(--ink);
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--seal);
+    box-shadow: 0 0 12px var(--seal);
+  }
+
+  .res {
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--ink-faint);
+    border-radius: var(--r-md);
+    background: var(--glass-bg);
+    font-size: var(--text-xs);
+  }
+
+  .res b {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+  }
+
+  .res p {
+    margin-top: 2px;
+    color: var(--ink-faint);
+  }
+
+  .res--ok { border-left-color: var(--seal); }
+  .res--warn { border-left-color: var(--ink-soft); }
+
+  .tv-demo {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr;
+    gap: var(--sp-4);
+    align-items: center;
+  }
+
+  .tv-demo__poster {
+    aspect-ratio: 2 / 3;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    background:
+      radial-gradient(90% 70% at 30% 20%, rgba(255, 255, 255, 0.18), transparent 55%),
+      linear-gradient(160deg, #2b2622, #08080a);
+  }
+
+  /* 页面清单与预览 */
+  .page-list {
+    padding: var(--sp-2);
+    max-height: 44rem;
+    overflow-y: auto;
+  }
+
+  .page-list ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .page-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px var(--sp-3);
+    width: 100%;
+    padding: var(--sp-3);
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease;
+  }
+
+  .page-item:hover,
+  .page-item.is-on {
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+  }
+
+  .page-item span {
+    font-size: var(--text-sm);
+    color: var(--ink);
+  }
+
+  .page-item em {
+    grid-column: 1 / -1;
+    font-style: normal;
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .page-item b {
+    grid-column: 2;
+    grid-row: 1;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 400;
+    color: var(--ink-faint);
+  }
+
+  .viewer {
+    padding: var(--sp-2);
+  }
+
+  .viewer__bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 0 var(--sp-2) var(--sp-2);
+  }
+
+  .viewer__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--rule-strong);
+  }
+
+  .viewer__url {
+    margin-left: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+
+  .viewer__acts {
+    margin-left: auto;
+    display: flex;
+    gap: var(--sp-2);
+  }
+
+  .viewer__stage {
+    height: 44rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    overflow: auto;
+    background: var(--paper);
+  }
+
+  .viewer__stage iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--paper);
+    transition: width 0.24s ease;
+  }
+
+  .viewer__stage.is-mobile {
+    display: grid;
+    place-items: start center;
+    padding: var(--sp-4);
+  }
+
+  .viewer__stage.is-mobile iframe {
+    width: 390px;
+    height: 844px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+  }
+
+  @media (max-width: 72rem) {
+    .pv-cols--3 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pv-cols--pages {
+      grid-template-columns: 1fr;
+    }
+
+    .page-list {
+      max-height: 20rem;
+    }
+  }
+
+  @media (max-width: 52rem) {
+    .pv-cols,
+    .pv-cols--3,
+    .pv-cols--type {
+      grid-template-columns: 1fr;
+    }
+
+    .pv-hero {
+      padding: var(--sp-6);
+    }
+
+    .pv-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .viewer__stage {
+      height: 36rem;
+    }
+  }
+</style>

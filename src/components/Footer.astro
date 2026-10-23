@@ -47,9 +47,8 @@ const links = [
 ---
 
 <footer class="site-footer">
-  <div class="wrap wrap--broad">
-    {/* R44 起页脚是**报尾**：一道细线 + 两簇小字，不再是那枚跟顶栏几乎一样的
-        圆角玻璃药丸（渲染实测：一页的头和尾长得一模一样，读不出「到底了」）。 */}
+  <div class="wrap wrap--broad glass-card footer-card">
+    {/* 报尾改成一张玻璃卡：与顶栏同材质，但内容更轻。 */}
     <div class="hairline"></div>
 
     <div class="foot">
@@ -96,6 +95,12 @@ const links = [
      隔一道线就够，8rem 会让长页面结尾处露出一大片空白（渲染实测） */
   .site-footer {
     margin-top: var(--sp-16);
+    padding-inline: var(--sp-4);
+    padding-bottom: var(--sp-2);
+  }
+
+  .footer-card {
+    padding: var(--sp-6) var(--sp-8);
   }
 
   .foot {

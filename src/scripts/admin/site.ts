@@ -209,7 +209,7 @@ async function loadUsers(): Promise<void> {
 /* ─────────────────────── 绑定 ─────────────────────── */
 
 export function initSiteAdmin(): void {
-  if (document.querySelector('[data-panel="site"]')?.dataset.bound === '1') return;
+  if ((document.querySelector('[data-panel="site"]') as HTMLElement | null)?.dataset.bound === '1') return;
   const panel = document.querySelector('[data-panel="site"]') as HTMLElement | null;
   if (!panel) return;
   panel.dataset.bound = '1';

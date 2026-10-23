@@ -27,7 +27,7 @@ const projects = await getListItems('projects', locale);
       五个纯文字方块排成格子 —— 图片位一直是空的，格子只剩边框在起作用。
       改成一栏之后每条能放下更长的描述，也不会在作品数是奇数时留一个空格子。
       封面支持没有删：填了 cover 的作品会在左侧多一张方图。 */}
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     <div class="head__row">
       <span class="vlabel">{s.label}</span>
       <h1 class="head__title">{s.title}</h1>
@@ -103,7 +103,7 @@ const projects = await getListItems('projects', locale);
 
 <style>
   .head {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
   }
 
   .head__row {
@@ -114,9 +114,8 @@ const projects = await getListItems('projects', locale);
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     margin-right: auto;
   }
 
@@ -130,21 +129,27 @@ const projects = await getListItems('projects', locale);
 
   .works {
     list-style: none;
-    margin: var(--sp-8) 0 0;
+    margin: var(--sp-5) 0 0;
     padding: 0;
-    border-bottom: var(--rule-w) solid var(--rule-strong);
+    display: grid;
+    gap: var(--sp-3);
   }
 
   .work {
-    border-top: var(--rule-w) solid var(--rule-strong);
-    padding-block: var(--sp-6);
-    transition: background-color 0.2s ease;
+    padding: var(--sp-5) var(--sp-6);
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-glass);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
-  /* hover 只换底色，不上浮、不换边框、不加阴影（上一版三样都做，加 0.24s 的
-     translateY(-3px)）—— 宪法第 4 条：不携带信息的动效删掉 */
   .work:hover {
-    background: var(--seal-wash);
+    border-color: var(--glass-border-lit);
+    box-shadow: var(--shadow-glass), var(--glow-accent);
   }
 
   .work__main {
@@ -159,7 +164,8 @@ const projects = await getListItems('projects', locale);
     flex-shrink: 0;
     aspect-ratio: 4 / 3;
     overflow: hidden;
-    border: var(--rule-w) solid var(--rule);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
     background: var(--paper-sunken);
   }
 
@@ -181,7 +187,6 @@ const projects = await getListItems('projects', locale);
 
   .work__title {
     font-size: var(--text-xl);
-    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
     transition: color 0.18s ease;
   }
 
@@ -195,8 +200,10 @@ const projects = await getListItems('projects', locale);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    padding: 0.2em 0.55em;
-    border: var(--rule-w) solid currentColor;
+    padding: 0.22em 0.6em;
+    border: 1px solid currentColor;
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
   }
 
   .badge--active {

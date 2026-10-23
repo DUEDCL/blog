@@ -26,7 +26,7 @@
   gap: var(--sp-12);
   margin-top: var(--sp-8);
   padding: var(--sp-8);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
 }
 
 /* 这台的按钮就是 .jk-ctl 里那些，所以 <audio> 没有 controls。
@@ -415,7 +415,7 @@
 .jk-lyr,
 .jk-list {
   padding: var(--sp-6);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
 }
 
 /* 歌词窗是**原生滚动容器**，不是被裁掉的盒子。
@@ -626,7 +626,7 @@
 .jk-juke {
   margin-top: var(--sp-6);
   padding: var(--sp-6);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
 }
 
 .jk-juke__h {

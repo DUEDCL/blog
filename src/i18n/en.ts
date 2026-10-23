@@ -89,10 +89,7 @@ export const en: Strings = {
   },
 
   editions: {
-    night: { name: 'Night', note: 'Straight off the press at midnight' },
-    paper: { name: 'Morning', note: 'Newsprint left at the door at dawn' },
-    film: { name: 'Film', note: 'The warm brown of an expired roll' },
-    neon: { name: 'Neon', note: 'Fluorescent ink on black paper' },
+    portal: { name: 'Door', note: 'The same white light and brass as the entrance' },
   },
 
   common: {

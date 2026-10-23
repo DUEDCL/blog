@@ -54,19 +54,10 @@ export const NAV = [
 ] as const;
 
 /**
- * 版次（R44）—— 顶栏那枚切换键列出来的四套主题。
- *
- * `id` 必须与 `src/styles/themes.css` 里 `[data-theme='…']` 的名字逐字对应，
- * 也与 `components/ThemeBoot.astro` 那段 inline 脚本里的白名单对应（那份是运行期
- * 校验 localStorage 的，拿不到本模块的常量 —— 加一套版次要改的是这三处，
- * 再加 `i18n/*.ts` 的 `editions` 三份文案）。
+ * 版次只剩「门」（portal）一套；顶栏的切换键已移除。
+ * `id` 与 `src/styles/themes.css` 的 `[data-theme='portal']` 逐字对应。
  */
-export const EDITIONS = [
-  { id: 'night' },
-  { id: 'paper' },
-  { id: 'film' },
-  { id: 'neon' },
-] as const;
+export const EDITIONS = [{ id: 'portal' }] as const;
 
 
 /**

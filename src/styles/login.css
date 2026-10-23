@@ -11,9 +11,9 @@
 }
 
 .lg {
-  max-width: 30rem;
+  max-width: 32rem;
   margin: 0 auto;
-  padding-bottom: var(--sp-10, 4rem);
+  padding: var(--sp-8);
 }
 
 .lg-head {
@@ -33,7 +33,6 @@
   margin: var(--sp-3, 0.75rem) 0 0;
   font-family: var(--font-display);
   font-size: var(--text-3xl, 2.25rem);
-  font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
   line-height: 1;
   letter-spacing: 0.04em;
   color: var(--ink);
@@ -122,19 +121,23 @@
 }
 
 .lg-input {
-  height: 2.5rem;
-  padding: 0 0.8rem;
-  border: var(--rule-w, 1px) solid var(--rule-strong);
-  background: var(--paper-raised);
+  height: 2.75rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  background: var(--glass-bg);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base, 1rem);
   outline: none;
-  transition: border-color 0.16s ease;
+  transition: border-color 0.16s ease, background-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .lg-input:focus {
   border-color: var(--seal);
+  background: var(--glass-bg-strong);
+  box-shadow: 0 0 0 3px var(--seal-wash);
 }
 
 .lg-input::placeholder {
@@ -145,14 +148,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 2.5rem;
+  height: 2.75rem;
   padding: 0 1.2rem;
-  border: var(--rule-w, 1px) solid var(--rule-strong);
-  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  background: var(--glass-bg);
   color: var(--ink-soft);
   font-family: var(--font-mono);
   font-size: var(--text-sm, 0.8125rem);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-decoration: none;
   cursor: pointer;
   transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
@@ -165,13 +169,14 @@
 
 .lg-btn--primary {
   border-color: var(--seal);
-  background: var(--seal-wash);
-  color: var(--seal);
+  background: var(--seal);
+  color: var(--paper);
   font-weight: 600;
 }
 
 .lg-btn--primary:hover {
-  background: var(--seal);
+  background: var(--seal-hover);
+  border-color: var(--seal-hover);
   color: var(--paper);
 }
 

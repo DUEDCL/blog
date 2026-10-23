@@ -26,7 +26,7 @@
 }
 
 .tv-head {
-  padding-top: var(--sp-6, 1.5rem);
+  padding: var(--sp-6, 1.5rem) var(--sp-8, 2rem);
   margin-bottom: var(--sp-6, 1.5rem);
 }
 
@@ -46,7 +46,6 @@
   margin: var(--sp-3, 0.75rem) 0 0;
   font-family: var(--font-display);
   font-size: var(--text-3xl, 2.25rem);
-  font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
   line-height: 1;
   letter-spacing: 0.04em;
   color: var(--ink);
@@ -114,14 +113,16 @@
 .tv-search__input {
   flex: 1;
   min-width: 0;
-  padding: 0.62rem 0.9rem;
-  border: var(--rule-w, 1px) solid var(--rule-strong);
-  background: var(--paper-raised);
+  padding: 0.72rem 0.95rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  background: var(--glass-bg);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base, 1rem);
   outline: none;
-  transition: border-color 0.16s ease;
+  transition: border-color 0.16s ease, background-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .tv-search__input::placeholder {
@@ -133,19 +134,22 @@
 }
 
 .tv-search__btn {
-  padding: 0.62rem 1.4rem;
-  border: var(--rule-w, 1px) solid var(--seal);
-  background: var(--seal-wash);
-  color: var(--seal);
+  padding: 0.72rem 1.4rem;
+  border: 1px solid var(--seal);
+  border-radius: var(--r-md);
+  background: var(--seal);
+  color: var(--paper);
   font-family: var(--font-mono);
   font-size: var(--text-sm, 0.8125rem);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
+  transition: background 0.16s ease, color 0.16s ease,
+    border-color 0.16s ease;
 }
 
 .tv-search__btn:hover {
-  background: var(--seal);
+  background: var(--seal-hover);
+  border-color: var(--seal-hover);
   color: var(--paper);
 }
 
@@ -161,9 +165,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.42em;
-  padding: 0.22em 0.62em;
-  border: var(--rule-w, 1px) solid var(--rule);
-  background: transparent;
+  padding: 0.3em 0.7em;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-full);
+  background: var(--glass-bg);
   color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: var(--text-xs, 0.75rem);
@@ -258,7 +263,8 @@
   aspect-ratio: 2 / 3;
   overflow: hidden;
   background: var(--paper-sunken);
-  border: var(--rule-w, 1px) solid var(--rule);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
   transition: border-color 0.2s ease;
 }
 
@@ -300,6 +306,7 @@
   font-family: var(--font-mono);
   font-size: 0.66rem;
   letter-spacing: 0.04em;
+  border-radius: var(--r-full);
 }
 
 .tv-card__rem {
@@ -419,8 +426,12 @@
   width: min(34rem, 100vw);
   display: flex;
   flex-direction: column;
-  background: var(--paper-raised);
-  border-left: var(--rule-w, 1px) solid var(--rule-strong);
+  background-color: var(--glass-under);
+  background-image: linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong));
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+  border-left: 1px solid var(--glass-border);
+  box-shadow: -30px 0 80px -30px rgba(0, 0, 0, 0.9);
   animation: tv-slide 0.26s ease;
 }
 
@@ -504,8 +515,10 @@
 }
 
 .tv-tag {
-  padding: 0.1em 0.5em;
-  border: var(--rule-w, 1px) solid var(--rule);
+  padding: 0.16em 0.55em;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-full);
+  background: var(--glass-bg);
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
@@ -986,9 +999,12 @@
 /* ══════════════ 继续观看 ══════════════ */
 .tv-cont {
   margin: 0 0 var(--sp-5, 1.25rem);
-  padding: var(--sp-4, 1rem) var(--sp-4, 1rem) var(--sp-3, 0.75rem);
-  border: var(--rule-w, 1px) solid var(--rule);
-  background: var(--paper-raised);
+  padding: var(--sp-4, 1rem);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 
 .tv-cont__h {

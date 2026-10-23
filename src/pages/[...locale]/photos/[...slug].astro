@@ -65,7 +65,7 @@ const lbJson = JSON.stringify(
   image={album.data.cover.src}
   width="wide"
 >
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     <p class="meta crumbs">
       <a href={backHref}>{strings.sections.photos.title}</a>
     </p>
@@ -260,7 +260,7 @@ const lbJson = JSON.stringify(
   /* R44：与文章页同一套页头，去掉玻璃卡与圆角 */
   .head {
     max-width: var(--measure-prose);
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
   }
 
   .crumbs a {
@@ -275,7 +275,6 @@ const lbJson = JSON.stringify(
   .title {
     margin-top: var(--sp-4);
     font-size: var(--text-headline);
-    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.015em;
     line-height: 1.16;
   }
@@ -301,7 +300,13 @@ const lbJson = JSON.stringify(
 
   .note {
     max-width: var(--measure-prose);
-    margin-top: var(--sp-8);
+    margin-top: var(--sp-6);
+    padding: var(--sp-6);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   }
 
   /* 长相在 global.css 的 `.original`。这一页额外收一道窄栏宽度 ——
@@ -314,11 +319,11 @@ const lbJson = JSON.stringify(
   /* 单列大图：摄影按「一张一版」呈现，不缩成缩略图 */
   .plates {
     list-style: none;
-    margin: var(--sp-16) 0 0;
+    margin: var(--sp-10) 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--sp-16);
+    gap: var(--sp-8);
   }
 
   .plate figure {
@@ -328,16 +333,23 @@ const lbJson = JSON.stringify(
   .plate__open {
     position: relative;
     display: block;
-    /* R44 直角：印刷品上的图是切方的。overflow 仍要留 —— hover 的高光要跟着裁 */
     overflow: hidden;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    background: var(--paper-sunken);
+    box-shadow: var(--shadow-glass);
+    transition: border-color 0.24s ease, box-shadow 0.24s ease;
   }
 
-  /* 边框代替落影（R44）。印刷品里的图不投影，它就印在纸上；
-     一道 1px 的规则线才是「图到此为止」的印刷说法 */
+  .plate__open:hover {
+    border-color: var(--glass-border-lit);
+    box-shadow: var(--shadow-glass), var(--glow-accent);
+  }
+
   .plate :global(img) {
     width: 100%;
     height: auto;
-    border: var(--rule-w) solid var(--rule);
+    border-radius: inherit;
   }
 
   /* 「放大」角标：只在装上了灯箱脚本时才出现 —— 脚本没跑起来时点图是

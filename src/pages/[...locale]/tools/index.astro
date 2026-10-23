@@ -19,7 +19,7 @@ const stepsHref = localePath(locale, '/tools/steps');
 ---
 
 <BaseLayout title={s.title} description={s.description} footerNote={s.note}>
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     <div class="head__row">
       <span class="vlabel">{s.heading}</span>
       <h1 class="head__title">{s.title}</h1>
@@ -81,7 +81,7 @@ const stepsHref = localePath(locale, '/tools/steps');
 
 <style>
   .head {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
     margin-bottom: var(--sp-10);
   }
 
@@ -93,9 +93,8 @@ const stepsHref = localePath(locale, '/tools/steps');
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     margin-right: auto;
   }
 
@@ -130,7 +129,6 @@ const stepsHref = localePath(locale, '/tools/steps');
 
   .brief__title {
     font-size: var(--text-xl);
-    font-variation-settings: 'opsz' 24, 'SOFT' 0, 'WONK' 0;
   }
 
   .brief__blurb {
@@ -148,15 +146,15 @@ const stepsHref = localePath(locale, '/tools/steps');
     padding-top: 0.35em;
   }
 
-  /* 状态芯片：方框而不是药丸 —— 与标签页同一条语汇 */
   .chip {
     display: inline-flex;
-    padding: 0.28em 0.7em;
-    border: var(--rule-w) solid var(--seal);
+    padding: 0.3em 0.72em;
+    border: 1px solid var(--seal);
+    border-radius: var(--r-full);
     background: var(--seal-wash);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     color: var(--ink);
     text-transform: uppercase;
   }

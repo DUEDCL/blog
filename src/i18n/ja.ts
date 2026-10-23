@@ -72,10 +72,7 @@ export const ja: Strings = {
   },
 
   editions: {
-    night: { name: '夜刊', note: '深夜の印刷所で刷り上がったばかりの版' },
-    paper: { name: '朝刊', note: '朝いちばんに戸口へ届く新聞紙' },
-    film: { name: 'フィルム', note: '期限切れのロールから出てくる暖かい褐色' },
-    neon: { name: 'ネオン', note: '黒い紙に刷った蛍光インク' },
+    portal: { name: '扉', note: '入口と同じ白い光と同じ真鍮' },
   },
 
   common: {

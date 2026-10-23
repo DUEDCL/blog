@@ -41,8 +41,8 @@ const backHref = localePath(locale, '/projects');
   image={project.data.cover?.src}
   width="prose"
 >
-  <article>
-    <header class="head rise rise-1">
+  <article class="glass-card article rise rise-1">
+    <header class="head">
       <p class="meta crumbs">
         <a href={backHref}>{strings.sections.projects.title}</a>
       </p>
@@ -114,8 +114,8 @@ const backHref = localePath(locale, '/projects');
 <style>
   /* R44：与文章页（ArticleLayout）同一套页头语汇 —— 去掉玻璃卡，靠字号与一道线分层。
      同一个站里「作品详情」和「文章详情」应该长得像同一份刊物的两页。 */
-  .head {
-    padding-top: var(--sp-8);
+  .article {
+    padding: var(--sp-8) var(--sp-10);
   }
 
   .crumbs a {
@@ -137,7 +137,6 @@ const backHref = localePath(locale, '/projects');
 
   .title {
     font-size: var(--text-headline);
-    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.015em;
     line-height: 1.16;
   }
@@ -147,8 +146,10 @@ const backHref = localePath(locale, '/projects');
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.06em;
-    padding: 0.2em 0.55em;
-    border: var(--rule-w) solid currentColor;
+    padding: 0.22em 0.6em;
+    border: 1px solid currentColor;
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
   }
 
   .badge--active {
@@ -240,7 +241,8 @@ const backHref = localePath(locale, '/projects');
   }
 
   .cover :global(img) {
-    border: var(--rule-w) solid var(--rule);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
   }
 
   .prose {

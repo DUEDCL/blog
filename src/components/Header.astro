@@ -1,7 +1,6 @@
 ---
 import { Image } from 'astro:assets';
 import { SITE_TITLE, NAV } from '../consts';
-import ThemeSwitch from './ThemeSwitch.astro';
 import LangSwitch from './LangSwitch.astro';
 import { localeOf, localePath, t } from '../i18n';
 import avatar from '../assets/avatar.jpg';
@@ -71,19 +70,16 @@ function isCurrent(href: string) {
           ))
         }
       </nav>
-      {/* R44 把版次键加了回来（R31 砍掉浅色时连它一起删了）；R46 在它左边多了一枚
-          语言键。位置都在导航右侧 —— `.brand` 的 `margin-right: auto` 把导航推到
-          右侧，这两枚跟在导航后面。窄屏时它们与品牌同一行（导航折到下面整行）。 */}
+      {/* 导航右侧只剩账号与语言两枚键。版次键已移除：全站只有「门」这一套配色，
+          不再需要切换器。窄屏时它们与品牌同一行（导航折到下面整行）。 */}
       {/* 账号位（R: 站点登录式）。未登录显示「登录」，已登录显示昵称/账号。
           放这里而不是塞进 nav：nav 是页面导航，账号不是页面。
-          样式复用 global.css 的 `.topkey`（与语言/版次两枚键同一套长相），
-          所以三枚并排看起来是一组。 */}
+          样式复用 global.css 的 `.topkey`，与语言键同一套长相。 */}
       <a class="topkey acct" href="/login" data-acct title="账号">
         <span class="acct__dot" aria-hidden="true"></span>
         <span class="acct__text">登录</span>
       </a>
       <LangSwitch />
-      <ThemeSwitch />
     </div>
   </div>
 </header>
@@ -166,28 +162,27 @@ function isCurrent(href: string) {
 <style>
   .site-header {
     position: sticky;
-    top: 0;
+    top: var(--sp-4);
     z-index: 50;
-    /* R44 去掉了 padding-block：通栏的页眉贴顶，上下不留缝。
-       顶栏占位高度因此就是 .bar 的高度（3.5rem），global.css 的 --header-h
-       与 --header-offset 依赖这个前提。 */
+    padding-inline: var(--sp-4);
   }
 
+  /* 悬浮玻璃胶囊。通栏改为 max 80rem 居中，四边留出环境光。 */
   .bar {
-    /* 通栏：只留底部一条线，左右上三条边去掉 —— 满宽元素画侧边框等于在视口边缘
-       描一道竖线，那是「这里有个盒子」的信号，而页眉不是盒子 */
-    border-radius: 0;
-    border-inline: 0;
-    border-top: 0;
-    border-bottom: var(--rule-w) solid var(--rule-strong);
-    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    max-width: var(--measure-broad);
+    margin-inline: auto;
+    border-radius: var(--r-full);
+    border: var(--rule-w) solid var(--glass-border);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease,
+      border-color 0.3s ease;
   }
 
   .bar__inner {
     display: flex;
     align-items: center;
-    gap: var(--sp-6);
-    height: 3.5rem;
+    gap: var(--sp-5);
+    height: 4rem;
+    padding-inline: var(--sp-5);
   }
 
   /* 滚动后玻璃变实、底下垫一道投影。
@@ -198,7 +193,8 @@ function isCurrent(href: string) {
   .site-header.is-scrolled .bar {
     background-color: var(--glass-under);
     background-image: linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong));
-    box-shadow: 0 12px 32px -14px rgba(0, 0, 0, 0.5);
+    border-color: var(--glass-border-lit);
+    box-shadow: var(--shadow-glass), 0 18px 40px -24px rgba(0, 0, 0, 0.9);
   }
 
   .brand {
@@ -241,7 +237,6 @@ function isCurrent(href: string) {
     font-family: var(--font-display);
     font-size: var(--text-lg);
     font-weight: 600;
-    font-variation-settings: 'opsz' 14, 'SOFT' 0, 'WONK' 0;
     letter-spacing: 0.02em;
     white-space: nowrap;
   }
@@ -255,39 +250,29 @@ function isCurrent(href: string) {
   .nav__link {
     position: relative;
     font-size: var(--text-sm);
+    font-weight: 500;
     color: var(--ink-soft);
     text-decoration: none;
-    padding: var(--sp-2) var(--sp-3);
+    padding: 0.5rem 0.8rem;
+    border: 1px solid transparent;
     border-radius: var(--r-full);
-    letter-spacing: 0.08em;
+    letter-spacing: 0.02em;
     white-space: nowrap;
-    transition: color 0.18s ease, background-color 0.24s ease;
+    transition: color 0.18s ease, background-color 0.24s ease,
+      border-color 0.24s ease;
   }
 
   .nav__link:hover {
     color: var(--ink);
     background: var(--glass-bg);
+    border-color: var(--glass-border);
   }
 
-  /* 当前栏目：**去掉了玻璃药丸**（R44）。通栏页眉里那枚圆角药丸是整条唯一的
-     圆角，渲染实测比导航本身更抢眼；报纸的做法是一道游标线。
-     线用签名色、文字提到 --ink，两者一起说明「你在这一栏」。 */
+  /* 当前栏目：一枚玻璃药丸，与整条顶栏同一材质。 */
   .nav__link.is-current {
     color: var(--ink);
-  }
-
-  /* 游标线用**签名色**而不是交互色：它回答的是「你在哪一栏」，不是「这里可以点」。
-     全站黄铜=可点、朱红=刊物在标记，两者不混用。
-     left/right 跟着 .nav__link 的内边距走，所以线与文字同宽 —— 固定宽度的短横线
-     在「名片」（2 字）和「作品」（2 字）下等宽，但换成三字栏目就会偏短。 */
-  .nav__link.is-current::after {
-    content: '';
-    position: absolute;
-    left: var(--sp-3);
-    right: var(--sp-3);
-    bottom: 0.1rem;
-    height: 2px;
-    background: var(--press);
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border-lit);
   }
 
   /* 窄屏：导航换到品牌下方，访客七项折成两行（4 + 3）。
@@ -299,15 +284,23 @@ function isCurrent(href: string) {
      导航因此比两行 3+3 略矮一点，global.css 的窄屏 --header-offset 已按
      12.25rem 保留（误差一档 padding，锚点仍安全）。
 
-     R46 在第一行多了一枚语言键。第一行的账（375px，可用 343px）：
-     品牌 88 + 语言键 59 + 版次键 75/108（中文／英文那两个词的宽度差）+ 两道 12px 间隙
-     = 246px（中文）／279px（英文），320px 那一档也还在 288px 以内。
-     再往这一行加东西之前先重算这笔账。 */
+     第一行的账（375px，可用 343px）：品牌 88 + 账号键 59 + 语言键 59 +
+     两道 12px 间隙 = 230px；320px 那一档也还在 288px 以内。
+     版次键已移除，这一行比上一版松。再往这一行加东西之前先重算这笔账。 */
   @media (max-width: 46rem) {
+    .site-header {
+      top: var(--sp-2);
+      padding-inline: var(--sp-2);
+    }
+
+    .bar {
+      border-radius: var(--r-lg);
+    }
+
     .bar__inner {
       height: auto;
       flex-wrap: wrap;
-      padding-block: var(--sp-3);
+      padding: var(--sp-3) var(--sp-4);
       row-gap: var(--sp-2);
       gap: var(--sp-3);
     }

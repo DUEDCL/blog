@@ -71,8 +71,8 @@ const upd = updatedDate
   image={cover?.src}
   width="prose"
 >
-  <article>
-    <header class="head rise rise-1">
+  <article class="glass-card article rise rise-1">
+    <header class="head">
       <p class="meta crumbs">
         <a href={section.href}>{section.label}</a>
       </p>
@@ -131,8 +131,8 @@ const upd = updatedDate
 </BaseLayout>
 
 <style>
-  .head {
-    padding-top: var(--sp-8);
+  .article {
+    padding: var(--sp-8) var(--sp-10);
   }
 
   .crumbs a {
@@ -149,7 +149,6 @@ const upd = updatedDate
   .title {
     margin-top: var(--sp-4);
     font-size: var(--text-headline);
-    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
     letter-spacing: -0.015em;
     line-height: 1.16;
   }
@@ -191,25 +190,35 @@ const upd = updatedDate
   .tags {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-4);
+    gap: var(--sp-2);
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
   .tag {
+    display: inline-flex;
+    padding: 0.28rem 0.62rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    letter-spacing: 0.06em;
-    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
     text-decoration: none;
-    transition: color 0.18s ease;
+    transition: color 0.18s ease, border-color 0.18s ease;
   }
 
   .tag::before {
     content: '#';
-    opacity: 0.55;
+    opacity: 0.65;
     margin-right: 0.15em;
+  }
+
+  .tag:hover {
+    color: var(--seal);
+    border-color: var(--seal);
   }
 
   .tag:hover {
@@ -222,7 +231,8 @@ const upd = updatedDate
 
   /* 图片也是直角了。全站只有浮层有圆角 —— 印刷品里的图是切成方的 */
   .cover :global(img) {
-    border: var(--rule-w) solid var(--rule);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
   }
 
   .prose {

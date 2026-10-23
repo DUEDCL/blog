@@ -22,7 +22,7 @@ const albums = await getListItems('photos', locale);
   footerNote={s.note}
   width="wide"
 >
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     <div class="head__row">
       <span class="vlabel">{s.label}</span>
       <h1 class="head__title">{s.title}</h1>
@@ -64,7 +64,7 @@ const albums = await getListItems('photos', locale);
 
 <style>
   .head {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
   }
 
   .head__row {
@@ -75,9 +75,8 @@ const albums = await getListItems('photos', locale);
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     margin-right: auto;
   }
 
@@ -106,21 +105,23 @@ const albums = await getListItems('photos', locale);
     grid-row: span 2;
   }
 
-  /* 直角（R44）：印刷品上的图是切方的。描边用规则线，与全站分栏线同一档 */
   .cell__link {
     position: relative;
     display: block;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    border: var(--rule-w) solid var(--rule-strong);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
     background: var(--paper-sunken);
+    box-shadow: var(--shadow-glass);
     text-decoration: none;
-    transition: border-color 0.24s ease;
+    transition: border-color 0.24s ease, box-shadow 0.24s ease;
   }
 
   .cell__link:hover {
-    border-color: var(--seal);
+    border-color: var(--glass-border-lit);
+    box-shadow: var(--shadow-glass), var(--glow-accent);
   }
 
   .cell__link :global(img) {
@@ -142,26 +143,25 @@ const albums = await getListItems('photos', locale);
   /* 说明文字压在图片上，默认半隐，hover 浮现。底部一层玻璃保证文字可读 */
   .cell__overlay {
     position: absolute;
-    inset: auto 0 0 0;
+    inset: auto var(--sp-2) var(--sp-2);
     display: flex;
     flex-direction: column;
     gap: var(--sp-1);
-    padding: var(--sp-6) var(--sp-4) var(--sp-4);
-    background: linear-gradient(to top, rgba(5, 4, 3, 0.74), transparent);
-    -webkit-backdrop-filter: blur(6px);
-    backdrop-filter: blur(6px);
-    -webkit-mask-image: linear-gradient(to top, #000 55%, transparent);
-    mask-image: linear-gradient(to top, #000 55%, transparent);
+    padding: var(--sp-4);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--r-md);
+    background: rgba(5, 5, 5, 0.55);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
     color: var(--sand-50);
-    transform: translateY(0.5rem);
-    opacity: 0.85;
-    transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.3s ease;
+    opacity: 0.92;
+    transition: opacity 0.3s ease, border-color 0.3s ease;
   }
 
   .cell__link:hover .cell__overlay,
   .cell__link:focus-visible .cell__overlay {
-    transform: none;
     opacity: 1;
+    border-color: rgba(255, 255, 255, 0.22);
   }
 
   .cell__title {

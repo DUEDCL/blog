@@ -40,7 +40,7 @@ export type NavKey =
 export type PortalKey = 'archive' | 'tags' | 'photos' | 'portal';
 
 /** 四套版次。与 `styles/themes.css` 的 `[data-theme='…']` 逐字对应 */
-export type EditionId = 'night' | 'paper' | 'film' | 'neon';
+export type EditionId = 'portal';
 
 /** 名片上的六个平台。与 `consts.ts` 的 CONTACT 对应 */
 export type ContactKey = 'wechat' | 'qq' | 'douyin' | 'telegram' | 'discord' | 'email';

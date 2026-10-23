@@ -18,7 +18,7 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
 ---
 
 <BaseLayout title={s.title} description={s.description} width="broad">
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     {/* 与栏目列表页同一套页头（竖排标识 + 标题 + 计数 + 朱红报头线）——
         R44 之前这里是「ARCHIVE + 标题 + 一段描述」，三个索引页三种页头 */}
     <div class="head__row">
@@ -145,7 +145,7 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
 
 <style>
   .head {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
     margin-bottom: var(--sp-16);
   }
 
@@ -157,9 +157,8 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
 
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     margin-right: auto;
   }
 
@@ -186,18 +185,18 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     margin-top: var(--sp-8);
   }
 
-  /* 方框，不是药丸（R44）。表单控件的圆角是「app 的长相」；印刷品上的填写框
-     是方的，而这一版全站只有浮层保留圆角 */
   .find__input {
-    flex: 0 1 18rem;
+    flex: 0 1 20rem;
     padding: var(--sp-3) var(--sp-4);
     font-family: inherit;
     font-size: var(--text-base);
     color: var(--ink);
-    background: transparent;
-    border: var(--rule-w) solid var(--rule-strong);
-    border-radius: 0;
-    transition: border-color 0.18s ease, background-color 0.24s ease;
+    background: var(--glass-bg);
+    border: var(--rule-w) solid var(--glass-border);
+    border-radius: var(--r-md);
+    outline: none;
+    transition: border-color 0.18s ease, background-color 0.24s ease,
+      box-shadow 0.18s ease;
   }
 
   .find__input::placeholder {
@@ -243,15 +242,24 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     list-style: none;
     margin: 0;
     padding: 0;
-    /* 上下封口：报纸的索引块两端都有线，不然最后一条读起来像被裁掉了 */
-    border-top: var(--rule-w) solid var(--rule-strong);
-    border-bottom: var(--rule-w) solid var(--rule-strong);
+    display: grid;
+    gap: var(--sp-2);
   }
 
-  /* :not([hidden]) 是给搜索用的 —— 否则被隐藏的条目照样算作相邻兄弟，
-     第一条可见行头上会多出一道悬空的分隔线 */
-  .item:not([hidden]) + .item:not([hidden]) {
-    border-top: var(--rule-w) solid var(--rule);
+  .item {
+    background-color: var(--glass-under);
+    background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-md);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .item:hover {
+    border-color: var(--glass-border-lit);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), var(--glow-accent);
   }
 
   .item__link {
@@ -259,15 +267,13 @@ const total = years.reduce((sum, y) => sum + y.entries.length, 0);
     grid-template-columns: 6.5rem 1fr auto;
     align-items: baseline;
     gap: var(--sp-4);
-    padding: var(--sp-4) var(--sp-3);
+    padding: var(--sp-4) var(--sp-5);
     text-decoration: none;
     transition: background-color 0.2s ease;
   }
 
-  /* hover 只换底色。上一版还同时把 padding-left 从 sp-6 推到 sp-8（0.24s），
-     那段位移不携带任何信息 —— 宪法第 4 条：报告不了状态、数据或进度的动效删掉 */
   .item__link:hover {
-    background: var(--seal-wash);
+    background: var(--glass-bg);
   }
 
   .item__date {

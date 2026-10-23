@@ -29,7 +29,7 @@ export default defineConfig({
     // /admin 排除：那是后台（R35）。「藏起来」的一半是不进 sitemap、不进 llms.txt、
     // `_headers` 里给它配 noindex；另一半是登录。地址难猜不算保护，所以地址就用 /admin。
     sitemap({
-      filter: (page) => !page.includes('/admin'),
+      filter: (page) => !page.includes('/admin') && !page.includes('/preview'),
       /**
        * 三种语言互指（R46）。这一段让 sitemap 里的每条 `<url>` 带上
        * `<xhtml:link rel="alternate" hreflang="…">`，等于把 `<head>` 里那几条

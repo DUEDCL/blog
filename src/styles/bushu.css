@@ -100,9 +100,14 @@
 /* ---- 卡片 ---------------------------------------------------------------- */
 
 .bs-card {
-  border: var(--rule-w) solid var(--rule-strong);
-  background: var(--paper-raised);
-  padding: var(--sp-5) var(--sp-5) var(--sp-5);
+  padding: var(--sp-6);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  background-color: var(--glass-under);
+  background-image: linear-gradient(var(--glass-bg), var(--glass-bg));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-glass);
 }
 
 .bs-card--quiet {
@@ -246,11 +251,13 @@
 .bs-chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.22em 0.62em;
-  border: var(--rule-w) solid var(--rule-strong);
+  padding: 0.26em 0.66em;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-full);
+  background: var(--glass-bg);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--ink-soft);
   white-space: nowrap;
 }
@@ -293,18 +300,20 @@
 .bs-input {
   width: 100%;
   padding: 0.72em 0.8em;
-  border: var(--rule-w) solid var(--rule-strong);
-  background: var(--paper-sunken);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
-  border-radius: 0;
+  border-radius: var(--r-md);
   appearance: none;
 }
 
 .bs-input:focus {
   outline: none;
   border-color: var(--seal);
+  background: var(--glass-bg-strong);
+  box-shadow: 0 0 0 3px var(--seal-wash);
 }
 
 .bs-input--num {
@@ -346,14 +355,14 @@
   justify-content: center;
   gap: var(--sp-2);
   padding: 0.72em 1.15em;
-  border: var(--rule-w) solid var(--rule-strong);
-  background: transparent;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   cursor: pointer;
-  border-radius: 0;
+  border-radius: var(--r-md);
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 

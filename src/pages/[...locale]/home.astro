@@ -57,7 +57,7 @@ const socialLinks = [
 
 <BaseLayout description={strings.siteDescription} width="broad">
   {/* ---------- 刊头 ---------- */}
-  <header class="mast rise rise-1">
+  <header class="mast glass-card rise rise-1">
     <div class="mast__row">
       <h1 class="mast__name">{SITE_TITLE}</h1>
 
@@ -113,7 +113,7 @@ const socialLinks = [
 
   {/* ---------- 头版：左栏文章（含头条），右栏随笔 ---------- */}
   <div class="front rise rise-2">
-    <section class="front__main">
+    <section class="front__main glass-card">
       <div class="colhead">
         <span class="vlabel">{strings.sections.posts.label}</span>
         <h2 class="colhead__title">{strings.sections.posts.title}</h2>
@@ -156,7 +156,7 @@ const socialLinks = [
       )}
     </section>
 
-    <section class="front__side">
+    <section class="front__side glass-card">
       <div class="colhead">
         <span class="vlabel">{strings.sections.notes.label}</span>
         <h2 class="colhead__title">{strings.sections.notes.title}</h2>
@@ -199,7 +199,7 @@ const socialLinks = [
 
       <ul class="works__grid">
         {works.map((pr) => (
-          <li class="work">
+          <li class="work glass-card glass-card--tight glass-card--interactive">
             <a href={pr.href}>
               <h3 class="work__title">{pr.title}</h3>
               <p class="work__desc">{pr.description}</p>
@@ -218,7 +218,7 @@ const socialLinks = [
     <div class="hairline"></div>
     <ul class="toc__list">
       {PORTALS.map((p) => (
-        <li class="toc__item">
+        <li class="toc__item glass-card glass-card--tight glass-card--interactive">
           <a href={localePath(locale, p.href)}>
             <span class="toc__label">{strings.portals[p.key].label}</span>
             <span class="toc__desc">{strings.portals[p.key].description}</span>
@@ -230,9 +230,9 @@ const socialLinks = [
 </BaseLayout>
 
 <style>
-  /* ---------- 刊头 ---------- */
+  /* 头版：一张大玻璃刊头 + 两张栏卡 + 作品/目录小卡。 */
   .mast {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
   }
 
   .mast__row {
@@ -240,61 +240,44 @@ const socialLinks = [
     align-items: flex-end;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: var(--sp-6) var(--sp-8);
+    gap: var(--sp-6) var(--sp-10);
   }
 
-  /**
-   * 刊名。这是整站最大的一个字号，也是「简陋」的解药里最便宜的一条：
-   * 上一版首页最大的字是 64px 的名字，但它压在一张玻璃卡里、旁边还有个 136px
-   * 的头像，于是读起来是「一张名片」而不是「一份刊物的头版」。
-   *
-   * 三个数都不是默认值：
-   *   · 字距 0.08em —— 中文大字必须放开字距，宋体在 100px 以上时字面会挤在一起；
-   *     西文标题惯用的负字距（-0.02em）在中文上直接糊成一团。
-   *   · line-height 0.86 —— 单行标题不需要行距，0.86 把顶部空铅收掉，
-   *     刊名于是真的贴着版心上沿。
-   *   · margin-left -0.045em —— 宋体字面左侧留白比右侧大，不补这一点，
-   *     刊名看起来会比下面的报头线往右缩一格（光学对齐，不是像素对齐）。
-   */
   .mast__name {
     font-size: var(--text-masthead);
-    font-variation-settings: 'opsz' 72, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.08em;
-    line-height: 0.86;
-    margin-left: -0.045em;
+    letter-spacing: -0.02em;
+    line-height: 0.98;
   }
 
   .mast__verse {
     display: flex;
     align-items: flex-end;
-    gap: var(--sp-5);
-    padding-bottom: 0.35rem;
-    max-width: 30rem;
+    gap: var(--sp-4);
+    padding-bottom: 0.3rem;
+    max-width: 32rem;
   }
 
-  /* 直角。报纸上的专栏作者照是方的 —— 圆头像是社交产品的语汇，
-     而这一版全站只有浮层是圆角 */
   .mast__face {
-    width: 3.25rem;
-    height: 3.25rem;
+    width: 4.5rem;
+    height: 4.5rem;
     flex-shrink: 0;
     object-fit: cover;
-    border: var(--rule-w) solid var(--rule-strong);
+    border-radius: var(--r-md);
+    border: 1px solid var(--glass-border-lit);
+    box-shadow: 0 14px 36px -20px rgba(0, 0, 0, 0.9);
   }
 
-  /* 题词 = BIO 第一句，用标题那套宋体。它是**他自己说的话**（见 consts.ts 的注释），
-     所以给它衬线体和更大的字号，不当说明文字排 */
   .mast__lead {
     font-family: var(--font-display);
     font-size: var(--text-lg);
-    line-height: var(--leading-normal);
+    line-height: 1.55;
     color: var(--ink);
   }
 
   .mast__sub {
     margin-top: var(--sp-2);
     font-size: var(--text-sm);
-    line-height: var(--leading-normal);
+    line-height: 1.6;
     color: var(--ink-faint);
   }
 
@@ -308,7 +291,7 @@ const socialLinks = [
     justify-content: space-between;
     flex-wrap: wrap;
     gap: var(--sp-2) var(--sp-6);
-    margin-top: var(--sp-3);
+    margin-top: var(--sp-4);
   }
 
   .mast__meta {
@@ -319,7 +302,7 @@ const socialLinks = [
   }
 
   .dot {
-    opacity: 0.45;
+    opacity: 0.4;
   }
 
   .mast__links {
@@ -331,12 +314,10 @@ const socialLinks = [
     padding: 0;
   }
 
-  /* 社交链接退成刊眉里的一行小字（上一版是三枚玻璃药丸 + hover 上浮）。
-     它们是次要出口，不该有按钮的重量 */
   .mast__links a {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-faint);
     text-decoration: none;
@@ -347,43 +328,30 @@ const socialLinks = [
     color: var(--seal);
   }
 
-  /* ---------- 头版两栏 ---------- */
-  /**
-   * 2.1 : 1 不是随手取的，也不是估的 —— `node scripts/measure.mjs` 量过：
-   * 1280 视口下左栏 798px、右栏 407px（含它自己 27px 的内边距）。
-   *   · 左栏 798px 装得下头条标题两行不折断，摘要另有 34rem 的上限压着，
-   *     所以正文每行 32 字左右，落在中文长阅读的舒适区（--measure-prose 那条实测）。
-   *   · 右栏 380px 是随笔标题两行内排得下的最小宽度，再窄就要折三行。
-   * 改这个比例要回来重跑那个脚本。
-   *
-   * 天沟 3 倍 --gutter（54px），分栏线画在它正中间：右栏 `border-left` 先用负 margin
-   * 往左推 1.5 倍（27px），再用同样的 padding 把内容推回来。线的位置因此只由
-   * --gutter 一个变量决定，不会和 column-gap 各说一套。
-   */
+  /* 两栏：左栏主文，右栏随笔。两张玻璃卡浮在同一层。 */
   .front {
     display: grid;
-    grid-template-columns: 2.1fr 1fr;
-    column-gap: calc(var(--gutter) * 3);
-    margin-top: var(--sp-12);
+    grid-template-columns: 1.55fr 1fr;
+    gap: var(--sp-5);
+    margin-top: var(--sp-5);
+    align-items: stretch;
   }
 
+  .front__main,
   .front__side {
-    border-left: var(--rule-w) solid var(--rule-strong);
-    margin-left: calc(var(--gutter) * -1.5);
-    padding-left: calc(var(--gutter) * 1.5);
+    padding: var(--sp-6);
+    border-radius: var(--r-lg);
   }
 
-  /* ---------- 头条 ---------- */
   .lead__link {
     display: block;
     text-decoration: none;
   }
 
   .lead__title {
-    font-size: var(--text-headline);
-    font-variation-settings: 'opsz' 48, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: -0.015em;
-    line-height: 1.16;
+    font-size: var(--text-2xl);
+    letter-spacing: -0.03em;
+    line-height: 1.18;
     transition: color 0.18s ease;
   }
 
@@ -391,28 +359,27 @@ const socialLinks = [
     color: var(--seal);
   }
 
-  /* 摘要只出现在头条上。其余条目只有标题与日期 —— 「哪条是头条」因此不需要
-     任何标签或角标，字号与摘要自己说明了 */
   .lead__dek {
-    margin-top: var(--sp-4);
+    margin-top: var(--sp-3);
     font-size: var(--text-lg);
-    line-height: var(--leading-normal);
+    line-height: 1.65;
     color: var(--ink-soft);
-    max-width: 34rem;
+    max-width: 36rem;
   }
 
   .lead__date {
     margin-top: var(--sp-4);
   }
 
-  /* ---------- 小条目 ----------
-     `.briefs` / `.brief` 那一套在 global.css（三处页面共用，见那里的注释）。
-     这里只有首页右栏那个变体。 */
   .briefs {
-    margin-top: var(--sp-8);
+    margin-top: var(--sp-5);
   }
 
-  /* 右栏只有 372px，标题与日期挤在一行会让标题折成三行。换成日期落在标题下方 */
+  .front .brief {
+    background: var(--glass-bg);
+    box-shadow: none;
+  }
+
   .briefs--stack .brief > a {
     display: block;
   }
@@ -428,51 +395,37 @@ const socialLinks = [
     font-size: var(--text-sm);
   }
 
-  /* ---------- 作品 ---------- */
   .works,
   .toc {
-    margin-top: var(--sp-16);
+    margin-top: var(--sp-12);
   }
 
   .works .colhead,
-  .toc .hairline {
-    margin-top: var(--sp-8);
+  .toc .colhead {
+    margin-top: var(--sp-2);
   }
 
   .works__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: var(--sp-3);
     list-style: none;
     margin: 0;
     padding: 0;
   }
 
-  .work + .work {
-    border-left: var(--rule-w) solid var(--rule);
+  .work {
+    padding: var(--sp-5);
   }
 
   .work a {
     display: block;
     height: 100%;
-    padding: var(--sp-5) var(--sp-6);
     text-decoration: none;
-    transition: background-color 0.2s ease;
-  }
-
-  /* 第一栏与版心左沿对齐 —— 有内边距的话，这一列的字会比上面的栏目标题缩进一格 */
-  .work:first-child a {
-    padding-left: 0;
-  }
-
-  /* hover 只换底色，不上浮。宪法第 4 条把「hover 时整卡上浮」列为反例：
-     那段位移不携带任何信息，纯装饰 */
-  .work a:hover {
-    background: var(--seal-wash);
   }
 
   .work__title {
     font-size: var(--text-lg);
-    font-variation-settings: 'opsz' 18, 'SOFT' 0, 'WONK' 0;
     transition: color 0.18s ease;
   }
 
@@ -481,39 +434,29 @@ const socialLinks = [
   }
 
   .work__desc {
-    margin-top: var(--sp-3);
+    margin-top: var(--sp-2);
     font-size: var(--text-sm);
-    line-height: var(--leading-normal);
+    line-height: 1.65;
     color: var(--ink-soft);
   }
 
-  /* ---------- 本期目录 ---------- */
   .toc__list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-3);
     list-style: none;
     margin: 0;
     padding: 0;
   }
 
-  .toc__item + .toc__item {
-    border-left: var(--rule-w) solid var(--rule);
+  .toc__item {
+    padding: var(--sp-4);
   }
 
   .toc__item a {
     display: block;
     height: 100%;
-    padding: var(--sp-5);
     text-decoration: none;
-    transition: background-color 0.2s ease;
-  }
-
-  .toc__item:first-child a {
-    padding-left: 0;
-  }
-
-  .toc__item a:hover {
-    background: var(--seal-wash);
   }
 
   .toc__label {
@@ -530,27 +473,15 @@ const socialLinks = [
 
   .toc__desc {
     display: block;
-    margin-top: var(--sp-2);
+    margin-top: var(--sp-1);
     font-size: var(--text-xs);
-    line-height: var(--leading-normal);
+    line-height: 1.5;
     color: var(--ink-faint);
   }
 
-  /* ---------- 窄屏：所有分栏塌成单列 ----------
-     分栏线跟着从竖线变成横线。报纸在手机上也是这么做的（对开变四开再变单栏），
-     线的方向变了，语汇没变。 */
   @media (max-width: 52rem) {
     .front {
       grid-template-columns: 1fr;
-    }
-
-    .front__side {
-      border-left: 0;
-      border-top: var(--rule-w) solid var(--rule-strong);
-      margin-left: 0;
-      padding-left: 0;
-      margin-top: var(--sp-12);
-      padding-top: var(--sp-8);
     }
 
     .works__grid,
@@ -558,24 +489,25 @@ const socialLinks = [
       grid-template-columns: 1fr;
     }
 
-    .work + .work,
-    .toc__item + .toc__item {
-      border-left: 0;
-      border-top: var(--rule-w) solid var(--rule);
-    }
-
-    .work a,
-    .toc__item a {
-      padding-inline: 0;
-    }
-
     .mast__verse {
-      /* 宽屏时题词与刊名底部对齐（报纸刊头的基线）；窄屏时题词换到下一行、
-         头像与文字并排，这时候要顶部对齐 —— 底部对齐会让 3.25rem 的头像
-         沉到两行文字的下沿，第一行文字看起来是「凭空缩进了一格」（390 宽实测） */
       align-items: flex-start;
-      padding-bottom: 0;
       max-width: none;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    .mast {
+      padding: var(--sp-5);
+    }
+
+    .mast__face {
+      width: 3.5rem;
+      height: 3.5rem;
+    }
+
+    .front__main,
+    .front__side {
+      padding: var(--sp-5);
     }
   }
 </style>

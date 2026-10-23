@@ -30,7 +30,7 @@ const ways = NAV.map((item) => ({
   {/* R44：报纸的**更正栏**。上一版是一张居中的圆角玻璃卡，与站上其他页的
       卡片长得一样 —— 一个「什么都没找到」的页面和一个列表页视觉重量相同。
       「更正」是报刊里勘误那一栏的名字，用在这儿正好，不用另造一个词。 */}
-  <section class="void rise rise-1">
+  <section class="void glass-card rise rise-1">
     <div class="void__row">
       <span class="vlabel">{s.label}</span>
       <h1 class="title">{s.heading}</h1>
@@ -56,7 +56,7 @@ const ways = NAV.map((item) => ({
 
 <style>
   .void {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
   }
 
   .void__row {
@@ -67,9 +67,8 @@ const ways = NAV.map((item) => ({
 
   .title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
-    letter-spacing: 0.04em;
-    line-height: 1;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     margin-right: auto;
   }
 
@@ -95,40 +94,34 @@ const ways = NAV.map((item) => ({
     margin-top: var(--sp-12);
   }
 
-  /* 一行文字链，竖线分隔（上一版是七枚玻璃药丸 + hover 上浮 2px）。
-     它们是七个地址，不是七个按钮 */
   .ways {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--sp-2) 0;
+    gap: var(--sp-2);
     margin: var(--sp-4) 0 0;
     padding: 0;
     list-style: none;
-    border-top: var(--rule-w) solid var(--rule-strong);
-    padding-top: var(--sp-4);
-  }
-
-  .ways li + li {
-    border-left: var(--rule-w) solid var(--rule);
   }
 
   .ways a {
-    display: inline-block;
-    padding: 0 var(--sp-5);
+    display: inline-flex;
+    padding: 0.5rem 0.9rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-full);
+    background: var(--glass-bg);
     font-family: var(--font-display);
-    font-size: var(--text-lg);
+    font-size: var(--text-base);
     font-weight: 600;
     text-decoration: none;
     color: var(--ink-soft);
-    transition: color 0.18s ease;
-  }
-
-  .ways li:first-child a {
-    padding-left: 0;
+    transition: color 0.18s ease, border-color 0.18s ease,
+      background-color 0.18s ease;
   }
 
   .ways a:hover {
     color: var(--seal);
+    border-color: var(--seal);
+    background: var(--glass-bg-strong);
   }
 
   @media (max-width: 40rem) {

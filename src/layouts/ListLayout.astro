@@ -42,7 +42,7 @@ const strings = t(localeOf(Astro.url.pathname));
 ---
 
 <BaseLayout title={title} description={description} footerNote={note} width="broad">
-  <header class="head rise rise-1">
+  <header class="head glass-card rise rise-1">
     <div class="head__row">
       <span class="vlabel">{label ?? title}</span>
       <h1 class="head__title">{title}</h1>
@@ -64,7 +64,7 @@ const strings = t(localeOf(Astro.url.pathname));
 
 <style>
   .head {
-    padding-top: var(--sp-8);
+    padding: var(--sp-8);
   }
 
   .head__row {
@@ -78,7 +78,6 @@ const strings = t(localeOf(Astro.url.pathname));
      因为这一档还没到会糊成一团的尺寸 */
   .head__title {
     font-size: var(--text-3xl);
-    font-variation-settings: 'opsz' 40, 'SOFT' 0, 'WONK' 0;
     letter-spacing: 0.04em;
     line-height: 1;
     margin-right: auto;
@@ -93,7 +92,7 @@ const strings = t(localeOf(Astro.url.pathname));
   }
 
   .briefs {
-    margin-top: var(--sp-8);
+    margin-top: var(--sp-4);
   }
 
   .empty {
