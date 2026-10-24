@@ -1405,3 +1405,65 @@
   font-family: var(--font-mono);
   letter-spacing: 0.02em;
 }
+
+/* ══════════════ 底部换集条（R53） ══════════════
+   为什么放在视频下方而不是浮在画面上：站上的播放器没有做统一的自绘控制层
+   （原生 <video controls> 才是主控制面），浮层随时会和原生控件抢位置；
+   底栏是常驻的、跟剧集条同族，永远知道往哪点。 */
+.tv-player__bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3, 0.75rem);
+  padding: 0.5rem 0.9rem;
+  background: #08080a;
+  border-top: 1px solid #1c1c20;
+  flex-shrink: 0;
+}
+
+.tv-nav {
+  min-width: 6.4rem;
+  padding: 0.42rem 0.9rem;
+  border: 1px solid #2a2a30;
+  background: #141416;
+  color: #d8d2c8;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm, 0.8125rem);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.tv-nav:hover:not(:disabled) {
+  color: #f0b429;
+  border-color: #f0b429;
+  background: rgba(240, 180, 41, 0.1);
+}
+
+.tv-nav:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.tv-player__epno {
+  min-width: 4.6rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.08em;
+  color: #8a857c;
+}
+
+/* 手机：底栏两颗键吃满宽度，指尖好按 */
+@media (max-width: 46rem) {
+  .tv-nav {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.6rem 0.4rem;
+    font-size: var(--text-base, 1rem);
+  }
+
+  .tv-player__epno {
+    min-width: 3.6rem;
+  }
+}

@@ -1158,6 +1158,7 @@
       '<h3 class="tv-detail__h">剧集 · ' + esc(line.from) + '</h3>' +
       '<div class="tv-eps">' + epsHtml + '</div>';
 
+    paintEpNo();
     ex.onclick = function (e) {
       if (e.target.closest('[data-line-more]')) {
         state.showAllLines = !state.showAllLines;
@@ -1202,16 +1203,43 @@
     fullProxy: '改为连分片也走本站代理',
   };
 
+  /**
+   * 换集（R53）。
+   *
+   * 站主的原话是「在播放页面能直接切换上下集」—— 顶栏那两颗 ⏮ ⏭ 其实一直在，
+   * 但手机上顶栏挤了标题、线路、画质、增强、倍速、上下集、关闭七样，
+   * ⏮/⏭ 只剩 1.9rem，基本摸不到。所以底栏补一对大字号的「上一集 / 下一集」，
+   * 中间显示「第 3 / 40 集」。键盘也接上：**← / →** 与 **P / N**。
+   *
+   * ⚠ 方向键原本是「长按加速」，现在改成了换集 —— 加速仍在：
+   * 长按屏幕上的 ⏭ 键，或按住 Space 临时 3×（见 bindPlayer 里的 boost 段）。
+   */
+  function stepEp(delta) {
+    var vod = state.detail && state.detail.vod;
+    if (!vod || !state.eps || !state.eps.length) return;
+    var next = state.epIdx + delta;
+    if (next < 0) { toast('已经是第一集'); return; }
+    if (next >= state.eps.length) { toast('已经是最后一集'); return; }
+    playEp(vod, next);
+    toast((delta > 0 ? '下一集' : '上一集') + '：' + (state.eps[next].name || ''));
+  }
+
+  /** 底栏那行「第 3 / 40 集」 */
+  function paintEpNo() {
+    var el = $('[data-tv-epno]');
+    if (!el) return;
+    var n = state.eps ? state.eps.length : 0;
+    el.textContent = n && state.epIdx >= 0 ? state.epIdx + 1 + ' / ' + n : n ? '— / ' + n : '— / —';
+    var prev = $('[data-tv-eprev]');
+    var next = $('[data-tv-enext]');
+    if (prev) prev.disabled = state.epIdx <= 0;
+    if (next) next.disabled = !n || state.epIdx >= n - 1;
+  }
+
   function bindPlayer() {
     $('[data-tv-pclose]').addEventListener('click', closePlayer);
-    $('[data-tv-pprev]').addEventListener('click', function () {
-      if (state.epIdx > 0) playEp(state.detail.vod, state.epIdx - 1);
-    });
-    $('[data-tv-pnext]').addEventListener('click', function () {
-      if (state.detail && state.detail.vod && state.epIdx < state.eps.length - 1) {
-        playEp(state.detail.vod, state.epIdx + 1);
-      }
-    });
+    $('[data-tv-eprev]').addEventListener('click', function () { stepEp(-1); });
+    $('[data-tv-enext]').addEventListener('click', function () { stepEp(1); });
     $('[data-tv-mask]').addEventListener('click', closeDetail);
     $('[data-tv-dclose]').addEventListener('click', closeDetail);
 
@@ -1226,12 +1254,14 @@
        · 「有时会失效」——keyup 丢在窗口外（切标签、松手时焦点不在文档里），
          state.holdingBoost 卡在 true，之后再也不进加速分支。
        现在键盘与屏幕上的右箭头共用 boostOn/boostOff，且三条兜底复位。 */
-    var nextBtn = $('[data-tv-pnext]');
-    if (nextBtn) {
+    /* 长按加速挪到**倍速键**上：点按 = 轮换常驻倍速（原行为），长按 = 临时 3×。
+       ⏭ 现在专职「下一集」，一个键只做一件事。 */
+    var speedKey = $('[data-tv-speedbtn]');
+    if (speedKey) {
       var holdTimer = 0;
       var heldBoost = false;
-      nextBtn.title = '点按下一集，长按加速播放';
-      nextBtn.addEventListener('pointerdown', function (e) {
+      speedKey.title = '点按切换倍速，长按临时加速';
+      speedKey.addEventListener('pointerdown', function (e) {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         heldBoost = false;
         clearTimeout(holdTimer);
@@ -1239,7 +1269,7 @@
           heldBoost = true;
           state.boostHeld = true;
           boostOn();
-        }, 280);
+        }, 260);
       });
       var endHold = function () {
         clearTimeout(holdTimer);
@@ -1248,32 +1278,49 @@
           boostOff();
         }
       };
-      nextBtn.addEventListener('pointerup', endHold);
-      nextBtn.addEventListener('pointercancel', endHold);
-      nextBtn.addEventListener('pointerleave', endHold);
-      // 长按成立后吞掉随后那一下 click，否则松手会顺带跳下一集
-      nextBtn.addEventListener('click', function (e) {
+      speedKey.addEventListener('pointerup', endHold);
+      speedKey.addEventListener('pointercancel', endHold);
+      speedKey.addEventListener('pointerleave', endHold);
+      // 长按成立后吞掉随后那一下 click，否则松手会顺带轮换倍速
+      speedKey.addEventListener('click', function (e) {
         if (!heldBoost) return;
         heldBoost = false;
+        // 同元素上还有一个 cycleRate 的冒泡监听：只 stopPropagation 不一定挡得住，
+        // stopImmediatePropagation 才是「这一下谁都别处理」。
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
       }, true);
     }
 
+    /* 键盘（R53）：
+       ← / → 与 P / N 换集（站主要的就是「播放页直接切上下集」）；
+       **长按 Space 临时加速** —— 方向键让位给换集之后，加速挪到空格，
+       既不与原生控件的「方向键快进」打架，也不需要按住某颗按钮。 */
     document.addEventListener('keydown', function (e) {
-      if (e.key !== 'ArrowRight') return;
       var ov = $('[data-tv-player]');
       if (!ov || ov.hidden) return;
       var t = e.target;
       if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '')) return;
-      // capture 阶段就拦：原生控件的「快进 5 秒」是默认动作，晚一步就晚了
-      e.preventDefault();
-      boostOn();
+
+      if (e.key === 'ArrowLeft' || e.key === 'p' || e.key === 'P') {
+        // capture 阶段拦：原生控件对方向键有「快进/快退」的默认动作
+        e.preventDefault();
+        if (!e.repeat) stepEp(-1);
+        return;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        if (!e.repeat) stepEp(1);
+        return;
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        boostOn();
+      }
     }, true);
 
     document.addEventListener('keyup', function (e) {
-      if (e.key !== 'ArrowRight') return;
-      boostOff();
+      if (e.key === ' ' || e.code === 'Space') boostOff();
     }, true);
 
     /* 三条兜底：窗口失焦、切标签、指针捕获被系统收走 —— 任何一条都可能吞掉 keyup/pointerup */
@@ -1613,6 +1660,7 @@
       b.addEventListener('click', function () { playEp(vod, i); });
       strip.appendChild(b);
     });
+    paintEpNo();
     var onBtn = strip.querySelector('.is-on');
     if (onBtn && onBtn.scrollIntoView) onBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
 

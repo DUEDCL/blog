@@ -130,13 +130,17 @@ import '../styles/tv.css';
     <span class="tv-speed" data-tv-speed>
       <button class="tv-icon tv-speed__btn" data-tv-speedbtn title="点按切换倍速；长按右边的 ⏭ 临时加速" aria-label="播放倍速">1×</button>
     </span>
-    <button class="tv-icon" data-tv-pprev title="上一集" aria-label="上一集">⏮</button>
-    <button class="tv-icon" data-tv-pnext title="点按下一集，长按加速播放" aria-label="下一集 / 长按加速">⏭</button>
     <button class="tv-icon" data-tv-pclose title="关闭" aria-label="关闭">✕</button>
   </div>
   <div class="tv-player__stage">
     <video data-tv-video controls playsinline preload="metadata"></video>
     <div class="tv-player__msg" data-tv-pmsg hidden></div>
+  </div>
+  <!-- 底部：上一集 / 集数进度 / 下一集。手机上这是唯一稳定的「换集」入口（顶栏那排键在小屏太挤） -->
+  <div class="tv-player__bar">
+    <button class="tv-nav" type="button" data-tv-eprev title="上一集（← 或 P）" aria-label="上一集">‹ 上一集</button>
+    <span class="tv-player__epno" data-tv-epno>— / —</span>
+    <button class="tv-nav" type="button" data-tv-enext title="下一集（→ 或 N）" aria-label="下一集">下一集 ›</button>
   </div>
   <div class="tv-player__eps" data-tv-peps></div>
 </div>
