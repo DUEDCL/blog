@@ -243,7 +243,7 @@
 
   /** 卡片上的星标状态跟着 state.fav 重画（不重建 DOM，省得打断 hover） */
   function paintFavButtons() {
-    $('[data-fav]').forEach(function (b) {
+    $$('[data-fav]').forEach(function (b) {
       var n = b.getAttribute('data-fav');
       var on = isFav(n);
       b.classList.toggle('is-on', on);
