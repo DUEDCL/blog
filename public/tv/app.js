@@ -147,8 +147,24 @@
   }
   function saveOff() { writeLS(LS.off, Array.from(state.off)); }
 
-  /** 搜索历史：[{q, t}] 新的在前 */
-  function getQueryHistory() { return readLS(LS.q, []); }
+  /** 搜索历史：旧版本或损坏的本地记录不能阻止搜索与页面初始化。 */
+  function getQueryHistory() {
+    var list = readLS(LS.q, []);
+    return Array.isArray(list) ? list.filter(function (x) {
+      return x && typeof x.q === 'string' && x.q.trim();
+    }) : [];
+  }
+
+  function readRecordMap(key) {
+    var all = readLS(key, {});
+    if (!all || typeof all !== 'object' || Array.isArray(all)) return {};
+    var out = Object.create(null);
+    Object.keys(all).forEach(function (k) {
+      var rec = all[k];
+      if (rec && typeof rec === 'object' && typeof rec.name === 'string') out[k] = rec;
+    });
+    return out;
+  }
   function pushQueryHistory(q) {
     var list = getQueryHistory().filter(function (x) { return x.q !== q; });
     list.unshift({ q: q, t: Date.now() });
@@ -170,7 +186,7 @@
   }
 
   /** 播放进度：{ [key]: {t,d,ts,name,epName,srcId,vodId,srcName,lineIdx,lineFrom} } */
-  function getProgress() { return readLS(LS.prog, {}); }
+  function getProgress() { return readRecordMap(LS.prog); }
   function progKey(name, epName) { return name + '||' + epName; }
 
   function saveProgress(rec) {
@@ -200,7 +216,7 @@
   /* ══════════════ 追剧收藏（R52） ══════════════ */
 
   /** 收藏表：{ [片名]: {name,pic,srcId,vodId,srcName,lineIdx,lineFrom,epName,t,d,ts} } */
-  function getFav() { return readLS(LS.fav, {}); }
+  function getFav() { return readRecordMap(LS.fav); }
   function setFav(all) { state.fav = all; writeLS(LS.fav, all); }
   function isFav(name) { return !!(state.fav && state.fav[name]); }
 
@@ -707,7 +723,11 @@
     }
   }
 
+  var searchRevision = 0;
   function doSearch(q) {
+    var revision = ++searchRevision;
+    var root = $('[data-tv]');
+    function isCurrent() { return revision === searchRevision && root === $('[data-tv]'); }
     state.lastQ = q;
     var empty = $('[data-tv-empty]');
     if (empty) empty.hidden = true;
@@ -721,22 +741,37 @@
 
     return getJson(BASE + '/search' + params)
       .then(function (d) {
-        state.groups = d.groups || [];
-        pushQueryHistory(q);
-        var okN = (d.sources || []).filter(function (s) { return s.ok; }).length;
-        var allN = (d.sources || []).length;
-        var fails = (d.sources || []).filter(function (s) { return !s.ok; });
-        setStatus(
-          '<b>' + okN + '/' + allN + '</b> 个源响应 · 共 <b>' + state.groups.length +
-            '</b> 部 · ' + d.tookMs + 'ms' +
-            (fails.length ? ' · 未响应：' + fails.map(function (f) { return esc(f.name); }).join('、') : '')
-        );
-        paintSrcHealth(d.sources);
-        renderCards();
-      })
-      .catch(function (e) {
+        if (!isCurrent()) return;
+        if (!d || !Array.isArray(d.groups) || !Array.isArray(d.sources)) {
+          $('[data-tv-grid]').innerHTML = '';
+          setStatus('搜索接口返回格式异常，请稍后重试');
+          return;
+        }
+        state.groups = d.groups;
+        var okN = d.sources.filter(function (s) { return s.ok; }).length;
+        var allN = d.sources.length;
+        var fails = d.sources.filter(function (s) { return !s.ok; });
+        var summary = '<b>' + okN + '/' + allN + '</b> 个源响应 · 共 <b>' + state.groups.length +
+          '</b> 部 · ' + d.tookMs + 'ms' +
+          (fails.length ? ' · 未响应：' + fails.map(function (f) { return esc(f.name); }).join('、') : '');
+        try {
+          paintSrcHealth(d.sources);
+          renderCards();
+          setStatus(summary);
+        } catch (e) {
+          // 数据已经拿到，不能再当网络失败清空全部结果。
+          setStatus('已搜到 ' + state.groups.length + ' 条结果，但显示异常；请刷新页面后重试');
+          console.error('看剧结果显示异常', e);
+          return;
+        }
+        // 历史属于附属功能，不能让异常记录把已经画出的卡片一并抹掉。
+        try { pushQueryHistory(q); } catch (e) {
+          setStatus(summary + ' · 搜索记录暂未保存，不影响查看结果');
+        }
+      }, function (e) {
+        if (!isCurrent()) return;
         $('[data-tv-grid]').innerHTML = '';
-        setStatus('搜索失败：' + esc(e.message));
+        setStatus('搜索请求失败：' + esc(e.message));
       });
   }
 

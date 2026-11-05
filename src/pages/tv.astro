@@ -19,6 +19,13 @@
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import '../styles/tv.css';
+import { createHash } from 'node:crypto';
+import tvClientSource from '../../public/tv/app.js?raw';
+
+// 不再复用可被浏览器缓存七天的固定 URL。内容变动时地址自动改变，
+// 无需要求旧访客手动清缓存；保留经典脚本加载顺序（hls.js 先执行）。
+const tvClientVersion = createHash('sha256').update(tvClientSource).digest('hex').slice(0, 16);
+const tvClientUrl = `/tv/app.js?v=${tvClientVersion}`;
 ---
 
 <BaseLayout
@@ -148,4 +155,4 @@ import '../styles/tv.css';
 <div class="tv-toast" data-tv-toast hidden></div>
 
 <script is:inline src="/tv/hls.min.js"></script>
-<script is:inline src="/tv/app.js"></script>
+<script is:inline src={tvClientUrl}></script>
